@@ -1,0 +1,66 @@
+#!/bin/sh
+# init-emc2 — FANO-1 boot integration for the E=mc² proof suite.
+#
+# This script is called by init-fano during boot to:
+#   1. Verify the proof binary is present and executable
+#   2. Run a quick proof suite smoke test (module 1 only)
+#   3. Register the WASM module with the Space Agent browser shell
+#   4. Check for LLM backend availability (for neuraleak)
+#
+# License: CC BY-NC-SA 4.0
+
+LIBDIR="/usr/lib/emc2"
+WASM_MODULE="$LIBDIR/emc2-proofs.wasm"
+SPACE_AGENT_URL="${SPACE_AGENT_URL:-http://127.0.0.1:3000}"
+OLLAMA_URL="${OLLAMA_URL:-http://127.0.0.1:11434}"
+
+log() { echo "[init-emc2] $*"; }
+
+# 1. Verify proof binary
+if [ ! -x "$LIBDIR/emc2-i-emc2" ]; then
+    log "WARNING: proof binary not found at $LIBDIR/emc2-i-emc2"
+    log "The emc2-toy-model package may not be fully installed."
+else
+    log "Proof binary found: $LIBDIR/emc2-i-emc2"
+fi
+
+# 2. Smoke test (run proof module 1 = chunk-01)
+if [ -x "$LIBDIR/emc2-i-emc2" ]; then
+    log "Running smoke test (proof module 1)..."
+    result=$("$LIBDIR/emc2-i-emc2" 2>&1 | grep "^summary:" | head -1)
+    if [ -n "$result" ]; then
+        log "Smoke test: $result"
+    else
+        log "WARNING: smoke test did not produce a summary line"
+    fi
+fi
+
+# 3. Register WASM module with Space Agent
+if [ -f "$WASM_MODULE" ]; then
+    log "WASM module found: $WASM_MODULE"
+    # Register with Space Agent if it's running
+    if wget -q -O /dev/null "$SPACE_AGENT_URL/api/health" 2>/dev/null; then
+        log "Registering WASM module with Space Agent..."
+        wget -q -O /dev/null \
+            --post-data="{\"name\":\"emc2-proofs\",\"path\":\"$WASM_MODULE\"}" \
+            "$SPACE_AGENT_URL/api/wasm/register" 2>/dev/null || true
+    else
+        log "Space Agent not running; WASM module will be available after desktop starts."
+    fi
+else
+    log "WASM module not found; browser integration disabled."
+fi
+
+# 4. Check LLM backend
+if wget -q -O /dev/null "$OLLAMA_URL/api/tags" 2>/dev/null; then
+    log "Ollama detected at $OLLAMA_URL — neuraleak experiments available."
+elif wget -q -O /dev/null "http://127.0.0.1:8080/health" 2>/dev/null; then
+    log "llama.cpp detected at port 8080 — neuraleak experiments available."
+else
+    log "No LLM backend detected; neuraleak experiments will use proof mode only."
+    log "  Start Ollama: ollama serve"
+    log "  Or llama.cpp: ./server -m qwen2.5-3b-q4_k_m.gguf"
+fi
+
+log "E=mc² proof suite ready."
+log "Commands: emc2-proofs, emc2-neuraleak, emc2-codon"

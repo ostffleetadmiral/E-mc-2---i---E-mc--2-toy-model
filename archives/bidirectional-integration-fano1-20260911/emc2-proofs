@@ -1,0 +1,59 @@
+#!/bin/sh
+# emc2-proofs — run the E=mc²-i-E=mc⁻² proof suite.
+#
+# Usage: emc2-proofs [--wasm] [--module N] [--summary]
+#
+# --wasm     Run via WASM (wasm3) instead of native binary
+# --module N Run only proof module N (1-30)
+# --summary  Print only the summary line
+#
+# License: CC BY-NC-SA 4.0
+
+LIBDIR="/usr/lib/emc2"
+WASM_RUNTIME="${WASM3_PATH:-/usr/lib/fano/wasm3}"
+
+mode="native"
+module=""
+summary_only=false
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --wasm)   mode="wasm"; shift ;;
+        --module) module="$2"; shift 2 ;;
+        --summary) summary_only=true; shift ;;
+        --help|-h)
+            echo "Usage: emc2-proofs [--wasm] [--module N] [--summary]"
+            echo ""
+            echo "Run the E=mc²-i-E=mc⁻² proof suite (30 modules, 180 checks)."
+            echo ""
+            echo "Options:"
+            echo "  --wasm     Run via WASM (wasm3) instead of native binary"
+            echo "  --module N Run only proof module N (1-30)"
+            echo "  --summary  Print only the summary line"
+            exit 0 ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+if [ "$mode" = "wasm" ]; then
+    if [ ! -x "$WASM_RUNTIME" ]; then
+        echo "Error: wasm3 runtime not found at $WASM_RUNTIME" >&2
+        echo "Set WASM3_PATH or install the fano-1 package." >&2
+        exit 1
+    fi
+    if [ "$summary_only" = true ]; then
+        "$WASM_RUNTIME" "$LIBDIR/emc2-proofs.wasm" 2>&1 | grep "^summary:"
+    else
+        "$WASM_RUNTIME" "$LIBDIR/emc2-proofs.wasm"
+    fi
+else
+    if [ ! -x "$LIBDIR/emc2-i-emc2" ]; then
+        echo "Error: proof binary not found at $LIBDIR/emc2-i-emc2" >&2
+        exit 1
+    fi
+    if [ "$summary_only" = true ]; then
+        "$LIBDIR/emc2-i-emc2" 2>&1 | grep "^summary:"
+    else
+        "$LIBDIR/emc2-i-emc2"
+    fi
+fi

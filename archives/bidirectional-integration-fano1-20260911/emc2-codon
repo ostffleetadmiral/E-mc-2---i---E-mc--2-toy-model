@@ -1,0 +1,48 @@
+#!/bin/sh
+# emc2-codon — route a 64-codon DNA sequence through the 6D Jordan algebra.
+#
+# Usage: emc2-codon [--codon CODON] [--all] [--builder TYPE]
+#
+# --codon CODON  Three-letter RNA codon (e.g., AUG, UAA)
+# --all          Show all 64 codon signatures
+# --builder TYPE Chemistry or placeholder (default: chemistry)
+#
+# License: CC BY-NC-SA 4.0
+
+LIBDIR="/usr/lib/emc2"
+BUILDER="chemistry"
+CODON=""
+SHOW_ALL=false
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --codon)   CODON="$2"; shift 2 ;;
+        --all)     SHOW_ALL=true; shift ;;
+        --builder) BUILDER="$2"; shift 2 ;;
+        --help|-h)
+            echo "Usage: emc2-codon [--codon CODON] [--all] [--builder TYPE]"
+            echo ""
+            echo "Route codons through the 6D Jordan algebra."
+            echo ""
+            echo "Options:"
+            echo "  --codon CODON   Three-letter RNA codon (e.g., AUG, UAA)"
+            echo "  --all           Show all 64 codon signatures"
+            echo "  --builder TYPE  Chemistry or placeholder (default: chemistry)"
+            exit 0 ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+if [ ! -x "$LIBDIR/emc2-i-emc2" ]; then
+    echo "Error: proof binary not found at $LIBDIR/emc2-i-emc2" >&2
+    exit 1
+fi
+
+if [ "$SHOW_ALL" = true ]; then
+    "$LIBDIR/emc2-i-emc2" --codon-all --builder "$BUILDER"
+elif [ -n "$CODON" ]; then
+    "$LIBDIR/emc2-i-emc2" --codon "$CODON" --builder "$BUILDER"
+else
+    echo "Error: specify --codon CODON or --all" >&2
+    exit 1
+fi

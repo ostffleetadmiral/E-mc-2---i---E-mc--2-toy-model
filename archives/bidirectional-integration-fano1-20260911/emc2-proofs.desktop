@@ -1,0 +1,29 @@
+[Desktop Entry]
+Name=E=mc² Proof Suite
+Comment=Run the E=mc²-i-E=mc⁻² physics proof suite (30 modules, 180 checks)
+Exec=emc2-proofs --summary
+Terminal=true
+Type=Application
+Icon=emc2-proofs
+Categories=Science;Physics;Math;
+Keywords=physics;octonion;E8;proof;mathematics;
+
+[Desktop Entry]
+Name=E=mc² Neuraleak
+Comment=Run neuraleak sentience testing with local Qwen LLM
+Exec=emc2-neuraleak --prompt 6d
+Terminal=true
+Type=Application
+Icon=emc2-neuraleak
+Categories=Science;AI;Physics;
+Keywords=neuraleak;consciousness;LLM;sentience;Qwen;
+
+[Desktop Entry]
+Name=E=mc² Codon Router
+Comment=Route 64-codon DNA through the 6D Jordan algebra
+Exec=emc2-codon --all
+Terminal=true
+Type=Application
+Icon=emc2-codon
+Categories=Science;Biology;Physics;
+Keywords=codon;DNA;RNA;Jordan;algebra;routing;

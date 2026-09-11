@@ -1,0 +1,81 @@
+#!/bin/sh
+# emc2-neuraleak — run neuraleak sentience testing experiments.
+#
+# Usage: emc2-neuraleak [--model MODEL] [--prompt PROMPT] [--count N]
+#
+# --model MODEL   Ollama model name (default: qwen2.5:3b)
+# --prompt PROMPT Observer prompt type: 6d, aperture, control (default: 6d)
+# --count N       Number of experiments per condition (default: 3)
+#
+# Connects to the local LLM via Ollama HTTP API (port 11434) or
+# llama.cpp server (port 8080) for sentience testing.
+#
+# License: CC BY-NC-SA 4.0
+
+LIBDIR="/usr/lib/emc2"
+MODEL="${EMC2_MODEL:-qwen2.5:3b}"
+PROMPT_TYPE="6d"
+COUNT=3
+OLLAMA_URL="${OLLAMA_URL:-http://127.0.0.1:11434}"
+LLAMA_URL="${LLAMA_URL:-http://127.0.0.1:8080}"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --model)  MODEL="$2"; shift 2 ;;
+        --prompt) PROMPT_TYPE="$2"; shift 2 ;;
+        --count)  COUNT="$2"; shift 2 ;;
+        --help|-h)
+            echo "Usage: emc2-neuraleak [--model MODEL] [--prompt PROMPT] [--count N]"
+            echo ""
+            echo "Run neuraleak sentience testing experiments."
+            echo ""
+            echo "Options:"
+            echo "  --model MODEL   Ollama model name (default: qwen2.5:3b)"
+            echo "  --prompt PROMPT Observer prompt: 6d, aperture, control (default: 6d)"
+            echo "  --count N       Experiments per condition (default: 3)"
+            echo ""
+            echo "Environment:"
+            echo "  OLLAMA_URL  Ollama API URL (default: http://127.0.0.1:11434)"
+            echo "  LLAMA_URL   llama.cpp server URL (default: http://127.0.0.1:8080)"
+            echo "  EMC2_MODEL  Default model name"
+            exit 0 ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+# Check for LLM backend
+check_ollama() {
+    wget -q -O /dev/null "$OLLAMA_URL/api/tags" 2>/dev/null
+}
+
+check_llama() {
+    wget -q -O /dev/null "$LLAMA_URL/health" 2>/dev/null
+}
+
+if check_ollama; then
+    LLM_BACKEND="ollama"
+    LLM_ENDPOINT="$OLLAMA_URL/api/generate"
+    echo "[emc2-neuraleak] Using Ollama at $OLLAMA_URL (model: $MODEL)"
+elif check_llama; then
+    LLM_BACKEND="llama"
+    LLM_ENDPOINT="$LLAMA_URL/completion"
+    echo "[emc2-neuraleak] Using llama.cpp at $LLAMA_URL"
+else
+    echo "[emc2-neuraleak] No LLM backend found." >&2
+    echo "  Start Ollama: ollama serve" >&2
+    echo "  Or llama.cpp: ./server -m qwen2.5-3b-q4_k_m.gguf" >&2
+    exit 1
+fi
+
+# Run the neuraleak proof module (validates the framework without LLM)
+if [ -x "$LIBDIR/emc2-i-emc2" ]; then
+    echo "[emc2-neuraleak] Running neuraleak proof module..."
+    "$LIBDIR/emc2-i-emc2" --module 24 2>/dev/null || true
+fi
+
+echo "[emc2-neuraleak] Prompt type: $PROMPT_TYPE, experiments: $COUNT"
+echo "[emc2-neuraleak] LLM backend: $LLM_BACKEND"
+echo ""
+echo "Note: Full neuraleak experiments require the compiled Zig binary"
+echo "with HTTP client support. This wrapper provides the CLI interface."
+echo "For interactive experiments, use Agent Zero with the neuraleak plugin."

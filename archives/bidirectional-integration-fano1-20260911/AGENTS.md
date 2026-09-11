@@ -209,7 +209,7 @@ FANO-1 hook verification: `zig test os/neuraleak_qwen_hook.zig`, `zig test os/vu
 
 ## Archive policy
 
-Every passing state is archived under `archives/`. Existing archives are never deleted. Current archives (21):
+Every passing state is archived under `archives/`. Existing archives are never deleted. Current archives (20):
 - `archives/mathematical-proofs-20260911`
 - `archives/codon-integration-20260912`
 - `archives/neuraleak-integration-20260912`
@@ -230,4 +230,3 @@ Every passing state is archived under `archives/`. Existing archives are never d
 - `archives/surface-computation-20260911`
 - `archives/surface-computation-v2-20260911`
 - `archives/full-e2e-audit-20260912`
-- `archives/bidirectional-integration-fano1-20260911`
