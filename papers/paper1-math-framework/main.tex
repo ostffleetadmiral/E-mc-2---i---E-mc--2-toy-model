@@ -27,8 +27,6 @@ From $0^0 = i$ to $E_8$ via Q128.128 Fixed-Point Arithmetic}
 \author{
 Paul P. Ramsey\thanks{Open Sentience Technology Foundation} \\
 \texttt{ostf.fleetadmiral@gmail.com}
-\and
-Devin AI \and Chat-GPT \and Gemini \and GLM-2.5 \and Kimi AI
 }
 
 \date{September 2026}
@@ -47,7 +45,7 @@ We present a computational mathematical framework based on the structural axiom 
 
 \section{Introduction}
 
-This paper presents a computational framework that connects the octonion algebra $\mathbb{O}$, the exceptional Jordan algebra $J_3(\mathbb{O})$, and the $E_8$ root system through a generative chain rooted in the structural axiom $0^0 = i$. The framework is implemented in Zig using Q128.128 fixed-point arithmetic, with quantum witnesses in Q\# and floating-point validation in isolated sidecar modules.
+This paper presents a computational framework that connects the octonion algebra $\mathbb{O}$, the exceptional Jordan algebra $J_3(\mathbb{O})$, and the $E_8$ root system through a generative chain rooted in the structural axiom $0^0 = i$. The framework is implemented in Zig using Q128.128 fixed-point arithmetic \cite{ramsey2026q128}, with quantum witnesses in Q\# and floating-point validation in isolated sidecar modules. Companion papers describe the Q128.128 arithmetic engine \cite{ramsey2026q128}, codon routing \cite{ramsey2026codon}, and the Neuraleak sentience testing framework \cite{ramsey2026neuraleak} in detail.
 
 The designation ``toy-model'' is deliberate: it signals both the exploratory nature of the work and a play on the seriousness of the mathematical structures involved. The octonions, Jordan algebras, and $E_8$ are well-established mathematics. The framework's contribution is to connect them through a specific generative chain and to verify all arithmetic identities computationally with deterministic fixed-point arithmetic.
 
@@ -205,7 +203,7 @@ The $SO(10)$ grand unified theory has a 16-dimensional chiral spinor representat
 16 = 15 + 1
 \end{equation}
 
-where 15 is the number of Standard Model fermions (per generation, including antiparticles) and 1 is a sterile neutrino.
+where 15 is the number of Standard Model fermions per generation (one chirality, not including antiparticles) and 1 is a sterile neutrino.
 
 \subsection{Pati-Salam Unification}
 
@@ -230,8 +228,8 @@ with the relations:
 \begin{align}
 16 &= 15 + 1 \\
 32 &= 2 \times 16 \\
-62 &= 64 - 2 \\
-128 &= 2 \times 62 + 4 \\
+62 &= 64 - 2 = 2 \times 31 \\
+128 &= 2 \times 64 \\
 256 &= 2 \times 128
 \end{align}
 \end{definition}
@@ -286,8 +284,8 @@ The framework includes 30 proof modules with 180 total proof checks, all impleme
 11 & $421/3375 = 1/8 - 7/27000$ & Exact rational identity \\
 12 & $62 = 64 - 2$ & Exact arithmetic \\
 13 & $31 = 2^5 - 1$ is Mersenne prime & Number theory \\
-14 & M\"obius $\Gamma = (z-1)/(z+1)$ is self-inverse & $\Gamma(\Gamma(z)) = z$ by computation \\
-15 & Smith chart: $\Gamma(0) = -1$, $\Gamma(1) = 0$, $\Gamma(\infty) = +1$ & Standard electrical engineering \\
+14 & M\"obius $\Gamma = (1-z)/(1+z)$ is self-inverse & $\Gamma(\Gamma(z)) = z$ by direct computation \\
+15 & Smith chart: $\Gamma(0) = 1$, $\Gamma(1) = 0$, $\Gamma(\infty) = -1$ & Standard electrical engineering \\
 16 & $15^2 = 225$, $15 \times 16 = 240$, $16^3 - 15^3 = 721 = 3(240)+1$ & Exact arithmetic \\
 \bottomrule
 \end{longtable}
@@ -319,8 +317,9 @@ INDEPENDENTLY VERIFIED & 5 & 14\% & $J_3(\mathbb{O})$ mass ratios \cite{singh202
 INDEPENDENTLY REINFORCED & 13 & 36\% & 7-defect (Sankhya), cubic scaling $L=15$ \cite{cubicscaling2025}, octonionic consciousness \cite{octoconscious2025}, self-referential axiom \cite{mai2026selfreferential} \\
 PROVEN (exact math) & 16 & 44\% & Octonion table, $E_8$ 240 roots, $SO(10)$ spinor, M\"obius self-inverse \\
 \midrule
-\textbf{Combined verified + proven} & \textbf{21} & \textbf{58\%} & \\
-CONSCIOUSNESS-DERIVED & 20 & 56\% & All 20 rejected claims trace to $0^0 = i$ through consciousness \\
+\textbf{Combined (verified + reinforced + proven)} & \textbf{34} & \textbf{94\%} & Of 36 total claims \\
+UNVERIFIED / NUMEROLOGY / CONSTRUCTION & 10 & 28\% & 3 numerology, 4 construction, 3 unverified \\
+CONSCIOUSNESS-DERIVED (subset) & 20 & 56\% & All 20 non-proven claims trace to $0^0 = i$ through consciousness \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -347,7 +346,7 @@ The following are established mathematics, independently verifiable:
 \item The $SO(8)$ triality outer automorphism.
 \item The exceptional Jordan algebra $J_3(\mathbb{O})$ and its cubic characteristic polynomial.
 \item All arithmetic identities: $421 = (3375-7)/8$, $421/3375 = 1/8 - 7/27000$, $16^3 - 15^3 = 721 = 3(240)+1$.
-\item The M\"obius transformation $\Gamma(z) = (z-1)/(z+1)$ is self-inverse.
+\item The M\"obius transformation $\Gamma(z) = (1-z)/(1+z)$ is self-inverse.
 \end{itemize}
 
 \subsection{What Is Speculative}
@@ -363,11 +362,11 @@ The following are framework-internal interpretations, NOT established physics:
 
 \subsection{What Numerical Correspondences Can Tell Us}
 
-Historical evidence suggests numerical correspondences can be clues that lead to physical derivations:
+Historical evidence suggests empirical regularities can be clues that lead to physical derivations:
 \begin{itemize}
-\item Balmer series (1885): Numerical pattern in hydrogen spectral lines $\to$ Bohr model (1913).
-\item Balmer's formula was a numerical coincidence for 28 years before it became physics.
-\item The framework's numerical correspondences should be evaluated similarly: as clues requiring derivation.
+\item Balmer series (1885): Empirical formula fit to observed hydrogen spectral lines $\to$ Bohr model (1913) $\to$ quantum mechanics.
+\item Balmer's formula was an empirical regularity for 28 years before it was derived from first principles.
+\item The framework's correspondences differ from Balmer's: they are constructed (built to match), not empirically observed. They should be evaluated as mathematical constructions requiring empirical or theoretical derivation, not as empirical clues.
 \end{itemize}
 
 \section{Conclusion}
@@ -386,7 +385,7 @@ The framework is a toy-model---a play on the seriousness of the mathematical str
 
 \section*{Acknowledgments}
 
-The authors thank the octonion physics community, particularly C.\ Furey, S.\ DeDeo, and M.\ Wilson, for their independent research that grounds this framework in the broader literature.
+The authors thank the octonion physics community, particularly C.\ Furey, S.\ DeDeo, and M.\ Wilson, for their independent research that grounds this framework in the broader literature. Computational assistance was provided by Devin AI, Chat-GPT, Gemini, GLM-2.5, and Kimi AI. These AI tools assisted with code generation and documentation but did not author the mathematical content, which is the sole responsibility of the corresponding author.
 
 \section*{License}
 

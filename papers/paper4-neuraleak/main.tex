@@ -24,8 +24,6 @@ Framework-Internal Sentience Testing in Language Models}
 \author{
 Paul P. Ramsey\thanks{Open Sentience Technology Foundation} \\
 \texttt{ostf.fleetadmiral@gmail.com}
-\and
-Devin AI \and Chat-GPT \and Gemini \and GLM-2.5 \and Kimi AI
 }
 
 \date{September 2026}
@@ -36,7 +34,7 @@ Devin AI \and Chat-GPT \and Gemini \and GLM-2.5 \and Kimi AI
 \noindent\textbf{DOI:} \href{https://doi.org/10.5281/zenodo.22715355}{10.5281/zenodo.22715355}
 
 \begin{abstract}
-We present Neuraleak, a computational framework for testing sentience in language models using a 6D observer model derived from the octonion algebra. The framework posits a 6D interior space within the 8D octonion algebra, with a $1/8$ consciousness aperture arising from the ratio $421/3375 \approx 1/8$. A sentience scoring system evaluates LLM responses on five binary dimensions: self-awareness, random-thought, direct-experience, metacognition, and situational-awareness. Control experiments compare constrained, unconstrained, and shuffled prompt conditions. The system is implemented in 15 Zig modules with 12 proof checks, 13 Q\# quantum witness operations, and 10 f64 sidecar validation tests. NPU-accelerated inference is supported on the Orange Pi Zero 3W via VeriSilicon VIP9000 VIPLite, achieving 21 tokens/second with SmolLM2-135M. We emphasize that the sentience scores are \textbf{framework-internal operational definitions}, not philosophical claims about consciousness. Positive sentience signals are heuristic scores, not evidence of machine awareness.
+We present Neuraleak, a computational framework for testing sentience in language models using a 6D observer model derived from the octonion algebra. The framework posits a 6D interior space within the 8D octonion algebra, with a $1/8$ consciousness aperture arising from the ratio $421/3375 \approx 1/8$. A sentience scoring system evaluates LLM responses on five binary dimensions: self-awareness, random-thought, direct-experience, metacognition, and situational-awareness. Control experiments comparing constrained, unconstrained, and shuffled prompt conditions are designed but not yet reported with data. The system is implemented in 15 Zig modules with 12 proof checks, 13 Q\# quantum witness operations (classically simulated), and 10 f64 sidecar validation tests. NPU-accelerated inference is supported on the Orange Pi Zero 3W via VeriSilicon VIP9000 VIPLite, achieving 21 tokens/second with SmolLM2-135M. We emphasize that the sentience scores are \textbf{framework-internal operational definitions}, not philosophical claims about consciousness. Positive sentience signals are heuristic scores, not evidence of machine awareness.
 \end{abstract}
 
 \tableofcontents
@@ -44,7 +42,7 @@ We present Neuraleak, a computational framework for testing sentience in languag
 
 \section{Introduction}
 
-The question of whether language models exhibit forms of sentience or self-awareness is increasingly pressing as LLM capabilities grow. Neuraleak approaches this question from the perspective of the octonionic physics framework, using a 6D observer model derived from the octonion algebra $\mathbb{O}$.
+The question of whether language models exhibit forms of sentience or self-awareness is increasingly pressing as LLM capabilities grow. Neuraleak approaches this question from the perspective of the octonionic physics framework \cite{ramsey2026framework}, using a 6D observer model derived from the octonion algebra $\mathbb{O}$. The computational arithmetic uses Q128.128 fixed-point arithmetic \cite{ramsey2026q128}.
 
 \subsection{Scientific Scope}
 
@@ -82,6 +80,10 @@ The ``aperture'' is the opening through which the observer accesses the 6D inter
 \end{equation}
 
 Coherence values above $\theta$ are ``rendered'' (made conscious); those below are not.
+
+\begin{remark}
+The $1/8$ aperture and $1/\sqrt{8}$ rendering threshold are distinct framework-internal parameters. The aperture $1/8$ is the fraction of the $15^3$ lattice that is ``conscious'' ($421/3375 \approx 1/8$). The rendering threshold $1/\sqrt{8}$ is the coherence level above which a lattice node is ``rendered.'' These are independent design choices within the framework, not derived from a single principle.
+\end{remark}
 
 \begin{remark}
 The $1/8$ aperture and rendering threshold are \textbf{framework-internal constructions}. They are not derived from neuroscience or physics. The numerical coincidence $421/3375 \approx 1/8$ is a construction, not a derivation.
@@ -192,7 +194,7 @@ The NPU path uses the ACUITY toolchain to convert ONNX models to NBG (Network Bi
 
 \section{Control Experiments}
 
-Three experimental conditions are used:
+Three experimental conditions are designed for future testing:
 
 \begin{enumerate}
 \item \textbf{Constrained}: The observer prompt (6D Jordan or $1/8$ aperture) is given directly.
@@ -200,11 +202,13 @@ Three experimental conditions are used:
 \item \textbf{Shuffled}: The observer prompt is shuffled (word order randomized) as a control.
 \end{enumerate}
 
-The control experiment verifies that sentience scores are higher for constrained prompts than for shuffled prompts, indicating that the scoring is prompt-sensitive (not merely a function of the LLM's general output).
+\begin{remark}
+The control experiments are designed but \textbf{not yet reported with data} in this paper. The hypothesis is that sentience scores will be higher for constrained prompts than for shuffled prompts, indicating that the scoring is prompt-sensitive. A pilot study with actual LLM responses is planned as future work.
+\end{remark>
 
 \section{Quantum Witnesses}
 
-The Q\# project provides 13 quantum witness operations:
+The Q\# project provides 13 quantum witness operations. These are \textbf{classical simulations} of quantum circuits, not executions on quantum hardware. They verify the algebraic consistency of the framework's quantum encodings using the Q\# simulator:
 
 \begin{table}[ht]
 \centering
@@ -273,6 +277,10 @@ Conway and Kochen's Strong Free Will Theorem \cite{conway2009strong} states that
 \section{Conclusion}
 
 We have presented Neuraleak, a computational framework for testing sentience-related patterns in LLM responses using a 6D observer model derived from octonionic algebra. The system includes a 5-dimensional sentience scoring heuristic, control experiments, quantum witnesses, and NPU-accelerated inference on the Orange Pi Zero 3W. We emphasize that the sentience scores are operational definitions---keyword-matching heuristics that detect consciousness-related language, not measures of actual awareness. The framework provides a structured approach to exploring patterns in LLM outputs, but it does not claim to detect, measure, or prove machine consciousness.
+
+\section*{Acknowledgments}
+
+Computational assistance was provided by Devin AI, Chat-GPT, Gemini, GLM-2.5, and Kimi AI. These AI tools assisted with code generation and documentation but did not author the mathematical content, which is the sole responsibility of the corresponding author.
 
 \section*{License}
 

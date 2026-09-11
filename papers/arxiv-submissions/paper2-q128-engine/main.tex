@@ -26,8 +26,6 @@ with Round-to-Nearest-Even Multiplication}
 \author{
 Paul P. Ramsey\thanks{Open Sentience Technology Foundation} \\
 \texttt{ostf.fleetadmiral@gmail.com}
-\and
-Devin AI \and Chat-GPT \and Gemini \and GLM-2.5 \and Kimi AI
 }
 
 \date{September 2026}
@@ -48,7 +46,7 @@ We present Q128.128, a deterministic 256-bit signed fixed-point arithmetic engin
 
 IEEE-754 floating-point arithmetic \cite{ieee754_2019}, while ubiquitous, suffers from non-determinism across platforms due to varying rounding modes, fused multiply-add (FMA) instructions, and compiler optimizations \cite{goldberg_1991, monniaux_2008}. For applications requiring bit-exact reproducibility---particularly mathematical physics verification---this non-determinism is unacceptable.
 
-Q128.128 addresses this by using integer-only arithmetic with a fixed-point representation. All operations are performed on 256-bit signed integers, with multiplication using exact 512-bit intermediate products and round-to-nearest-even (RNE) truncation. The result is deterministic: the same inputs always produce the same outputs, regardless of platform, compiler, or hardware.
+Q128.128 addresses this by using integer-only arithmetic with a fixed-point representation. All operations are performed on 256-bit signed integers, with multiplication using exact 512-bit intermediate products and round-to-nearest-even (RNE) truncation. The result is deterministic: the same inputs always produce the same outputs, regardless of platform, compiler, or hardware. The engine is used as the computational backbone for the octonionic physics framework described in a companion paper \cite{ramsey2026framework}, as well as codon routing \cite{ramsey2026codon} and sentience testing \cite{ramsey2026neuraleak}.
 
 \section{Representation}
 
@@ -78,7 +76,7 @@ Internal type & i256 (two's complement) \\
 \end{tabular}
 \end{table}
 
-The fractional resolution of $2^{-128} \approx 2.94 \times 10^{-39}$ is approximately $10^4$ times smaller than the Planck length ($\ell_P \approx 1.62 \times 10^{-35}$ m), providing sub-Planck precision for physics computations \cite{higham_2002}.
+The fractional resolution of $2^{-128} \approx 2.94 \times 10^{-39}$ provides approximately 38.5 decimal digits of fractional precision, sufficient for exact representation of all fundamental physical constants and their products \cite{higham_2002}.
 
 \section{Multiplication}
 
@@ -125,7 +123,7 @@ i.e., at most half a unit in the last place (ULP).
 \end{theorem}
 
 \begin{proof}
-The discarded bits $d \in [0, 2^{128} - 1]$. The halfway point is $h = 2^{127}$. RNE ensures $|d - h| \leq h$ after rounding, so the error is at most $h / 2^{128} = 2^{127} / 2^{128} = 2^{-1}$ ULP $= 2^{-129}$ in value. $\square$
+The discarded bits $d \in [0, 2^{128} - 1]$. The halfway point is $h = 2^{127}$. Round-to-nearest (with any tie-breaking rule) ensures the rounded result is within $h$ of the exact value, giving an error of at most $h / 2^{128} = 2^{127} / 2^{128} = 2^{-1}$ ULP $= 2^{-129}$ in value. RNE specifically provides an unbiased error distribution (zero mean), but the worst-case bound is the same for any round-to-nearest variant. $\square$
 \end{proof}
 
 \subsection{Overflow Handling}
@@ -139,7 +137,7 @@ Division is truncating (floor toward zero):
 \mathrm{fl}(a / b) = \left\lfloor \frac{a_{\text{raw}} \times 2^{128}}{b_{\text{raw}}} \right\rfloor
 \end{equation}
 
-The \texttt{fromRatio} constructor creates a Q128.128 from a rational $n/d$ using round-half-away-from-zero:
+The \texttt{fromRatio} constructor creates a Q128.128 from a rational $n/d$ using a modified round-half-away-from-zero that avoids rounding exact zeros upward:
 
 \begin{algorithm}
 \caption{fromRatio}\label{alg:fromratio}
@@ -172,7 +170,7 @@ starting from an initial estimate and converging to $\sqrt{S}$ within a toleranc
 
 \section{RamseyIdentity Transforms}
 
-The Q128.128 engine includes RamseyIdentity transforms that encode the framework's structural identity:
+The Q128.128 engine includes RamseyIdentity transforms that encode the framework's structural identity \cite{ramsey2026framework}:
 \begin{equation}
 E = mc^2 \leftrightarrow i \leftrightarrow E = mc^{-2}
 \end{equation}
@@ -180,7 +178,7 @@ E = mc^2 \leftrightarrow i \leftrightarrow E = mc^{-2}
 i = e_0[e_1, e_2, e_3, e_4, e_5, e_6, e_7] \to e_0
 \end{equation}
 
-These transforms map between energy-momentum space ($E = mc^2$), the imaginary unit ($i$), and the inverse energy relation ($E = mc^{-2}$), with the octonionic identity providing the algebraic bridge.
+These transforms are framework-internal algebraic identities, not physical derivations. The first states that the imaginary unit $i$ serves as an algebraic bridge between the energy-momentum relation $E = mc^2$ and its inverse $E = mc^{-2}$. The second expresses $i$ as the real unit $e_0$ projected from the full octonion basis. The transforms are implemented as Q128.128 fixed-point operations that verify the algebraic consistency of the framework's identity chain.
 
 \section{WASM Portability}
 
@@ -339,6 +337,10 @@ Overflow & $\pm \infty$ & Saturation \\
 \section{Conclusion}
 
 Q128.128 provides deterministic 256-bit fixed-point arithmetic with round-to-nearest-even multiplication, achieving bit-exact reproducibility across native, WASM, and GPU platforms. The engine's $2^{-129}$ error bound, sub-Planck resolution, and polyglot runtime make it suitable for mathematical physics verification where IEEE-754 floating-point non-determinism is unacceptable. The FANO-1 OS deployment with Orange Pi Zero 3W NPU support enables edge deployment of deterministic computing workloads.
+
+\section*{Acknowledgments}
+
+Computational assistance was provided by Devin AI, Chat-GPT, Gemini, GLM-2.5, and Kimi AI. These AI tools assisted with code generation and documentation but did not author the mathematical content, which is the sole responsibility of the corresponding author.
 
 \section*{License}
 
