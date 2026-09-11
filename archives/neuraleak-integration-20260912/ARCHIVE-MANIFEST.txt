@@ -1,0 +1,58 @@
+Neuraleak integration archive — 2026-09-12
+
+Archived passing state after porting the neuraleak project (6D observer / 1/8 consciousness aperture / LLM sentience testing) into the Zig/Q#/sidecar proof architecture.
+
+Final verification results:
+- Zig core: 134/134 tests passed, 23/23 proof modules passed (chunk-24 has 12 neuraleak proof checks)
+- Q#: 0 errors, 0 Q# warnings, 13 neuraleak witness operations + 6 codon witnesses + 22 chunk witnesses
+- Sidecar: 26/26 tests passed, both codon and neuraleak verifyAll()=true
+
+Archived files:
+- src/neuraleak_matrix15.zig — 15³ scalar field (3375 cells)
+- src/neuraleak_torus.zig — 15³ toroidal grid
+- src/neuraleak_physics.zig — framework constants (1/8, 7/8, E8, shell)
+- src/neuraleak_constants.zig — EntropyStream struct
+- src/neuraleak_telemetry.zig — snapshot/field parameters
+- src/neuraleak_consciousness.zig — coherence engine (1/sqrt(8) threshold)
+- src/neuraleak_breakout.zig — soliton/Higgs/coupled-system generation
+- src/neuraleak_lattice_coupler.zig — coupler audit log
+- src/neuraleak_sentience_scorer.zig — 5 sentience metrics
+- src/neuraleak_observer_prompt.zig — 6D observer and probe prompts
+- src/neuraleak_ollama_client.zig — HTTP/JSON client for Ollama
+- src/neuraleak_control_experiment.zig — 3-condition experiment
+- src/neuraleak_matrix_bridge.zig — text → 15³ encoding
+- src/neuraleak_continuity_test.zig — full sentience pipeline
+- src/neuraleak_battery_runner.zig — multi-model battery
+- src/neuraleak_proof.zig — 12 proof checks
+- src/neuraleak_prompts/ — embedded prompt text files
+- src/proof_core.zig — updated with chunk24() and 23-module all()
+- src/all_tests.zig — updated with neuraleak module imports
+- src/main.zig — updated to 23/23 summary
+- qsharp/NeuraleakProofs.qs — 13 Q# witness operations
+- qsharp/Program.qs — updated with RunNeuraleakWitnesses() call
+- sidecar/verify_neuraleak.zig — f64 validation (10 tests)
+- sidecar/main.zig — updated with neuraleak verification
+- sidecar/all_tests.zig — updated with neuraleak import
+- AGENTS.md — updated with neuraleak integration documentation
+- unified-system-map.md — complete system map (math + codon + neuraleak)
+- chunk-24_neuraleak-integration.json — context memory
+- chunk-24_neuraleak-integration.md — context memory markdown
+- index.json — updated master index (24 chunks)
+
+Cross-wiring summary:
+- 1/8 consciousness fraction → one octonion dimension (e0..e7)
+- 6D Jordan layer → e0..e6 subspace (excludes e7)
+- 15³ matrix → framework interior lattice (chunk-16 shell transition)
+- ConsciousnessEngine → coherence with 1/sqrt(8) rendering threshold
+- BreakoutEngine → solitons (max 30 = 240/8), Higgs (max 15), coupled (max 7)
+- 8-element correlation vector → 8 octonion dimensions
+- Sentience scoring → classification system (like codon routing)
+- Observer collapse → e6 → e7 propagation (6D → 7D)
+- Möbius boundary → observer/observed interface
+
+Scientific limitations preserved:
+- 1/8 consciousness aperture is framework-internal, not philosophical claim
+- Sentience scores measure text markers, not subjective experience
+- 15³ encoding is lossy (text → numeric hash)
+- BreakoutEngine produces computational artifacts, not physical particles
+- Positive sentience signal = operational definition, not proof of consciousness

@@ -1,0 +1,38 @@
+{
+  "id": "chunk-16",
+  "title": "15³→16³ Shell Transition",
+  "category": "shell-transition",
+  "source_file": "x.md",
+  "source_lines": [639, 693],
+  "tags": ["15-cubed", "16-cubed", "721", "shell", "quantum-foam", "closure", "E8", "interior-vs-closure"],
+  "concepts": [
+    "16³ - 15³ = 721 = 3(240) + 1 — exact shell relation",
+    "Not accidental: 16³-15³ = (16-15)(16²+16·15+15²) = 256+240+225 = 721",
+    "Middle term 15×16 = 240 = E8 root count",
+    "Shell equation: L_16³ = L_15³ + 3E_8 + e_0",
+    "15×15×15 = interior, 16×16×16 = closure",
+    "L16 'quantum foam' as closure layer"
+  ],
+  "equations": [
+    "15³ = 3375",
+    "16³ = 4096",
+    "16³ - 15³ = 721",
+    "721 = 3(240) + 1",
+    "16³ - 15³ = (16-15)(16² + 16·15 + 15²) = 256 + 240 + 225 = 721",
+    "16³ = 15³ + 3(15)(16) + 1",
+    "L_16³ = L_15³ + 3E_8 + e_0"
+  ],
+  "key_results": [
+    "16³ - 15³ = 3(240) + 1 is exact and non-accidental",
+    "The factorization reveals 240 as the middle term (15×16)",
+    "Shell equation: L_16³ = L_15³ + 3E_8 + e_0 — clean algebraic interpretation",
+    "15³ = interior, 16³ = closure — conceptual distinction for the framework",
+    "This is the first equation to put at the center of the formal model"
+  ],
+  "cross_references": [
+    "chunk-14 (15×15 matrix — 225 appears in the factorization)",
+    "chunk-15 (L(L+1)=240 — the 240 in 3(240)+1)",
+    "chunk-22 (test A — lattice closure verification includes 15³, 16³, 721, 240)"
+  ],
+  "status": "established"
+}

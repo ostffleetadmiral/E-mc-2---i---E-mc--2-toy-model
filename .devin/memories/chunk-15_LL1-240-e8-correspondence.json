@@ -1,0 +1,34 @@
+{
+  "id": "chunk-15",
+  "title": "L(L+1)=240 & E8 Correspondence",
+  "category": "e8-correspondence",
+  "source_file": "x.md",
+  "source_lines": [599, 637],
+  "tags": ["L(L+1)", "240", "E8", "root-system", "15", "16", "correspondence", "lattice"],
+  "concepts": [
+    "L(L+1) = 240 factorizes as (L-15)(L+16) = 0, giving L = 15, L+1 = 16",
+    "15 × 16 = 240 = number of roots in canonical E8 root system",
+    "Two independent routes to 240: L(L+1) construction and E8 root count",
+    "Correspondence, not yet proof of E8 lattice — needs actual embedding/metric"
+  ],
+  "equations": [
+    "L(L+1) = 240",
+    "L² + L - 240 = 0",
+    "(L-15)(L+16) = 0",
+    "L = 15, L+1 = 16",
+    "15 × 16 = 240",
+    "|E8 roots| = 240"
+  ],
+  "key_results": [
+    "L = 15, L+1 = 16 derived exactly from L(L+1) = 240",
+    "15 × 16 = 240 = |E8 roots| — two independent routes to same number",
+    "This is an exact numerical correspondence, much stronger than a numerical fit",
+    "Does NOT by itself prove the lattice is an E8 lattice — needs embedding/metric"
+  ],
+  "cross_references": [
+    "chunk-08 (scorecard — lists L(L+1)=240 as exact result)",
+    "chunk-14 (15×15 matrix — 225=240-15 uses this 240)",
+    "chunk-16 (15³→16³ shell — 16³-15³=3(240)+1 uses this 240)"
+  ],
+  "status": "established"
+}

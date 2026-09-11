@@ -1,0 +1,31 @@
+{
+  "id": "chunk-07",
+  "title": "CODATA Consistency Relationships",
+  "category": "codata-network",
+  "source_file": "x.md",
+  "source_lines": [193, 215],
+  "tags": ["CODATA", "Rydberg", "Bohr-radius", "consistency", "over-constrained", "alpha-family"],
+  "concepts": [
+    "CODATA relationships form a built-in consistency network",
+    "If system produces one correct α, dimensional propagation constrains entire family",
+    "Over-constrained test: one α → R_∞, a_0, and all dependent constants",
+    "Measured values for R_∞ and a_0 as reference"
+  ],
+  "equations": [
+    "R_∞ = α²m_ec/(2h)",
+    "a_0 = ℏ/(αm_ec)",
+    "R_∞ = 10,973,731.568157(12) m^-1",
+    "a_0 = 5.29177210544(82) × 10^-11 m"
+  ],
+  "key_results": [
+    "CODATA relationships provide a built-in over-constraint network",
+    "One correct dimensionless α constrains an entire family of constants",
+    "This is what 'over-constrained' should mean in the framework"
+  ],
+  "cross_references": [
+    "chunk-05 (CODATA propagation — α-power hierarchy)",
+    "chunk-21 (EM over-constraint chain — full derivation from α to atomic constants)",
+    "chunk-22 (test plan — Test E derives R_∞, a_0, r_e, λ_C, σ_T from α)"
+  ],
+  "status": "established"
+}

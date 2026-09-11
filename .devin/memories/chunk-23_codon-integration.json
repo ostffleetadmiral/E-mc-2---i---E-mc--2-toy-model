@@ -1,0 +1,86 @@
+{
+  "id": "chunk-23",
+  "title": "Codon DNA → 6D Jordan Algebra Routing Integration",
+  "category": "codon-integration",
+  "source_file": "codon/",
+  "source_type": "external_project_port",
+  "created": "2026-09-12",
+  "summary": "Ports the Python codon project (64-codon DNA → 6D Jordan algebra routing) into the Zig/Q#/sidecar proof architecture. Cross-wires codon channels to octonion basis, 3-qubit states, 15-layer central row, and Smith/Möbius boundary.",
+  "key_concepts": {
+    "codon_encoding": "6-bit base-4 index: A=00, C=01, G=10, U=11, first base most significant (idx = b0<<4 | b1<<2 | b2)",
+    "aug_index": 14,
+    "uaa_index": 48,
+    "gaa_index": 32,
+    "genetic_code": "64 codons, 20 amino acids + STOP",
+    "stop_codons": ["UAA", "UAG", "UGA"],
+    "routing_channels": {
+      "E0": "unknown/other",
+      "E2": "stop",
+      "E4": "basic (K,R,H)",
+      "E5": "polar (S,T,C,Y,N,Q)",
+      "E6": "hydrophobic (F,L,I,M,V,P,A,W,G)",
+      "E7": "acidic (D,E)"
+    },
+    "ladder_coordinates": {
+      "E0": 0.0,
+      "E1": "phi",
+      "E2": "pi",
+      "E3": "21/4 = 5.25",
+      "E4": "21/2 = 10.5",
+      "E5": 21.0,
+      "E6": 42.0,
+      "E7": 21.0
+    },
+    "chemistry_qubit_coords": "qx = floor((mw_sum - 970) / 30) % 2, qy = floor(ring_hbond_sum) % 2, qz = floor(no_sum) % 2",
+    "base_point": "x = floor(((mw-323.2)/40)*14 + pos*phi) % 15, y = floor(rings*7+hbonds*2 + pos*pi) % 15, z = floor(((atoms-13)/3)*14 + pos*5.25) % 15",
+    "surface_area": "4*pi*(r_sum_nm + 0.34)^2 where r_sum_nm = sum(vdw_radius)/10",
+    "lattice_area": "0.5*sqrt(|cross|^2) from base-point triangle",
+    "outliers": {
+      "chemistry_builder": "AUG: sorted=[0,0,6], coord_sum=42.0",
+      "placeholder_builder": "GCA: sorted=[0,0,6], coord_sum=42.0"
+    },
+    "routing_flags": {
+      "E2_stop": "A=1, C=1, D=0",
+      "E6_hydrophobic": "A=0, C=1, D=1",
+      "E7_acidic": "A=0, C=0, D=0",
+      "E5_polar": "A=1, C=1, D=1",
+      "E4_basic": "A=1, C=0, D=1",
+      "E0_unknown": "A=1, C=1, D=1"
+    }
+  },
+  "cross_wiring": {
+    "octonion_basis": "channel E0..E7 -> octonion e0..e7",
+    "qubit_state": "6-bit codon index -> 3-qubit computational basis (or 6-qubit for full encoding)",
+    "central_row": "channel -> 15x15 matrix central row [6,5,4,3,2,1,0,7,0,1,2,3,4,5,6] at position 7-channel",
+    "smith_mobius": "channel -> Gamma = (z-1)/(z+1) where z = channel index"
+  },
+  "implementation": {
+    "zig_core": "src/codon.zig (963 lines, 34 tests, 12 proof checks)",
+    "qsharp": "qsharp/CodonProofs.qs (157 lines, 6 witness operations)",
+    "sidecar": "sidecar/verify_codon.zig (329 lines, 16 tests)",
+    "proof_integration": "proof_core.zig chunk22() includes codon.proof() check"
+  },
+  "verified_values": {
+    "aug_qubit_coords": [0, 0, 0],
+    "uaa_qubit_coords": [1, 1, 1],
+    "gaa_qubit_coords": [0, 1, 1],
+    "aug_surface_area_nm2": 10.2694,
+    "uaa_surface_area_nm2": 10.0885,
+    "aug_lattice_area": 20.62,
+    "uaa_lattice_area": 59.76,
+    "uga_e0_count": 3,
+    "uga_lattice_area_sq": 3041,
+    "ladder_E6": 42.0,
+    "stop_count": 3,
+    "acidic_count": 4,
+    "total_codons": 64
+  },
+  "scientific_limitations": [
+    "Chemistry-derived routing fields use documented heuristics; source manuscripts do not define exact base-to-dimension mapping",
+    "PlaceholderSignatureBuilder and ChemistrySignatureBuilder produce different routing for polar/basic amino acids",
+    "Port verifies arithmetic identities and routing rule consistency, not the speculative biological interpretation",
+    "No genome classification accuracy or shuffled-control p-values computed in Zig/Q# port",
+    "Does not prove a physical Jordan algebra embedding"
+  ],
+  "tags": ["codon", "DNA", "genetic-code", "routing", "Jordan-algebra", "octonion", "cross-wiring", "integration"]
+}

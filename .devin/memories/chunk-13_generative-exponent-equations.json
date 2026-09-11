@@ -1,0 +1,36 @@
+{
+  "id": "chunk-13",
+  "title": "Generative Exponent Equations",
+  "category": "generative-equations",
+  "source_file": "x.md",
+  "source_lines": [545, 557],
+  "tags": ["generative-equations", "exponents", "degrees-of-freedom", "correction", "p1-p7"],
+  "concepts": [
+    "Seven generative equations relating exponents p_1 through p_7",
+    "Important correction: equations alone do NOT uniquely force (-1,-1,-1,-2,-2,-3,-4)",
+    "With p_1=-1, there are still two degrees of freedom",
+    "The earlier document implicitly selected p_2=p_3=-1 as additional structural condition",
+    "This tells us exactly where Smith-chart/lattice structure needs to enter"
+  ],
+  "equations": [
+    "p_1 + p_2 = p_4",
+    "p_1 + p_3 = p_5",
+    "p_3 + p_4 = p_6",
+    "p_1 + p_6 = p_7",
+    "p_2 + p_5 = p_6",
+    "p_4 + p_5 = p_7",
+    "p_2 + p_3 = p_7"
+  ],
+  "key_results": [
+    "Seven equations relate p_1...p_7 but do NOT uniquely determine (-1,-1,-1,-2,-2,-3,-4)",
+    "With p_1=-1, two degrees of freedom remain",
+    "p_2=p_3=-1 was implicitly selected — this is an additional structural condition",
+    "The degrees of freedom identify where Smith-chart/lattice structure must enter"
+  ],
+  "cross_references": [
+    "chunk-12 (octonionic architecture — provides the triad structure)",
+    "chunk-14 (15×15 matrix — may constrain the remaining degrees of freedom)",
+    "chunk-18 (Smith chart — may provide the additional structural condition)"
+  ],
+  "status": "established"
+}

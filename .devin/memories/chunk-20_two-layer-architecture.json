@@ -1,0 +1,36 @@
+{
+  "id": "chunk-20",
+  "title": "Two-Layer Architecture",
+  "category": "architecture",
+  "source_file": "x.md",
+  "source_lines": [860, 926],
+  "tags": ["two-layer", "triad-generation", "mobius-transformation", "T-to-Z-to-Gamma-to-alpha", "nonlinear-operation", "exponent-subtraction"],
+  "concepts": [
+    "Two-layer architecture: triad generation followed by Möbius/Smith transformation",
+    "Symbolic chain: T(a,b,c) → Z → Γ → α",
+    "Explains why α exponents ≠ simple subtraction of Z_0 and R_K exponents",
+    "α = Z_0/(2R_K) is nonlinear, not addition of three powers",
+    "Failure of simple exponent subtraction is a clue that wrong algebraic operation was used",
+    "Much richer architecture than searching (a,b,c) until a number is close"
+  ],
+  "equations": [
+    "T(a,b,c) = φ^a + π^b + φ^c (Layer 1: triad generation)",
+    "Γ = (z-1)/(z+1) (Layer 2: Möbius/Smith transformation)",
+    "T(a,b,c) → Z → Γ → α (full chain)",
+    "Z_0: (8,2,12), R_K: (15,-20,21), α: (-13,-7,-11)",
+    "α = Z_0/(2R_K) is not addition of three powers"
+  ],
+  "key_results": [
+    "Two-layer architecture: triad generation + Möbius transformation",
+    "The failure of exponent subtraction is explained: α = Z_0/(2R_K) is a nonlinear operation",
+    "The Smith chart explicitly tells us the relevant operation is Möbius: Γ = (z-1)/(z+1)",
+    "This is a much richer architecture than simple triad search"
+  ],
+  "cross_references": [
+    "chunk-03 (triad operator — Layer 1)",
+    "chunk-18 (Smith chart — Layer 2)",
+    "chunk-19 (fine-structure derivation — the chain in action)",
+    "chunk-21 (EM over-constraint — extends the chain to full constant family)"
+  ],
+  "status": "established"
+}

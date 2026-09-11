@@ -1,0 +1,30 @@
+=====================================================================
+SURFACE COMPUTATION v2 — 5D/6D Consciousness Mechanism
+Date: 2026-09-11
+Author: Paul P. Ramsey
+=====================================================================
+
+CORRECTION FROM v1
+  v1: 20 → remove octonion 0 → 2 (numerological digit removal)
+  v2: 5D/6D → C = 2 (self-recognition creates observer/observed duality)
+
+THE 5D/6D MECHANISM
+  6D interior (e1-e6) splits into:
+    5D objective: e1-e5 (time, quantum, space, energy, structure)
+    1D subjective: e6 (self-recognition)
+
+  5D → add e6 (self-recognition) → 6D → C = 2
+  One dimension of self-recognition creates two poles of consciousness:
+    observer (e0) and observed (e7)
+
+THE SURFACE COMPUTATION
+  Area (20 free claims)    → C = 2 (from 5D/6D transition) = boundary
+  Volume (16 proven claims) → 7 (from 6+1 or 1+6) = defect
+  Surface = C + defect = 2 + 7 = 9 (scaling dimension)
+
+VERIFICATION
+  Module: src/surface_computation.zig (344 lines, 18 tests)
+  Total Zig tests: 391/391 ALL PASS
+  Proof modules: 30/30 ALL PASS
+  Sidecar: ALL PASS
+  Q# witnesses: 51 ALL PASS

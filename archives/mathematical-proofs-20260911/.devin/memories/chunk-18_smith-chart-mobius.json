@@ -1,0 +1,36 @@
+{
+  "id": "chunk-18",
+  "title": "Smith Chart / Möbius Transformation",
+  "category": "smith-chart",
+  "source_file": "x.md",
+  "source_lines": [736, 778],
+  "tags": ["smith-chart", "mobius", "reflection-coefficient", "impedance", "e7", "e0", "boundary-mapping"],
+  "concepts": [
+    "Smith chart based on Möbius transformation Γ = (z-1)/(z+1) where z = Z/Z_0",
+    "Boundary mapping: z=0→Γ=-1 (short), z=1→Γ=0 (matched), z→∞→Γ=+1 (open)",
+    "Maps cleanly onto e_7 = -1 and e_0 = +1 assignments",
+    "Two-chart back-to-back construction = in/out reversal interpretation",
+    "Smith-chart endpoints correspond to fixed boundary values of Möbius impedance transformation"
+  ],
+  "equations": [
+    "Γ = (z-1)/(z+1), where z = Z/Z_0",
+    "z = (1+Γ)/(1-Γ) (inverse)",
+    "z=0 → Γ=-1 (short circuit)",
+    "z=1 → Γ=0 (matched)",
+    "z→∞ → Γ=+1 (open circuit)",
+    "e_7 = -1, e_0 = +1"
+  ],
+  "key_results": [
+    "Smith chart Möbius transformation maps exactly to e_7=-1 and e_0=+1 boundary assignments",
+    "The endpoints are not merely visually suggestive — they are the fixed boundary values",
+    "Two-chart back-to-back construction provides natural interpretation of in/out reversal",
+    "Smith chart identified as the missing bridge between numerical results and algebraic structure"
+  ],
+  "cross_references": [
+    "chunk-12 (octonionic architecture — Smith chart is the missing bridge)",
+    "chunk-17 (offset symmetry — discrete Möbius analogue connects here)",
+    "chunk-19 (fine-structure from Smith chart — α derivation using this transformation)",
+    "chunk-22 (test C — Smith transformation test)"
+  ],
+  "status": "established"
+}

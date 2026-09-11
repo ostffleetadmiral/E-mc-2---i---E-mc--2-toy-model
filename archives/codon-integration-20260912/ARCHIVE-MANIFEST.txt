@@ -1,0 +1,36 @@
+Codon integration archive — 2026-09-12
+
+Archived passing state after porting the Python codon/ project into the Zig/Q#/sidecar proof architecture.
+
+Final verification results:
+- Zig core: 56/56 tests passed, 22/22 proof modules passed (chunk-22 includes 12 codon proof checks)
+- Q#: 0 errors, 0 Q# warnings, 6 codon witness operations (codon-code, codon-aug, codon-witness, codon-stop, codon-acidic, codon-octonion)
+- Sidecar: 16/16 tests passed, verifyAll()=true (64 codon f64 signatures validated)
+
+Archived files:
+- src/codon.zig — 64-codon Zig port (963 lines, 34 tests, 12 proof checks)
+- src/proof_core.zig — updated chunk22() with codon.proof() integration
+- src/all_tests.zig — updated with codon.zig import
+- qsharp/CodonProofs.qs — Q# codon witness operations (157 lines, 6 operations)
+- qsharp/Program.qs — updated Main() with codon witness calls
+- sidecar/verify_codon.zig — f64 codon validation (329 lines, 16 tests)
+- sidecar/main.zig — updated with codon verification
+- sidecar/all_tests.zig — updated with codon import
+- AGENTS.md — updated with codon integration documentation
+- coherent-system.md — updated with codon integration results and cross-wiring table
+- chunk-23_codon-integration.json — context memory for codon integration
+- chunk-23_codon-integration.md — context memory markdown
+- index.json — updated master index (23 chunks)
+
+Cross-wiring summary:
+- 6-bit base-4 codon index → 3-qubit computational basis
+- Chemistry qubit coords (qx,qy,qz) → 3-qubit octonion basis
+- Routing channels E0..E7 → octonion basis e0..e7
+- Channel position → 15×15 matrix central row
+- Channel reflection → Smith/Möbius Γ = (z-1)/(z+1)
+
+Scientific limitations preserved:
+- Chemistry-derived routing uses documented heuristics
+- Port verifies arithmetic identities, not speculative biological interpretation
+- No genome classification or p-values in Zig/Q# port
+- Does not prove physical Jordan algebra embedding

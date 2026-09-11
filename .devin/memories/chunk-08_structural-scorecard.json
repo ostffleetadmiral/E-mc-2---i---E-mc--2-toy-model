@@ -1,0 +1,41 @@
+{
+  "id": "chunk-08",
+  "title": "Structural Scorecard",
+  "category": "scorecard",
+  "source_file": "x.md",
+  "source_lines": [217, 235],
+  "tags": ["scorecard", "0^0=i", "L(L+1)=240", "E8", "determinant", "minimum-norm", "summary"],
+  "concepts": [
+    "Summary of all structural results established so far",
+    "0^0 = i as structural axiom of the system",
+    "L(L+1) = 240 exactly → L = 15",
+    "E8 properties: determinant 1, minimum norm 2, minimum vectors 240",
+    "Hydrogen signature works, fine-structure naive attempt fails",
+    "Next step: topological/dimensional derivation rather than numerical search"
+  ],
+  "equations": [
+    "0^0 = i (structural axiom)",
+    "L(L+1) = 240 → L = 15",
+    "15(16) = 240 (exact)",
+    "E8 determinant = 1",
+    "E8 minimum norm = 2",
+    "E8 minimum vectors = 240"
+  ],
+  "key_results": [
+    "0^0 = i: defined by system axiom",
+    "L(L+1) = 240: exact, gives L = 15",
+    "E8 det=1, min norm=2, min vectors=240: established properties",
+    "S^5→N^3→S^7: proposed dimensional path for hydrogen",
+    "5,2,-4 → H_21: very close (0.00184%)",
+    "Same form → α^-1: does not pass",
+    "α-propagation network: worth testing next"
+  ],
+  "cross_references": [
+    "chunk-02 (hydrogen 7/66 correction)",
+    "chunk-03 (triad operator result)",
+    "chunk-04 (fine-structure failure)",
+    "chunk-15 (L(L+1)=240 & E8 correspondence)",
+    "chunk-22 (test plan — formalizes next steps)"
+  ],
+  "status": "established"
+}

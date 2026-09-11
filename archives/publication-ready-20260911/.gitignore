@@ -1,0 +1,31 @@
+# Zig build artifacts
+.zig-cache/
+.zig-out/
+*.zig.o
+
+# Q# / .NET build artifacts
+qsharp/bin/
+qsharp/obj/
+qsharp/*.user
+
+# Sidecar build artifacts
+sidecar/.zig-cache/
+sidecar/.zig-out/
+
+# Python bytecode (codon subsystem)
+__pycache__/
+*.pyc
+*.pyo
+
+# Generated data
+codon/data/
+codon/results/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~

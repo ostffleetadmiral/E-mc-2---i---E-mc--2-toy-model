@@ -1,0 +1,1 @@
+Archived and moved passing mathematical proof baseline on 2026-09-11; final verification: Zig 22/22, CSV 145/145, source nonblank lines covered 668/668, Q# 0 errors, sidecar 145-row reproduction passed.

@@ -1,0 +1,230 @@
+{
+  "title": "Mathematical Physics Framework — Context Memory Index",
+  "description": "Master index of 22 context memory chunks extracted from the mathematical physics conversation in x.md",
+  "source_file": "x.md",
+  "source_total_lines": 1124,
+  "chunk_count": 22,
+  "created": "2026-09-11",
+  "categories": {
+    "numerical-foundations": "Fixed-point arithmetic, state space, precision",
+    "hydrogen-line": "21cm hydrogen hyperfine transition, 7/66 correction",
+    "triad-operator": "T(a,b,c) = φ^a + π^b + φ^c operator and dimensional signatures",
+    "fine-structure": "Fine-structure constant α derivation attempts and results",
+    "codata-network": "CODATA propagation and consistency relationships",
+    "propagation-graph": "S/N dimensional propagation graph and signature paths",
+    "scorecard": "Summary of structural results",
+    "constants-table": "Full table of ~145 physical constants with triad assignments",
+    "error-analysis": "Error structure and exponent recurrence analysis",
+    "qed-corrections": "g-factor clues and QED correction hierarchy",
+    "octonionic-architecture": "Core e_0...e_7 octonionic basis and dimensional depths",
+    "generative-equations": "Seven generative exponent equations and degrees of freedom",
+    "lattice-structure": "15×15 matrix structure and element distribution",
+    "e8-correspondence": "L(L+1)=240 and E8 root system correspondence",
+    "shell-transition": "15³→16³ shell transition and closure equation",
+    "offset-symmetry": "15-layer offset reversal symmetry and Möbius analogue",
+    "smith-chart": "Smith chart Möbius transformation and boundary mapping",
+    "architecture": "Two-layer architecture: triad generation + Möbius transformation",
+    "over-constraint": "EM family over-constraint derivation chain",
+    "test-plan": "Seven-test verification plan (Tests A-G)"
+  },
+  "chunks": [
+    {
+      "id": "chunk-01",
+      "title": "Q128.128 Fixed-Point & Universe Scale",
+      "category": "numerical-foundations",
+      "source_lines": [1, 35],
+      "json": ".devin/memories/chunk-01_q128-universe-scale.json",
+      "md": ".devin/memories/chunk-01_q128-universe-scale.md",
+      "tags": ["i256", "Q128.128", "fixed-point", "universe-scale", "lattice"]
+    },
+    {
+      "id": "chunk-02",
+      "title": "21cm Hydrogen 7/66 Correction",
+      "category": "hydrogen-line",
+      "source_lines": [37, 63],
+      "json": ".devin/memories/chunk-02_21cm-hydrogen-correction.json",
+      "md": ".devin/memories/chunk-02_21cm-hydrogen-correction.md",
+      "tags": ["21cm", "hydrogen", "7/66", "7-defect", "numerical-correspondence"]
+    },
+    {
+      "id": "chunk-03",
+      "title": "Triad Operator & Dimensional Signatures",
+      "category": "triad-operator",
+      "source_lines": [65, 97],
+      "json": ".devin/memories/chunk-03_triad-operator-signatures.json",
+      "md": ".devin/memories/chunk-03_triad-operator-signatures.md",
+      "tags": ["triad-operator", "phi", "pi", "dimensional-signature"]
+    },
+    {
+      "id": "chunk-04",
+      "title": "Fine-Structure Constant Naive Attempt",
+      "category": "fine-structure",
+      "source_lines": [99, 133],
+      "json": ".devin/memories/chunk-04_fine-structure-naive.json",
+      "md": ".devin/memories/chunk-04_fine-structure-naive.md",
+      "tags": ["fine-structure", "alpha", "failed-prediction"]
+    },
+    {
+      "id": "chunk-05",
+      "title": "CODATA Propagation Network",
+      "category": "codata-network",
+      "source_lines": [135, 162],
+      "json": ".devin/memories/chunk-05_codata-propagation-network.json",
+      "md": ".devin/memories/chunk-05_codata-propagation-network.md",
+      "tags": ["CODATA", "propagation", "alpha-powers"]
+    },
+    {
+      "id": "chunk-06",
+      "title": "Dimensional Propagation Graph",
+      "category": "propagation-graph",
+      "source_lines": [163, 191],
+      "json": ".devin/memories/chunk-06_dimensional-propagation-graph.json",
+      "md": ".devin/memories/chunk-06_dimensional-propagation-graph.md",
+      "tags": ["propagation", "S-N-sequence", "signature-path"]
+    },
+    {
+      "id": "chunk-07",
+      "title": "CODATA Consistency Relationships",
+      "category": "codata-network",
+      "source_lines": [193, 215],
+      "json": ".devin/memories/chunk-07_codata-consistency-relationships.json",
+      "md": ".devin/memories/chunk-07_codata-consistency-relationships.md",
+      "tags": ["CODATA", "Rydberg", "Bohr-radius", "over-constrained"]
+    },
+    {
+      "id": "chunk-08",
+      "title": "Structural Scorecard",
+      "category": "scorecard",
+      "source_lines": [217, 235],
+      "json": ".devin/memories/chunk-08_structural-scorecard.json",
+      "md": ".devin/memories/chunk-08_structural-scorecard.md",
+      "tags": ["scorecard", "0^0=i", "L(L+1)=240", "E8"]
+    },
+    {
+      "id": "chunk-09",
+      "title": "Full Constants Table",
+      "category": "constants-table",
+      "source_lines": [237, 382],
+      "json": ".devin/memories/chunk-09_full-constants-table.json",
+      "md": ".devin/memories/chunk-09_full-constants-table.md",
+      "tags": ["constants", "CODATA", "triad-operator", "error-analysis"]
+    },
+    {
+      "id": "chunk-10",
+      "title": "Error Structure & Exponent Recurrence",
+      "category": "error-analysis",
+      "source_lines": [385, 432],
+      "json": ".devin/memories/chunk-10_error-structure-recurrence.json",
+      "md": ".devin/memories/chunk-10_error-structure-recurrence.md",
+      "tags": ["error-structure", "exponent-recurrence", "CKM", "g-factors"]
+    },
+    {
+      "id": "chunk-11",
+      "title": "g-Factor Clue & QED Hierarchy",
+      "category": "qed-corrections",
+      "source_lines": [434, 519],
+      "json": ".devin/memories/chunk-11_gfactor-qed-hierarchy.json",
+      "md": ".devin/memories/chunk-11_gfactor-qed-hierarchy.md",
+      "tags": ["g-factor", "QED", "radiative-corrections", "base-lattice"]
+    },
+    {
+      "id": "chunk-12",
+      "title": "Core Octonionic Architecture",
+      "category": "octonionic-architecture",
+      "source_lines": [521, 543],
+      "json": ".devin/memories/chunk-12_core-octonionic-architecture.json",
+      "md": ".devin/memories/chunk-12_core-octonionic-architecture.md",
+      "tags": ["octonion", "e0-e7", "triads", "dimensional-depth"]
+    },
+    {
+      "id": "chunk-13",
+      "title": "Generative Exponent Equations",
+      "category": "generative-equations",
+      "source_lines": [545, 557],
+      "json": ".devin/memories/chunk-13_generative-exponent-equations.json",
+      "md": ".devin/memories/chunk-13_generative-exponent-equations.md",
+      "tags": ["generative-equations", "exponents", "degrees-of-freedom"]
+    },
+    {
+      "id": "chunk-14",
+      "title": "15×15 Matrix Structure",
+      "category": "lattice-structure",
+      "source_lines": [559, 597],
+      "json": ".devin/memories/chunk-14_15x15-matrix-structure.json",
+      "md": ".devin/memories/chunk-14_15x15-matrix-structure.md",
+      "tags": ["15x15-matrix", "row-sum", "49", "225", "240"]
+    },
+    {
+      "id": "chunk-15",
+      "title": "L(L+1)=240 & E8 Correspondence",
+      "category": "e8-correspondence",
+      "source_lines": [599, 637],
+      "json": ".devin/memories/chunk-15_LL1-240-e8-correspondence.json",
+      "md": ".devin/memories/chunk-15_LL1-240-e8-correspondence.md",
+      "tags": ["L(L+1)", "240", "E8", "root-system"]
+    },
+    {
+      "id": "chunk-16",
+      "title": "15³→16³ Shell Transition",
+      "category": "shell-transition",
+      "source_lines": [639, 693],
+      "json": ".devin/memories/chunk-16_15cubed-16cubed-shell.json",
+      "md": ".devin/memories/chunk-16_15cubed-16cubed-shell.md",
+      "tags": ["15-cubed", "16-cubed", "721", "shell", "closure"]
+    },
+    {
+      "id": "chunk-17",
+      "title": "15-Layer Offset Symmetry",
+      "category": "offset-symmetry",
+      "source_lines": [695, 734],
+      "json": ".devin/memories/chunk-17_offset-symmetry.json",
+      "md": ".devin/memories/chunk-17_offset-symmetry.md",
+      "tags": ["offset-symmetry", "reversal", "mobius", "56"]
+    },
+    {
+      "id": "chunk-18",
+      "title": "Smith Chart / Möbius Transformation",
+      "category": "smith-chart",
+      "source_lines": [736, 778],
+      "json": ".devin/memories/chunk-18_smith-chart-mobius.json",
+      "md": ".devin/memories/chunk-18_smith-chart-mobius.md",
+      "tags": ["smith-chart", "mobius", "reflection-coefficient", "e7", "e0"]
+    },
+    {
+      "id": "chunk-19",
+      "title": "Fine-Structure from Smith Chart",
+      "category": "fine-structure",
+      "source_lines": [780, 858],
+      "json": ".devin/memories/chunk-19_fine-structure-from-smith.json",
+      "md": ".devin/memories/chunk-19_fine-structure-from-smith.md",
+      "tags": ["fine-structure", "alpha", "Z0", "RK", "numerical-verification"]
+    },
+    {
+      "id": "chunk-20",
+      "title": "Two-Layer Architecture",
+      "category": "architecture",
+      "source_lines": [860, 926],
+      "json": ".devin/memories/chunk-20_two-layer-architecture.json",
+      "md": ".devin/memories/chunk-20_two-layer-architecture.md",
+      "tags": ["two-layer", "triad-generation", "mobius-transformation"]
+    },
+    {
+      "id": "chunk-21",
+      "title": "EM Family Over-Constraint Chain",
+      "category": "over-constraint",
+      "source_lines": [928, 1016],
+      "json": ".devin/memories/chunk-21_em-overconstraint-chain.json",
+      "md": ".devin/memories/chunk-21_em-overconstraint-chain.md",
+      "tags": ["over-constraint", "EM-family", "derived-alpha", "c-hbar-correction"]
+    },
+    {
+      "id": "chunk-22",
+      "title": "Complete Architecture & Test Plan",
+      "category": "test-plan",
+      "source_lines": [1018, 1124],
+      "json": ".devin/memories/chunk-22_architecture-test-plan.json",
+      "md": ".devin/memories/chunk-22_architecture-test-plan.md",
+      "tags": ["architecture-diagram", "test-plan", "test-A-G", "synthesis"]
+    }
+  ]
+}

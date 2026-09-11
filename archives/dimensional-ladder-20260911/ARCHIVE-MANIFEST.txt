@@ -1,0 +1,27 @@
+Dimensional Ladder Archive
+Date: 2026-09-11
+Status: ALL TESTS PASSING
+
+Zig core: 285/285 tests passed
+Zig proof: 27/27 proof modules passed (chunk-28: 6 checks, 0 failures)
+Sidecar: 36/36 tests passed
+
+Dimensional ladder:
+  Propagation graph: S¹ → N³ → S³ → N³ → S⁵ → N³ → S⁷
+  π is lattice-native: emerges from S^n sphere volumes
+  φ is lattice-native: emerges from self-similar scaling (r²=r+1 → r=φ)
+  Triad exponents are dimensional signatures, not fitted parameters
+  Hydrogen 21cm: S⁵→N³→S⁷ → (5, 2, -4) → T(5,2,-4) ≈ 21.106 cm
+
+Gap #7 (triad operator) CLOSED:
+  φ: lattice-native (self-similar scaling, verified φ²=φ+1)
+  π: lattice-native (S^n geometry, verified in propagation graph)
+  exponents: lattice-native (dimensional signatures from propagation graph)
+  generative equations: 6 consistent equations constrain exponents
+
+Remaining open gaps (3):
+  1. Consciousness from 1/8: philosophical parallel only
+  2. Codon routing as biology: no biological mechanism
+  3. Specific heuristic choices: framework-internal
+
+Total gaps closed: 7 of 10

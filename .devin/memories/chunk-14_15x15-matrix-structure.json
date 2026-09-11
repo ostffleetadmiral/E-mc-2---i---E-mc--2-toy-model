@@ -1,0 +1,36 @@
+{
+  "id": "chunk-14",
+  "title": "15×15 Matrix Structure",
+  "category": "lattice-structure",
+  "source_file": "x.md",
+  "source_lines": [559, 597],
+  "tags": ["15x15-matrix", "central-matrix", "row-sum", "49", "7-squared", "225", "240", "element-count"],
+  "concepts": [
+    "Central matrix [6,5,4,3,2,1,0,7,0,1,2,3,4,5,6] with cyclic shifts forms 15×15 structure",
+    "Every row sums to 49 = 7²",
+    "Total matrix sum: 15(49) = 735",
+    "30 occurrences each of e_0...e_6, but only 15 of e_7",
+    "225 = 7(30) + 15 = 240 - 15 (exact relationship)"
+  ],
+  "equations": [
+    "Central row: [6,5,4,3,2,1,0,7,0,1,2,3,4,5,6]",
+    "Row sum = 49 = 7²",
+    "Total = 15(49) = 735",
+    "Element count: 30 each of e_0...e_6, 15 of e_7",
+    "225 = 7(30) + 15",
+    "225 = 240 - 15 (exact)"
+  ],
+  "key_results": [
+    "Every row of the 15×15 matrix sums to 7² = 49",
+    "e_7 appears half as often as other elements (15 vs 30)",
+    "225 = 240 - 15 is an exact relationship connecting matrix structure to E8 root count",
+    "This is not approximate — it's exact arithmetic"
+  ],
+  "cross_references": [
+    "chunk-13 (generative equations — matrix may constrain degrees of freedom)",
+    "chunk-15 (L(L+1)=240 — the 240 in 225=240-15)",
+    "chunk-16 (15³→16³ shell — builds on 15×15 structure)",
+    "chunk-17 (offset symmetry — 15-layer stack related to this matrix)"
+  ],
+  "status": "established"
+}

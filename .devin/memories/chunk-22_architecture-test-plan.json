@@ -1,0 +1,50 @@
+{
+  "id": "chunk-22",
+  "title": "Complete Architecture & Test Plan",
+  "category": "test-plan",
+  "source_file": "x.md",
+  "source_lines": [1018, 1124],
+  "tags": ["architecture-diagram", "test-plan", "test-A", "test-B", "test-C", "test-D", "test-E", "test-F", "test-G", "interior-vs-closure", "synthesis"],
+  "concepts": [
+    "Complete vertical architecture diagram from e_0/E8 closure to atomic/QED constants",
+    "15×15×15 = interior, 16×16×16 = closure, 16³-15³ = 3(240)+1 = shell description",
+    "Seven-test verification plan (Tests A through G)",
+    "Test A: lattice closure (15³, 16³, 15(16), 721, 240, offset symmetry)",
+    "Test B: octonion propagation (7 triads, 15-layer transition graph)",
+    "Test C: Smith transformation (e_0=+1, e_7=-1 boundaries through Möbius)",
+    "Test D: EM closure (Z_0, R_K → Γ, α, G_0, K_J, μ_0, ε_0, no independent fitting)",
+    "Test E: atomic closure (α → R_∞, a_0, r_e, λ_C, σ_T, Ry, E_h)",
+    "Test F: QED correction (residual structure → a_e, a_μ, g_e, g_μ)",
+    "Test G: statistical null test (compare against random integer triple search)",
+    "Key insight: φ^a+π^b+φ^c is one layer, Smith/Möbius supplies the operation for physical couplings"
+  ],
+  "equations": [
+    "15×15×15 = interior",
+    "16×16×16 = closure",
+    "16³ - 15³ = 3(240) + 1 (shell)",
+    "Test A: verify 15³, 16³, 15(16), 721, 240, offset symmetry",
+    "Test B: construct 7 triads, test 15-layer transition graph",
+    "Test C: Γ = (z-1)/(z+1) with e_0=+1, e_7=-1",
+    "Test D: Z_0, R_K → Γ, α, G_0, K_J, μ_0, ε_0 (no fitting)",
+    "Test E: α → R_∞, a_0, r_e, λ_C, σ_T, Ry, E_h",
+    "Test F: residual → a_e, a_μ, g_e, g_μ",
+    "Test G: statistical null test vs random triple search"
+  ],
+  "key_results": [
+    "Complete architecture diagram synthesizes all prior chunks into unified framework",
+    "Seven tests provide systematic verification from lattice to QED corrections",
+    "Test G (statistical null test) can distinguish structural result from fitting scheme",
+    "Key conclusion: triad expression is one layer; Smith/Möbius transformation supplies the coupling operation",
+    "Fine-structure constant fits into the architecture via Möbius, not as isolated triad"
+  ],
+  "cross_references": [
+    "chunk-12 (octonionic architecture — top of diagram)",
+    "chunk-14 (15×15 matrix — core of diagram)",
+    "chunk-15 (L(L+1)=240 — E8 shell)",
+    "chunk-16 (shell transition — L16 closure)",
+    "chunk-18 (Smith chart — Smith/Möbius map)",
+    "chunk-19 (fine-structure — α = Z_0/(2R_K))",
+    "chunk-21 (EM chain — atomic/QED constants)"
+  ],
+  "status": "established"
+}

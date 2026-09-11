@@ -1,0 +1,37 @@
+{
+  "id": "chunk-11",
+  "title": "g-Factor Clue & QED Hierarchy",
+  "category": "qed-corrections",
+  "source_file": "x.md",
+  "source_lines": [434, 519],
+  "tags": ["g-factor", "electron", "muon", "QED", "radiative-corrections", "base-lattice", "coupling-correction", "alpha-coupling"],
+  "concepts": [
+    "g_e and g_μ both select (-13,0,0) and produce identical model value 2.0019193787255",
+    "Current scalar expression is blind to electron-muon distinction",
+    "g_μ - g_e ≠ 0 experimentally — this is where radiative/QED structure enters",
+    "Hierarchy: base lattice value + coupling/loop correction",
+    "α should be attacked as coupling/closure quantity, not as another isolated triad",
+    "Fine-structure propagation equation from dimensional rules needed"
+  ],
+  "equations": [
+    "g_e = 2.0023193044, g_μ = 2.0023318418",
+    "Both: (-13,0,0) → 2.0019193787255",
+    "g_μ - g_e ≠ 0 (experimentally)",
+    "Hierarchy: base lattice value + coupling/loop correction",
+    "S^1→N^3→S^3→N^3→S^5→N^3→S^7 (propagation sequence for α derivation)"
+  ],
+  "key_results": [
+    "g_e and g_μ produce same triad value — model blind to e-μ distinction",
+    "The difference g_μ - g_e is where QED radiative structure enters",
+    "Proposed hierarchy: base lattice value + coupling/loop correction",
+    "α should emerge as coupling between stages, not direct three-term evaluation",
+    "If α mechanism predicts g-2, r_e, σ_e, R_∞, a_0 simultaneously — that's the over-constrained test"
+  ],
+  "cross_references": [
+    "chunk-09 (constants table — g_e and g_μ entries)",
+    "chunk-10 (error structure — (-13,0,0) recurrence)",
+    "chunk-19 (fine-structure from Smith chart — correct α derivation)",
+    "chunk-22 (test F — QED correction test for a_e, a_μ, g_e, g_μ)"
+  ],
+  "status": "established"
+}

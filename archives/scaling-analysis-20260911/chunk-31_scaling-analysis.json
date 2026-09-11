@@ -1,0 +1,95 @@
+{
+  "id": "chunk-31",
+  "title": "Cubic Scaling Chain and Unified 7-Defect",
+  "category": "math",
+  "created": "2026-09-11",
+  "source": "x.md scaling analysis (user-directed)",
+  "status": "verified",
+  "proof_module": "src/scaling_analysis.zig",
+  "proof_chunk": "chunk31",
+  "checks": 12,
+  "key_claims": {
+    "scaling_chain": {
+      "description": "The lattice scales through a chain of cubic volumes",
+      "levels": [
+        {"L": 15, "volume": 3375, "power_of_2": "2^4 - 1", "meaning": "interior (closure - Higgs)"},
+        {"L": 16, "volume": 4096, "power_of_2": "2^4", "meaning": "first closure"},
+        {"L": 32, "volume": 32768, "power_of_2": "2^5", "meaning": "first doubling"},
+        {"L": 62, "volume": 238328, "power_of_2": "2^6 - 2", "meaning": "codon capacity - boundary"},
+        {"L": 128, "volume": 2097152, "power_of_2": "2^7", "meaning": "third doubling"},
+        {"L": 256, "volume": 16777216, "power_of_2": "2^8", "meaning": "octonion capacity"}
+      ]
+    },
+    "seven_defect_natural": {
+      "description": "The 7-defect is natural in cubic doubling",
+      "formula": "(2L)^3 - L^3 = 8L^3 - L^3 = 7L^3",
+      "algebraic_identity": "2^3 - 1 = 7",
+      "verified_for_L": [1, 2, 4, 8, 16, 32, 64, 128]
+    },
+    "identity_421": {
+      "description": "421 = (15^3 - 7) / 8 = (3375 - 7) / 8 = 3368 / 8 = 421",
+      "meaning": "interior_volume minus 7-defect, divided by octonion_dimension",
+      "exact": true
+    },
+    "fraction_421_over_3375": {
+      "description": "421/3375 = 1/8 - 7/27000",
+      "meaning": "consciousness fraction (1/8) corrected by 7-defect (7/27000)",
+      "27000": "8 * 3375 = octonion_dim * interior_volume",
+      "exact": true,
+      "verification": "cross-multiply: 421 * 216000 == 3375 * 26944"
+    },
+    "codon_minus_boundary": {
+      "description": "62 = 64 - 2 = codon_capacity - boundary_dimensions",
+      "codon_capacity": "64 = 2^6",
+      "boundary_dim": "2 = e0 + e7 (observer + observed)",
+      "meaning": "interior codon states after removing boundary"
+    },
+    "shell_vs_doubling": {
+      "shell_transition": "(L+1)^3 - L^3 = 3L^2 + 3L + 1 (the +1 is the Higgs)",
+      "shell_example": "16^3 - 15^3 = 721 = 3(240) + 1",
+      "doubling_transition": "(2L)^3 - L^3 = 7L^3 (the 7 is the defect)",
+      "doubling_example": "32^3 - 16^3 = 28672 = 7 * 4096"
+    },
+    "seven_in_three_places": {
+      "place_1": "Cubic doubling: 2^3 - 1 = 7 (algebraic identity)",
+      "place_2": "Hydrogen 21cm: 7/66 = 7/(6*11) (numerical correction)",
+      "place_3": "Consciousness: 1/8 - 421/3375 = 7/27000 (correction to 1/8)",
+      "unified": "All three are the SAME 7, arising from 2^3 - 1 = 7"
+    },
+    "factorization_62": {
+      "description": "62 = 2 * 31 where 31 = 2^5 - 1 (Mersenne prime)",
+      "cube": "62^3 = 2^3 * 31^3 = 8 * 29791 = 238328"
+    },
+    "cumulative_seven_defect": {
+      "description": "Cumulative 7-defect from exact doublings 16->32->64->128->256",
+      "total": "7 * (16^3 + 32^3 + 64^3 + 128^3) = 7 * 2396160 = 16773120"
+    }
+  },
+  "scientific_scope": {
+    "established_mathematics": [
+      "(2L)^3 - L^3 = 7L^3 is an exact algebraic identity",
+      "421 = (3375 - 7) / 8 is exact integer arithmetic",
+      "421/3375 = 1/8 - 7/27000 is exact rational arithmetic",
+      "62 = 64 - 2 is exact",
+      "31 = 2^5 - 1 is a Mersenne prime"
+    ],
+    "framework_interpretation": [
+      "The 7 in cubic doubling is the SAME 7 as in the hydrogen 21cm correction",
+      "421/3375 is the 7-defect-corrected consciousness fraction",
+      "62 = codon_capacity - boundary_dim is a framework interpretation",
+      "The scaling chain 15->16->32->62->128->256 maps to powers of 2 with corrections"
+    ],
+    "not_established": [
+      "The scaling chain does not prove the framework's physical model",
+      "The appearance of 7 in multiple contexts may be coincidence",
+      "The 62 = 64-2 interpretation requires the boundary dimension concept"
+    ]
+  },
+  "connections": {
+    "chunk-02": "7/66 hydrogen correction uses the same 7",
+    "chunk-16": "15^3=3375, 16^3=4096, 721=3(240)+1 shell transition",
+    "chunk-29": "1/8 consciousness fraction, 6D interior, E=mc^2 checksum",
+    "chunk-30": "Free will as 6D routing underdetermination",
+    "chunk-26": "Gap closure with 7-defect structure"
+  }
+}

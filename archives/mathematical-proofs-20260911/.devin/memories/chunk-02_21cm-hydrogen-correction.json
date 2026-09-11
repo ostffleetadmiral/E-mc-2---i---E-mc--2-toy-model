@@ -1,0 +1,31 @@
+{
+  "id": "chunk-02",
+  "title": "21cm Hydrogen 7/66 Correction",
+  "category": "hydrogen-line",
+  "source_file": "x.md",
+  "source_lines": [37, 63],
+  "tags": ["21cm", "hydrogen", "hyperfine", "7/66", "7-defect", "6-arms", "11-dimensions", "numerical-correspondence"],
+  "concepts": [
+    "7/66 correction factor = 7 defect / (6 arms × 11 dimensions)",
+    "Numerical correspondence to hydrogen 21cm hyperfine transition wavelength",
+    "Numerical correspondence vs physical derivation distinction",
+    "7-defect / 6-arms / 11-dimensions as structural interpretation"
+  ],
+  "equations": [
+    "7/66 = 7/(6×11) ≈ 0.1060606",
+    "21 + 7/66 = 21.1060606 cm",
+    "λ ≈ 21.1061 cm (observed hydrogen line)",
+    "ν ≈ 1.4204 GHz (corresponding frequency)"
+  ],
+  "key_results": [
+    "21 + 7/66 ≈ 21.10606 cm is remarkably close to observed 21.1061 cm hydrogen line",
+    "This is a numerical correspondence, not yet a physical derivation",
+    "To elevate beyond numerology: derive 7/66 independently from a physical model"
+  ],
+  "cross_references": [
+    "chunk-03 (triad operator — formalizes this as T(5,2,-4))",
+    "chunk-06 (dimensional propagation graph — S^5→N^3→S^7 path)",
+    "chunk-08 (structural scorecard — lists this as strongest result)"
+  ],
+  "status": "established"
+}

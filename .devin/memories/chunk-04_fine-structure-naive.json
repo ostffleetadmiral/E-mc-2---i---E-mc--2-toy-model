@@ -1,0 +1,33 @@
+{
+  "id": "chunk-04",
+  "title": "Fine-Structure Constant Naive Attempt",
+  "category": "fine-structure",
+  "source_file": "x.md",
+  "source_lines": [99, 133],
+  "tags": ["fine-structure", "alpha", "inverse-alpha", "triad-operator", "failed-prediction", "CODATA"],
+  "concepts": [
+    "Naive three-term search for α^-1 using φ^a + π^b + φ^c",
+    "Fine-structure constant as dimensionless electromagnetic coupling",
+    "Failure of direct scalar evaluation for α — important constraint",
+    "Experimental precision of α is much more stringent than hydrogen line"
+  ],
+  "equations": [
+    "α^-1 = 137.035999177(21), relative uncertainty ~1.6×10^-10",
+    "Best triad: φ^3 + π^2 + φ^10 = 137.0975417598...",
+    "Difference: 0.06154258",
+    "Relative error: 4.49 × 10^-4"
+  ],
+  "key_results": [
+    "Closest integer combination φ^3+π^2+φ^10 = 137.0975, error 4.49×10^-4",
+    "This does NOT pass as a prediction of the fine-structure constant",
+    "At experimental precision of α, the naive triad is nowhere near enough",
+    "The failure is an important constraint: α needs a different algebraic structure"
+  ],
+  "cross_references": [
+    "chunk-03 (triad operator — works for hydrogen, fails for α)",
+    "chunk-05 (CODATA propagation — α has special dimensional structure)",
+    "chunk-19 (fine-structure from Smith chart — correct derivation path)",
+    "chunk-20 (two-layer architecture — explains why naive triad fails)"
+  ],
+  "status": "established"
+}

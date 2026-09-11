@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+title: "E=mc²-i-E=mc⁻² (toy-model): play on the seriousness of the framework"
+message: "A computational mathematical framework based on the axiom 0^0=i, octonion algebra, exceptional Jordan algebra J3(O), and E8 root system."
+type: software
+license: CC-BY-NC-SA-4.0
+organization:
+  name: "Open Sentience Technology Foundation"
+authors:
+  - name: "Paul P. Ramsey"
+    role: "Dev Lead Theoretician"
+  - name: "Devin AI"
+    role: "Dev R&D"
+  - name: "Chat-GPT"
+    role: "Dev R&D"
+  - name: "Gemini"
+    role: "Dev R&D"
+  - name: "GLM-2.5"
+    role: "Dev R&D"
+  - name: "Kimi AI"
+    role: "Dev R&D"
+keywords:
+  - octonions
+  - exceptional-jordan-algebra
+  - E8
+  - particle-physics
+  - fixed-point-arithmetic
+  - quantum-computing
+  - consciousness
+  - standard-model
+version: "1.0.0"
+date-released: "2026-09-11"
+preferred-citation:
+  type: software
+  title: "E=mc²-i-E=mc⁻² (toy-model): play on the seriousness of the framework"
+  authors:
+    - name: "Paul P. Ramsey"
+    - name: "Devin AI"
+    - name: "Chat-GPT"
+    - name: "Gemini"
+    - name: "GLM-2.5"
+    - name: "Kimi AI"
+  organization: "Open Sentience Technology Foundation"
+  year: 2026
+  license: CC-BY-NC-SA-4.0

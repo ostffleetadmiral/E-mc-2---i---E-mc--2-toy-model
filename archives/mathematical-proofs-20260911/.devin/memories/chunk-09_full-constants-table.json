@@ -1,0 +1,37 @@
+{
+  "id": "chunk-09",
+  "title": "Full Constants Table",
+  "category": "constants-table",
+  "source_file": "x.md",
+  "source_lines": [237, 382],
+  "tags": ["constants", "CODATA", "triad-operator", "error-analysis", "physical-constants", "lattice-values"],
+  "concepts": [
+    "Comprehensive table of ~100+ physical constants with triad (a,b,c) assignments",
+    "Each constant assigned integer triple (a,b,c) generating T(a,b,c) = φ^a + π^b + φ^c",
+    "Error percentages ranging from 0.0015% (proton magnetic moment) to 2.7% (Planck temperature)",
+    "Constants span categories: nuclear, particle, atomic, cosmology, QCD, QED, EM, electroweak, thermo, astro, planck, mixing, neutrino, derived, mound",
+    "Discrete lattice of candidate values from integer triples, not continuous fitting"
+  ],
+  "equations": [
+    "T(a,b,c) = φ^a + π^b + φ^c for each constant",
+    "Error% = (Triad_Value - Target) / Target × 100"
+  ],
+  "key_results": [
+    "Best fit: Proton Magnetic Moment μ_p, error 0.00154%",
+    "Hydrogen 21cm: error 0.00209%",
+    "Dark Energy Density Ω_Λ: error 0.00400%",
+    "QCD Scale Λ_QCD: error 0.00850%",
+    "Several within 10^-2%, many within 10^-1%",
+    "Worst fits: Hartree Energy (2.21%), Schwarzschild Radius of Sun (2.27%), Proton Charge Radius (2.35%), Curvature Density (2.58%), Planck Temperature (2.71%)"
+  ],
+  "cross_references": [
+    "chunk-03 (triad operator definition)",
+    "chunk-10 (error structure & recurrence analysis of this table)",
+    "chunk-11 (g-factor clue from this table)",
+    "chunk-21 (EM chain uses Z_0 and R_K entries from this table)"
+  ],
+  "status": "established",
+  "table_columns": ["Name", "Category", "Target", "Unit", "Sign", "a", "b", "c", "Triad_Value", "Error_Percent"],
+  "table_row_count": 145,
+  "categories_present": ["nuclear", "particle", "atomic", "cosmology", "QCD", "QED", "EM", "electroweak", "thermo", "astro", "planck", "mixing", "neutrino", "derived", "mound"]
+}

@@ -1,0 +1,31 @@
+{
+  "id": "chunk-12",
+  "title": "Core Octonionic Architecture",
+  "category": "octonionic-architecture",
+  "source_file": "x.md",
+  "source_lines": [521, 543],
+  "tags": ["octonion", "e0-e7", "triads", "dimensional-depth", "propagation-chain", "closure"],
+  "concepts": [
+    "Octonionic basis e_0 through e_7 with closure to e_0/e_8",
+    "Seven octonionic triads providing multiplication/propagation structure",
+    "Dimensional depth interpretation: e_0=origin, e_1=time, e_2=quantum, e_3=space, e_4=energy, e_5=structure, e_6=self-recognition, e_7=shadow/gravity",
+    "Depths, not eight ordinary Cartesian axes",
+    "Smith-chart work as the missing bridge between numerical results and algebraic structure"
+  ],
+  "equations": [
+    "e_0 → e_1 → e_2 → e_3 → e_4 → e_5 → e_6 → e_7 → e_0/e_8"
+  ],
+  "key_results": [
+    "Core architecture is an octonionic propagation chain with closure",
+    "Seven triads provide the multiplication/propagation structure",
+    "Dimensional assignments are depths, not Cartesian axes",
+    "Smith-chart work identified as the missing bridge"
+  ],
+  "cross_references": [
+    "chunk-06 (dimensional propagation graph — S/N sequence built on this architecture)",
+    "chunk-13 (generative exponent equations — derived from triad structure)",
+    "chunk-18 (Smith chart — the missing bridge)",
+    "chunk-22 (test B — octonion propagation test)"
+  ],
+  "status": "established"
+}

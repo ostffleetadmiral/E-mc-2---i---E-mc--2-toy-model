@@ -1,0 +1,32 @@
+{
+  "id": "chunk-06",
+  "title": "Dimensional Propagation Graph",
+  "category": "propagation-graph",
+  "source_file": "x.md",
+  "source_lines": [163, 191],
+  "tags": ["propagation", "S-N-sequence", "dimensional-signature", "signature-path", "operators"],
+  "concepts": [
+    "S/N propagation sequence: S^1, N^3, S^3, N^3, S^5, N^3, S^7",
+    "Transitions as propagation operators — constants get signatures, not just exponents",
+    "Hydrogen path: S^5→N^3→S^7 with numerical signature 5→2→-4",
+    "Each physical constant has its own path through the dimensional graph",
+    "Signature → triad → constant → propagate powers"
+  ],
+  "equations": [
+    "S^1, N^3, S^3, N^3, S^5, N^3, S^7",
+    "Hydrogen: S^5→N^3→S^7, signature 5→2→-4",
+    "Test: signature → φ^a+π^b+φ^c → α → propagate α^-1, α^-2, α^-3, α^-6"
+  ],
+  "key_results": [
+    "Hydrogen result identified as path S^5→N^3→S^7 with signature 5→2→-4",
+    "Fine-structure constant should have its own path through the same graph",
+    "Much more powerful than independently fitting each constant"
+  ],
+  "cross_references": [
+    "chunk-03 (triad operator — T(5,2,-4) is the hydrogen path evaluation)",
+    "chunk-05 (CODATA propagation — powers to propagate after generating α)",
+    "chunk-12 (octonionic architecture — provides the underlying triad structure)",
+    "chunk-22 (test plan — Test B constructs the seven triads as transition graph)"
+  ],
+  "status": "established"
+}

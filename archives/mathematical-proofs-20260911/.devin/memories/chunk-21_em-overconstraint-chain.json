@@ -1,0 +1,46 @@
+{
+  "id": "chunk-21",
+  "title": "EM Family Over-Constraint Chain",
+  "category": "over-constraint",
+  "source_file": "x.md",
+  "source_lines": [928, 1016],
+  "tags": ["over-constraint", "EM-family", "Z0", "RK", "alpha", "G0", "KJ", "mu0", "epsilon0", "Rydberg", "Bohr-radius", "Thomson", "derived-alpha", "c-hbar-correction"],
+  "concepts": [
+    "Full derivation chain: e_0/e_7 → Z_0 → R_K → Γ → α → G_0, K_J, μ_0, ε_0 → R_∞, a_0, r_e, λ_C, σ_T, Ry, E_h",
+    "Zero-free-parameter test: one set of primitive lattice outputs generates entire network without refitting",
+    "Derived α from table's Z_0 and R_K: α_derived = 0.0073305960, +0.456% error — table doesn't close yet",
+    "Primitive outputs need propagation through correct transformation, not independent scalar comparison",
+    "c and ℏ correction: scaling relations t(N)∝N^-1, l(N)∝N^-1, E(N)∝N^-2 don't produce numerical values",
+    "Structural derivation (power of N cancels) vs numerical derivation (c=299792458 m/s) must be distinguished",
+    "Smith-chart normalization may be part of missing closure mechanism"
+  ],
+  "equations": [
+    "Chain: e_0/e_7 → Z_0 → R_K → Γ → α",
+    "G_0 = 2/R_K",
+    "K_J = 2e/h",
+    "μ_0 = Z_0/c",
+    "ε_0 = 1/(Z_0·c)",
+    "α = Z_0/(2R_K)",
+    "R_∞ = α/(4π·a_0)",
+    "r_e = α²·a_0",
+    "σ_T = (8π/3)·r_e²",
+    "α_derived = 378.845/(2×25840.001) = 0.0073305960 (+0.456% error)",
+    "t(N) ∝ N^-1, l(N) ∝ N^-1, E(N) ∝ N^-2 (scaling relations)"
+  ],
+  "key_results": [
+    "Full EM/atomic derivation chain defined: one α → entire family of constants",
+    "Using table's Z_0 and R_K independently: α_derived = 0.0073305960, +0.456% from measured",
+    "Table by itself does not yet constitute a closed theory",
+    "Smith-chart operation needed: propagate through transformation, not compare as independent scalars",
+    "c and ℏ: scaling relations established but numerical values need normalization/closure mechanism",
+    "Smith-chart normalization may be part of the missing mechanism for c and ℏ"
+  ],
+  "cross_references": [
+    "chunk-05 (CODATA propagation — α-power hierarchy)",
+    "chunk-07 (CODATA consistency — R_∞, a_0 formulas)",
+    "chunk-09 (constants table — Z_0 and R_K entries)",
+    "chunk-19 (fine-structure from Smith chart — α = Z_0/(2R_K))",
+    "chunk-22 (tests D, E — EM closure and atomic closure)"
+  ],
+  "status": "established"
+}

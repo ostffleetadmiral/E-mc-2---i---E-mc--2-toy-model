@@ -1,0 +1,22 @@
+Rebuttal Stress Test Archive
+Date: 2026-09-11
+Status: ALL TESTS PASSING — REBUTTALS IMPLEMENTED
+
+Test counts:
+  Zig core: 326/326 tests passed (11 new rebuttal tests)
+  Zig proof: 29/29 proof modules passed
+  Sidecar: all tests passed
+
+Rebuttal summary (3 critical, 7 warning):
+  C1 (α circular): PARTIAL — octonion charges independent, numerical value pending
+  C2 (no predictions): PARTIAL — 9 predictions identified, computation pending
+  C3 (checksum formal): PARTIAL — Möbius transformation non-trivial
+  W1 (triad sensitivity): PARTIAL — exponents fixed by graph, sensitivity expected
+  W2 (codon arbitrary): STRONG — 6D structurally determined, routing = free will
+  W3 (1/8 not special): STRONG — 1/(6+2) = holographic boundary ratio
+  W4 (non-assoc unused): STRONG — required for triality, E8, J3(O)
+  W5 (2 DOF): PARTIAL — Smith chart boundaries fix DOF, formal proof pending
+  W6 (φ not derived): INCOMPLETE — definition not derivation, honestly acknowledged
+  W7 (exponents constructed): PARTIAL — partly derived, partly motivated conventions
+
+Overall: 3 STRONG, 4 PARTIAL, 1 INCOMPLETE

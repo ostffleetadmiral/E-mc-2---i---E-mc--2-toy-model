@@ -1,0 +1,33 @@
+{
+  "id": "chunk-01",
+  "title": "Q128.128 Fixed-Point & Universe Scale",
+  "category": "numerical-foundations",
+  "source_file": "x.md",
+  "source_lines": [1, 35],
+  "tags": ["i256", "Q128.128", "fixed-point", "universe-scale", "lattice", "state-space", "precision"],
+  "concepts": [
+    "Signed 256-bit integer (i256) with Q128.128 fixed-point representation",
+    "128 integer bits + 128 fractional bits",
+    "Finite discrete state space vs infinite mathematical continuum",
+    "Comparison of bit-pattern count to observable universe atom count",
+    "Fractional precision as physical resolution analog"
+  ],
+  "equations": [
+    "Q128.128 range: -2^127 to 2^127 - 2^-128",
+    "2^256 ≈ 1.16 × 10^77 (distinct bit patterns)",
+    "2^-128 ≈ 2.94 × 10^-39 (fractional resolution)",
+    "2^127 ≈ 1.7014 × 10^38 (max integer magnitude)"
+  ],
+  "key_results": [
+    "2^256 ≈ 10^77 < ~10^80 atoms in observable universe (state count is NOT bigger than universe)",
+    "Q128.128 provides ~39 decimal places of fractional precision",
+    "256 bits gives a finite discrete state space — extremely dense but not infinite continuum",
+    "Numerical range 2^127 ≈ 10^38 is vastly larger than ordinary physical scales but not universal scale"
+  ],
+  "cross_references": [
+    "chunk-12 (octonionic architecture — lattice foundation)",
+    "chunk-14 (15×15 matrix structure — discrete lattice)",
+    "chunk-22 (lattice closure — 15³ interior / 16³ closure)"
+  ],
+  "status": "established"
+}

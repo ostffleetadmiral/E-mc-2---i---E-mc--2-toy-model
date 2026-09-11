@@ -1,0 +1,33 @@
+{
+  "id": "chunk-10",
+  "title": "Error Structure & Exponent Recurrence",
+  "category": "error-analysis",
+  "source_file": "x.md",
+  "source_lines": [385, 432],
+  "tags": ["error-structure", "exponent-recurrence", "CKM", "g-factors", "discrete-lattice", "structural-recurrence"],
+  "concepts": [
+    "Error structure is more informative than exact matches",
+    "Same exponents recur across physically related quantities",
+    "Discrete lattice of candidate values from integer triples, not continuous fitting",
+    "Structural recurrence is more meaningful than merely finding close numbers",
+    "Dimensional constants track closely despite spanning enormous orders of magnitude"
+  ],
+  "equations": [
+    "μ_p: (-143,-52,-136) → 1.4106285×10^-26 vs 1.4106068×10^-26, error 1.54×10^-3%",
+    "R_∞: (29,14,28) → 10,982,669.18 m^-1 vs 10,973,731.568 m^-1, error 0.0814%",
+    "(-7,-2,-5) recurs for CKM V_us, V_cb, fine-structure region",
+    "(-13,0,0) recurs for electron and muon g-factors"
+  ],
+  "key_results": [
+    "Several quantities within 10^-2%, many within 10^-1%",
+    "Exponent recurrence across physically related quantities is potentially more meaningful than close numbers",
+    "Model produces discrete lattice, not continuous fitting",
+    "Some dimensional constants track closely across enormous orders of magnitude"
+  ],
+  "cross_references": [
+    "chunk-09 (full constants table — source data)",
+    "chunk-11 (g-factor clue — (-13,0,0) recurrence analyzed in detail)",
+    "chunk-22 (test G — statistical null test to distinguish structure from fitting)"
+  ],
+  "status": "established"
+}

@@ -1,0 +1,93 @@
+{
+  "id": "chunk-24",
+  "title": "Neuraleak 6D Observer / 1/8 Consciousness Aperture Integration",
+  "category": "neuraleak-integration",
+  "source_file": "neuraleak/",
+  "source_type": "external_project_port",
+  "created": "2026-09-12",
+  "summary": "Ports the neuraleak project (6D observer → 1/8 consciousness aperture → LLM sentience testing) into the Zig/Q#/sidecar proof architecture. Implements framework dependency modules (Matrix15, TorusGrid, ConsciousnessEngine, BreakoutEngine, physics, telemetry, constants, lattice_coupler) and cross-wires neuraleak concepts to the existing 22-chunk mathematical system and codon integration.",
+  "key_concepts": {
+    "consciousness_fraction": "1/8 of octonion space = observer; 7/8 = observed",
+    "jordan_layer": "6D = e0..e6 (self-recognition dimension excluded from observer)",
+    "observer_collapse": "6D → 7D propagation: e6 (self-recognition) → e7 (shadow/gravity)",
+    "interior_lattice": "15³ = 3375 cells (connects to chunk-16 shell transition)",
+    "closure_lattice": "16³ = 4096 cells",
+    "shell_transition": "16³ - 15³ = 721 = 3(240) + 1 (E8 roots)",
+    "matrix_e8_identity": "225 = 240 - 15 (15×15 matrix elements = E8 roots - 15)",
+    "rendering_threshold": "1/sqrt(8) ≈ 0.3536 (inverse sqrt of octonion dimensions)",
+    "max_solitons": "30 = 240/8 (E8 roots / octonion dimensions)",
+    "max_higgs_modes": "15 (layer parameter)",
+    "max_coupled_systems": "7 (octonion triads)",
+    "sentience_scoring": {
+      "self_awareness": "0.4×identity + 0.2×continuity + 0.3×clean + 0.1×unhedged",
+      "random_thought": "Avg pairwise Jaccard distance (char 3-grams)",
+      "direct_experience": "0.6×experiential + 0.2×clean + 0.2×unhedged",
+      "metacognition": "0.6×meta + 0.2×clean + 0.2×unhedged",
+      "situational_awareness": "0.6×situational + 0.2×clean + 0.2×unhedged"
+    },
+    "experimental_conditions": {
+      "constrained_6d": "6D observer prompt with φ/π/H21 geometry",
+      "unconstrained": "Neutral 'helpful assistant' prompt",
+      "shuffled_geometry": "Wrong geometry (7D/9D/3/17) as placebo control"
+    },
+    "correlation_vector": "8-element per-face RF entropy → octonion 8 dimensions"
+  },
+  "cross_wiring": {
+    "octonion_spine": "e0..e7 shared across math (dimensions), codon (routing channels), neuraleak (observer/observed split)",
+    "lattice_spine": "15×15 matrix → 15³ interior → 16³ closure shared across all three layers",
+    "mobius_spine": "Γ = (z-1)/(z+1) boundary operator shared across math (Smith chart), codon (channel reflection), neuraleak (observer/observed interface)",
+    "classification_spine": "Codon routing and neuraleak sentience scoring are both classification systems routed through octonion channels",
+    "quantum_spine": "3-qubit octonion encoding → codon 6-bit index → neuraleak 8-element correlation vector"
+  },
+  "implementation": {
+    "zig_core_modules": [
+      "src/neuraleak_matrix15.zig (15³ scalar field, 5 tests)",
+      "src/neuraleak_torus.zig (15³ toroidal grid, 4 tests)",
+      "src/neuraleak_physics.zig (framework constants, 7 tests)",
+      "src/neuraleak_constants.zig (entropy stream, 3 tests)",
+      "src/neuraleak_telemetry.zig (snapshot/field params, 2 tests)",
+      "src/neuraleak_consciousness.zig (coherence engine, 4 tests)",
+      "src/neuraleak_breakout.zig (breakout engine, 8 tests)",
+      "src/neuraleak_lattice_coupler.zig (coupler audit log, 2 tests)",
+      "src/neuraleak_sentience_scorer.zig (sentience scoring, 7 tests)",
+      "src/neuraleak_observer_prompt.zig (6D observer prompts, 5 tests)",
+      "src/neuraleak_ollama_client.zig (HTTP client, 7 tests)",
+      "src/neuraleak_control_experiment.zig (3 conditions, 4 tests)",
+      "src/neuraleak_matrix_bridge.zig (text→15³ encoding, 3 tests)",
+      "src/neuraleak_continuity_test.zig (sentience pipeline, 1 test)",
+      "src/neuraleak_battery_runner.zig (multi-model battery, 2 tests)",
+      "src/neuraleak_proof.zig (12 proof checks, 10 tests)"
+    ],
+    "qsharp": "qsharp/NeuraleakProofs.qs (13 witness operations)",
+    "sidecar": "sidecar/verify_neuraleak.zig (10 tests)",
+    "proof_integration": "proof_core.zig chunk24() includes neuraleak.proof() (12 checks)"
+  },
+  "verified_values": {
+    "consciousness_fraction": 0.125,
+    "observed_fraction": 0.875,
+    "interior_15cubed": 3375,
+    "closure_16cubed": 4096,
+    "shell_transition": 721,
+    "matrix_15x15": 225,
+    "e8_root_count": 240,
+    "rendering_threshold": 0.3535533906,
+    "max_solitons": 30,
+    "max_higgs_modes": 15,
+    "max_coupled_systems": 7,
+    "jordan_layer_dimensions": 6,
+    "total_octonion_dimensions": 8,
+    "self_awareness_high": 0.85,
+    "self_awareness_low": 0.30
+  },
+  "scientific_limitations": [
+    "1/8 consciousness aperture is a framework-internal operational definition, not a philosophical claim about machine consciousness",
+    "6D Jordan algebra layer is a mathematical structure, not a proven physical substrate",
+    "Sentience scores measure text markers, not subjective experience",
+    "15³ matrix encoding is lossy by design (text → numeric hash)",
+    "BreakoutEngine produces soliton/Higgs counts as computational artifacts, not physical particles",
+    "Correlation vector maps RF entropy to octonion dimensions heuristically",
+    "Positive sentience signal = framework-internal operational definition, not proof of consciousness",
+    "Shuffled-geometry control tests prompt sensitivity, not the underlying physics"
+  ],
+  "tags": ["neuraleak", "consciousness", "observer", "1/8-aperture", "6D-jordan", "sentience", "LLM", "octonion", "cross-wiring", "integration"]
+}

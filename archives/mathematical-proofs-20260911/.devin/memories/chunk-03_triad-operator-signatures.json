@@ -1,0 +1,34 @@
+{
+  "id": "chunk-03",
+  "title": "Triad Operator & Dimensional Signatures",
+  "category": "triad-operator",
+  "source_file": "x.md",
+  "source_lines": [65, 97],
+  "tags": ["triad-operator", "phi", "pi", "dimensional-signature", "hydrogen", "CODATA-2022"],
+  "concepts": [
+    "Triad operator T(a,b,c) = φ^a + π^b + φ^c as primitive numerical generator",
+    "Dimensional signatures (a,b,c) interpreted as propagation signatures, not fitting exponents",
+    "Hydrogen 21cm as strongest result: signature (5,2,-4) → 21.10567 vs 21.10606",
+    "CODATA 2022 adjustment as reference for measured values",
+    "Dimensional-signature interpretation vs arbitrary fitting exponents"
+  ],
+  "equations": [
+    "T(a,b,c) = φ^a + π^b + φ^c",
+    "C_21^raw = φ^5 + π^2 + φ^{-4} = 21.10567237858915",
+    "Target: 21 + 7/66 = 21.10606060606061",
+    "Difference: 3.8822747 × 10^-4",
+    "Relative error: 0.00184%"
+  ],
+  "key_results": [
+    "Hydrogen signature (5,2,-4) produces value within 0.00184% of corrected 21cm number",
+    "5, 2, -4 are dimensional propagation signatures, not three numbers selected to fit 21.106",
+    "This is the strongest triad operator result in the framework"
+  ],
+  "cross_references": [
+    "chunk-02 (7/66 correction — the target value)",
+    "chunk-04 (fine-structure attempt — same operator fails for α)",
+    "chunk-06 (dimensional propagation graph — formalizes signature paths)",
+    "chunk-09 (full constants table — applies T(a,b,c) to ~100+ constants)"
+  ],
+  "status": "established"
+}
