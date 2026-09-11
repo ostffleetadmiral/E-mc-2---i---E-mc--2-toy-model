@@ -1,5 +1,7 @@
 # arXiv Papers — E=mc²-i-E=mc⁻² (toy-model)
 
+**DOI:** [10.5281/zenodo.22715355](https://doi.org/10.5281/zenodo.22715355)
+
 Four arXiv-ready LaTeX papers generated from the computational framework.
 
 ## Papers and arXiv Submission Categories

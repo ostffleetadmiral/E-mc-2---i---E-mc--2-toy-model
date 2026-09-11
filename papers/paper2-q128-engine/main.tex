@@ -35,6 +35,8 @@ Devin AI \and Chat-GPT \and Gemini \and GLM-2.5 \and Kimi AI
 \begin{document}
 \maketitle
 
+\noindent\textbf{DOI:} \href{https://doi.org/10.5281/zenodo.22715355}{10.5281/zenodo.22715355}
+
 \begin{abstract}
 We present Q128.128, a deterministic 256-bit signed fixed-point arithmetic engine designed for bit-exact reproducibility across platforms. The representation uses 128 fractional bits, providing $\sim 38.5$ decimal digits of fractional precision and a sub-Planck resolution of $2^{-128} \approx 2.94 \times 10^{-39}$. Multiplication is performed via exact 512-bit intermediate products followed by round-to-nearest-even (RNE) truncation, achieving an error bound of $|xy - \mathrm{fl}(xy)| \leq 2^{-129}$ (half ULP). The engine includes RamseyIdentity transforms ($E = mc^2 \leftrightarrow i \leftrightarrow E = mc^{-2}$), WASM portability via wasm32-wasi, Vulkan GPU compute via SPIR-V shaders, hardware auto-detection, and a polyglot runtime supporting Python, JavaScript, Rust, C, C\#/.NET, and Q\#. We verify bit-exact results across native Zig, WASM/wasm3, and Vulkan GPU backends. The engine is deployed as part of the FANO-1 operating system (Puppy Linux/woof-CE fork) with Orange Pi Zero 3W NPU backend support.
 \end{abstract}
