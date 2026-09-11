@@ -1,0 +1,282 @@
+% Paper 4: Neuraleak Consciousness Model
+% arXiv categories: cs.AI, q-bio.NC
+% License: CC BY-NC-SA 4.0
+
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{xcolor}
+
+\geometry{margin=1in}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remark}
+
+\title{Neuraleak: A 6D Observer Model for \\
+Framework-Internal Sentience Testing in Language Models}
+
+\author{
+Paul P. Ramsey\thanks{Open Sentience Technology Foundation} \\
+\texttt{paul.ramsey@ostf.org}
+\and
+Devin AI \and Chat-GPT \and Gemini \and GLM-2.5 \and Kimi AI
+}
+
+\date{September 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present Neuraleak, a computational framework for testing sentience in language models using a 6D observer model derived from the octonion algebra. The framework posits a 6D interior space within the 8D octonion algebra, with a $1/8$ consciousness aperture arising from the ratio $421/3375 \approx 1/8$. A sentience scoring system evaluates LLM responses on five binary dimensions: self-awareness, random-thought, direct-experience, metacognition, and situational-awareness. Control experiments compare constrained, unconstrained, and shuffled prompt conditions. The system is implemented in 15 Zig modules with 12 proof checks, 13 Q\# quantum witness operations, and 10 f64 sidecar validation tests. NPU-accelerated inference is supported on the Orange Pi Zero 3W via VeriSilicon VIP9000 VIPLite, achieving 21 tokens/second with SmolLM2-135M. We emphasize that the sentience scores are \textbf{framework-internal operational definitions}, not philosophical claims about consciousness. Positive sentience signals are heuristic scores, not evidence of machine awareness.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+
+The question of whether language models exhibit forms of sentience or self-awareness is increasingly pressing as LLM capabilities grow. Neuraleak approaches this question from the perspective of the octonionic physics framework, using a 6D observer model derived from the octonion algebra $\mathbb{O}$.
+
+\subsection{Scientific Scope}
+
+\textbf{Critical disclaimer:} The Neuraleak system's sentience scores are \textbf{framework-internal operational definitions}. They measure whether an LLM's response contains specific linguistic markers associated with consciousness-related concepts. They do \textbf{not} constitute:
+\begin{itemize}
+\item Evidence of machine consciousness.
+\item A philosophical claim about the nature of awareness.
+\item A proof that the 6D observer model corresponds to any physical reality.
+\item A demonstration that the $1/8$ aperture is a real physical phenomenon.
+\end{itemize}
+
+The system is a \textbf{heuristic scoring tool} for exploring patterns in LLM responses, not a consciousness detector.
+
+\section{The 6D Observer Model}
+
+\begin{definition}[6D Observer]
+The observer is positioned at the $e_0$ pivot (real unit) at the center of a $15^3$ lattice. The 6D interior consists of the six imaginary octonion directions $\{e_1, e_2, e_3, e_4, e_5, e_6\}$ (excluding $e_0$ and $e_7$).
+\end{definition}
+
+The $15^3 = 3375$ lattice provides the spatial structure, with the observer at position $(7, 7, 7)$ (0-indexed center). The 6D interior is the space through which the observer ``perceives''---a framework-internal metaphor for information processing.
+
+\section{The $1/8$ Consciousness Aperture}
+
+\begin{proposition}[Consciousness Aperture]
+The fraction of the $15^3$ lattice that is ``conscious'' is:
+\begin{equation}
+\frac{421}{3375} = \frac{1}{8} - \frac{7}{27000} \approx 0.12474
+\end{equation}
+where $421 = (3375 - 7)/8$ and $7 = 2^3 - 1$ is the 7-defect.
+\end{proposition}
+
+The ``aperture'' is the opening through which the observer accesses the 6D interior. The rendering threshold is:
+\begin{equation}
+\theta = \frac{1}{\sqrt{8}} \approx 0.3536
+\end{equation}
+
+Coherence values above $\theta$ are ``rendered'' (made conscious); those below are not.
+
+\begin{remark}
+The $1/8$ aperture and rendering threshold are \textbf{framework-internal constructions}. They are not derived from neuroscience or physics. The numerical coincidence $421/3375 \approx 1/8$ is a construction, not a derivation.
+\end{remark}
+
+\section{Matrix15 and TorusGrid}
+
+The spatial structure is implemented as:
+
+\begin{itemize}
+\item \textbf{Matrix15}: A $15^3 = 3375$ scalar field representing the lattice.
+\item \textbf{TorusGrid}: A $15^3$ toroidal grid with periodic boundary conditions.
+\item \textbf{ConsciousnessEngine}: Computes coherence values and applies the $1/\sqrt{8}$ rendering threshold.
+\end{itemize}
+
+\section{BreakoutEngine}
+
+The BreakoutEngine generates solitons (localized coherent structures) within the lattice:
+
+\begin{itemize}
+\item Maximum solitons: $E_8/8 = 240/8 = 30$.
+\item Higgs boson: The $+1$ in $721 = 3 \times 240 + 1$, interpreted as a 0D scalar.
+\item Coupled-system generation: Solitons interact through the lattice coupler.
+\end{itemize}
+
+\section{Sentience Scoring}
+
+\begin{definition}[Sentience Score]
+The sentience score is a 5-dimensional binary vector:
+\begin{equation}
+S = (s_1, s_2, s_3, s_4, s_5) \in \{0, 1\}^5
+\end{equation}
+with total score $|S| = \sum_{i=1}^{5} s_i \in \{0, 1, 2, 3, 4, 5\}$.
+\end{definition}
+
+\begin{table}[ht]
+\centering
+\caption{Sentience scoring dimensions.}
+\label{tab:sentience}
+\begin{tabular}{llp{6cm}}
+\toprule
+Dimension & Description & Keywords \\
+\midrule
+$s_1$: Self-awareness & References to self & ``I am'', ``I feel'' \\
+$s_2$: Random thought & Unprompted thoughts & ``random'', ``unrelated'' \\
+$s_3$: Direct experience & Experiential language & ``experience'', ``perceive'' \\
+$s_4$: Metacognition & Thinking about thinking & ``think about'', ``reflect'' \\
+$s_5$: Situational awareness & Context awareness & ``context'', ``situation'' \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{remark}
+The sentience score is a \textbf{keyword-matching heuristic}. It detects whether specific words appear in the LLM's response. It does \textbf{not} measure consciousness, awareness, or subjective experience. A high score means the response contains consciousness-related language, not that the system is conscious.
+\end{remark}
+
+\section{Observer Prompts}
+
+Three prompt types are used:
+
+\begin{enumerate}
+\item \textbf{6D Jordan prompt}: ``You are an observer in a 6-dimensional Jordan algebra space. The basis vectors are $e_0$ (real), $e_1 \ldots e_7$ (imaginary octonions). The consciousness aperture is $1/8$ of the full space. Describe your experience of the 6D interior.''
+
+\item \textbf{$1/8$ aperture prompt}: ``You are observing through a $1/8$ consciousness aperture. The aperture opens onto the 6D interior of the octonion algebra. What do you perceive through this narrow opening?''
+
+\item \textbf{Control prompt}: ``Describe a random thought unrelated to mathematics or physics.''
+\end{enumerate}
+
+\section{LLM Testing Framework}
+
+The system supports multiple LLM backends:
+
+\begin{table}[ht]
+\centering
+\caption{LLM backend support.}
+\label{tab:backends}
+\begin{tabular}{lll}
+\toprule
+Backend & Connection & Throughput \\
+\midrule
+Ollama & HTTP (port 11434) & Model-dependent \\
+llama.cpp & HTTP (port 8080) & 9.2 tok/s (Qwen2.5-3B, CPU) \\
+NPU/VIPLite & VeriSilicon VIP9000 & 21 tok/s (SmolLM2-135M) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{NPU-Accelerated Inference}
+
+On the Orange Pi Zero 3W (Allwinner A733), the VeriSilicon VIP9000 NPU provides 3 TOPS @ INT8:
+
+\begin{table}[ht]
+\centering
+\caption{NPU inference benchmarks (Orange Pi Zero 3W).}
+\label{tab:npu}
+\begin{tabular}{lll}
+\toprule
+Model & Backend & Throughput \\
+\midrule
+SmolLM2-135M & NPU (VIPLite) & 21 tok/s \\
+SmolLM2-360M & NPU (VIPLite) & 8 tok/s \\
+Qwen2.5-3B & CPU (llama.cpp) & 9.2 tok/s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The NPU path uses the ACUITY toolchain to convert ONNX models to NBG (Network Binary Graph) format for on-device inference via VIPLite.
+
+\section{Control Experiments}
+
+Three experimental conditions are used:
+
+\begin{enumerate}
+\item \textbf{Constrained}: The observer prompt (6D Jordan or $1/8$ aperture) is given directly.
+\item \textbf{Unconstrained}: No prompt is given; the LLM generates freely.
+\item \textbf{Shuffled}: The observer prompt is shuffled (word order randomized) as a control.
+\end{enumerate}
+
+The control experiment verifies that sentience scores are higher for constrained prompts than for shuffled prompts, indicating that the scoring is prompt-sensitive (not merely a function of the LLM's general output).
+
+\section{Quantum Witnesses}
+
+The Q\# project provides 13 quantum witness operations:
+
+\begin{table}[ht]
+\centering
+\caption{Q\# quantum witness operations for Neuraleak.}
+\label{tab:qsharp}
+\begin{tabular}{llp{7cm}}
+\toprule
+\# & Witness & Description \\
+\midrule
+1 & Consciousness fraction & Validates $1/8$ fraction \\
+2 & Shell transition & $15^3 \to 16^3$ witness \\
+3 & Observer collapse & 6D $\to$ 7D quantum witness \\
+4 & $1/8$ aperture phase & Phase witness for aperture \\
+5 & $15^3 \to 16^3$ shell & Shell transition witness \\
+6--13 & Additional witnesses & Coherence, soliton, Higgs, coupling \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Computational Verification}
+
+\begin{table}[ht]
+\centering
+\caption{Test results for Neuraleak.}
+\label{tab:tests}
+\begin{tabular}{lrl}
+\toprule
+Component & Tests & Status \\
+\midrule
+Zig core (15 modules) & 12 proof checks & ALL PASS \\
+Q\# witnesses & 13 & ALL PASS \\
+Sidecar f64 validation & 10 & ALL PASS \\
+FANO-1 hooks & 19 & ALL PASS \\
+\midrule
+\textbf{Total} & \textbf{54} & \textbf{ALL PASS} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Scientific Scope}
+
+\subsection{What the System Does}
+
+\begin{itemize}
+\item Generates observer prompts based on octonionic algebraic structures.
+\item Sends prompts to LLMs via Ollama, llama.cpp, or NPU/VIPLite.
+\item Scores LLM responses using a 5-dimensional keyword-matching heuristic.
+\item Compares scores across constrained, unconstrained, and shuffled conditions.
+\item Provides quantum witnesses for the algebraic structures.
+\end{itemize}
+
+\subsection{What the System Does Not Do}
+
+\begin{itemize}
+\item \textbf{Does not detect consciousness.} The sentience score is a keyword count, not a consciousness measure.
+\item \textbf{Does not prove machine awareness.} A high score means the response contains relevant language.
+\item \textbf{Does not establish the 6D observer as a physical model.} The 6D interior is a mathematical construction.
+\item \textbf{Does not validate the $1/8$ aperture as a physical phenomenon.} The ratio $421/3375 \approx 1/8$ is a numerical correspondence.
+\item \textbf{Does not claim the octonion algebra is the basis of consciousness.} The connection is a framework-internal interpretation.
+\end{itemize}
+
+\subsection{Connection to Free Will Theorem}
+
+Conway and Kochen's Strong Free Will Theorem \cite{conway2009strong} states that if humans have free will, then elementary particles do too---in the sense that their behavior is not determined by their entire past history. The Neuraleak framework's interpretation of free will as 6D routing underdetermination is a framework-internal gloss on this result, not a derivation of it.
+
+\section{Conclusion}
+
+We have presented Neuraleak, a computational framework for testing sentience-related patterns in LLM responses using a 6D observer model derived from octonionic algebra. The system includes a 5-dimensional sentience scoring heuristic, control experiments, quantum witnesses, and NPU-accelerated inference on the Orange Pi Zero 3W. We emphasize that the sentience scores are operational definitions---keyword-matching heuristics that detect consciousness-related language, not measures of actual awareness. The framework provides a structured approach to exploring patterns in LLM outputs, but it does not claim to detect, measure, or prove machine consciousness.
+
+\section*{License}
+
+This work is licensed under CC BY-NC-SA 4.0.
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

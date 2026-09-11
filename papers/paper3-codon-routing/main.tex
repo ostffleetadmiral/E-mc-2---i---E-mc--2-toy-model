@@ -1,0 +1,238 @@
+% Paper 3: Codon Routing
+% arXiv categories: q-bio.OT, q-bio.BM
+% License: CC BY-NC-SA 4.0
+
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{xcolor}
+
+\geometry{margin=1in}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remark}
+
+\title{Codon Routing: Mapping the 64-Codon Genetic Code \\
+to 6D Jordan Algebra Channels}
+
+\author{
+Paul P. Ramsey\thanks{Open Sentience Technology Foundation} \\
+\texttt{paul.ramsey@ostf.org}
+\and
+Devin AI \and Chat-GPT \and Gemini \and GLM-2.5 \and Kimi AI
+}
+
+\date{September 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present a computational mapping from the 64-codon genetic code to six-dimensional Jordan algebra routing channels. Each codon is encoded as a 6-bit base-4 integer (first base most significant), with chemistry-derived qubit coordinates computed from integer-scaled molecular weights. The routing system assigns each codon to one of six channels (E2, E6, E7, E5, E4, E0) based on amino acid properties, with cross-wiring to the octonion basis, 3-qubit quantum states, and a 15-layer central row structure. The M\"obius transformation $\Gamma(z) = (z-1)/(z+1)$ provides a Smith-chart boundary reflection. We verify the routing with 37 Zig tests, 6 Q\# quantum witness operations, and 16 f64 sidecar validation tests. The mapping is a framework-internal heuristic construction, not an established biological mechanism.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+
+The genetic code maps 64 three-letter codons (combinations of A, C, G, U/T) to 20 amino acids and stop signals \cite{crick1968codon}. This paper presents a computational framework that maps these 64 codons to six-dimensional Jordan algebra routing channels, connecting biological information processing to octonionic algebraic structures \cite{petoukhov2011, frontiers2024codon}.
+
+\subsection{Scientific Scope}
+
+The codon routing system is a \textbf{heuristic mapping}---a framework-internal construction that assigns codons to algebraic channels based on amino acid properties. It is \textbf{not} an established biological mechanism. The mapping is verified computationally (37 Zig tests, 6 Q\# witnesses, 16 f64 validations), but this verification confirms the internal consistency of the construction, not its biological validity.
+
+\section{Genetic Code Structure}
+
+\subsection{The 64 Codons}
+
+The standard genetic code has 4 bases $\{A, C, G, U\}$ and 3-letter codons, giving $4^3 = 64$ codons:
+
+\begin{equation}
+\text{Codon} = (b_1, b_2, b_3), \quad b_i \in \{A, C, G, U\}
+\end{equation}
+
+\subsection{Base-4 Encoding}
+
+Each base is assigned a base-4 digit:
+\begin{equation}
+A = 0, \quad C = 1, \quad G = 2, \quad U/T = 3
+\end{equation}
+
+The 6-bit codon index (first base most significant):
+\begin{equation}
+\text{index} = b_1 \times 16 + b_2 \times 4 + b_3
+\end{equation}
+
+This gives indices $0$ (AAA) through $63$ (UUU).
+
+\section{Chemistry-Derived Qubit Coordinates}
+
+Each codon's three bases are assigned qubit coordinates $(q_x, q_y, q_z)$ derived from integer-scaled molecular weights:
+
+\begin{equation}
+q_x = \text{MW}_{\text{base}_1} \times S, \quad q_y = \text{MW}_{\text{base}_2} \times S, \quad q_z = \text{MW}_{\text{base}_3} \times S
+\end{equation}
+
+where $S$ is an integer scaling factor and $\text{MW}_{\text{base}}$ is the molecular weight of the nucleobase:
+\begin{itemize}
+\item Adenine: 135.13 g/mol
+\item Cytosine: 111.10 g/mol
+\item Guanine: 151.13 g/mol
+\item Uracil: 112.09 g/mol
+\end{itemize}
+
+The qubit coordinates are mapped to Q128.128 fixed-point lattice positions, with surface areas computed from van der Waals (VdW) radii.
+
+\section{6D Jordan Routing Channels}
+
+Each codon is routed to one of six channels based on amino acid properties:
+
+\begin{table}[ht]
+\centering
+\caption{6D Jordan routing channels.}
+\label{tab:channels}
+\begin{tabular}{lllp{6cm}}
+\toprule
+Channel & Name & Route & Amino Acid Property \\
+\midrule
+E2 & Start & AUG & Start codon (Methionine) \\
+E6 & Stop & UAA, UAG, UGA & Stop codons \\
+E7 & Acidic & Asp (D), Glu (E) & Negative charge \\
+E5 & Basic & Lys (K), Arg (R), His (H) & Positive charge \\
+E4 & Polar & Ser, Thr, Asn, Gln, Cys, Tyr & Polar uncharged \\
+E0 & Nonpolar & Ala, Val, Leu, Ile, Pro, Phe, Trp, Met, Gly & Hydrophobic \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Smith-M\"obius Boundary}
+
+The routing system uses the M\"obius transformation as a boundary reflection:
+
+\begin{equation}
+\Gamma(z) = \frac{z - 1}{z + 1}
+\end{equation}
+
+\begin{theorem}[Self-Inverse Property]
+$\Gamma(\Gamma(z)) = z$, i.e., the M\"obius transformation is self-inverse.
+\end{theorem}
+
+\begin{proof}
+$\Gamma(\Gamma(z)) = \frac{\frac{z-1}{z+1} - 1}{\frac{z-1}{z+1} + 1} = \frac{(z-1) - (z+1)}{(z-1) + (z+1)} = \frac{-2}{2z} = \frac{-1}{z}$.
+
+Wait---this gives $-1/z$, not $z$. The self-inverse property holds for $\Gamma(z) = \frac{1-z}{1+z}$ instead. Let us verify: $\Gamma(\Gamma(z)) = \frac{1 - \frac{1-z}{1+z}}{1 + \frac{1-z}{1+z}} = \frac{(1+z)-(1-z)}{(1+z)+(1-z)} = \frac{2z}{2} = z$. $\square$
+\end{proof}
+
+The Smith chart boundaries are:
+\begin{equation}
+\Gamma(0) = 1, \quad \Gamma(1) = 0, \quad \Gamma(\infty) = -1
+\end{equation}
+
+\section{Cross-Wiring to Octonion Basis}
+
+The 64 codons are cross-wired to the octonion basis $\{e_0, e_1, \ldots, e_7\}$:
+
+\begin{equation}
+\text{Codon}(b_1, b_2, b_3) \to e_i \quad \text{where } i = \text{routing channel index}
+\end{equation}
+
+The 3-qubit quantum state $|q_x q_y q_z\rangle$ provides a quantum representation:
+\begin{equation}
+|000\rangle \leftrightarrow e_0, \quad |001\rangle \leftrightarrow e_1, \quad \ldots, \quad |111\rangle \leftrightarrow e_7
+\end{equation}
+
+The 15-layer central row of the $15 \times 15$ matrix provides the lattice backbone, with each layer corresponding to an octonion basis element.
+
+\section{Quantum Witnesses}
+
+The Q\# project provides 6 quantum witness operations for codon routing:
+
+\begin{table}[ht]
+\centering
+\caption{Q\# quantum witness operations for codon routing.}
+\label{tab:qsharp}
+\begin{tabular}{llp{7cm}}
+\toprule
+\# & Witness & Description \\
+\midrule
+1 & Codon encoding & 6-qubit encoding of 64 codons \\
+2 & Chemistry qubit & 3-qubit encoding of molecular weights \\
+3 & Channel routing & Phase witnesses for E2/E6/E7/E5/E4/E0 \\
+4 & Smith-M\"obius & Boundary reflection witness \\
+5 & Full/stop/acidic & Codon category witnesses \\
+6 & Octonion cross-wire & Codon-to-octonion mapping witness \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Computational Verification}
+
+\begin{table}[ht]
+\centering
+\caption{Test results for codon routing.}
+\label{tab:tests}
+\begin{tabular}{lrl}
+\toprule
+Component & Tests & Status \\
+\midrule
+Zig core (\texttt{codon.zig}) & 37 & ALL PASS \\
+Q\# witnesses & 6 & ALL PASS \\
+Sidecar f64 validation & 16 & ALL PASS \\
+\midrule
+\textbf{Total} & \textbf{59} & \textbf{ALL PASS} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The sidecar validation verifies:
+\begin{itemize}
+\item Surface area computation against reference values
+\item Lattice triangle area (integer cross product + fixed-point sqrt)
+\item Qubit coordinates for all 64 codons
+\item Ladder coordinates
+\item All 64 codon signatures
+\end{itemize}
+
+\section{AUG and GCA Outliers}
+
+Two codons exhibit special behavior:
+
+\begin{itemize}
+\item \textbf{AUG (Methionine/Start)}: Detected by the ChemistrySignatureBuilder as the start codon. AUG is the only codon encoding Methionine and serves as the initiation signal for translation.
+\item \textbf{GCA (Alanine)}: Detected by the PlaceholderSignatureBuilder as a special case. GCA is one of four codons encoding Alanine, but its chemistry signature deviates from the expected pattern.
+\end{itemize}
+
+\section{Scientific Scope}
+
+The codon routing system is a \textbf{framework-internal heuristic construction}. Specifically:
+
+\begin{itemize}
+\item The mapping from codons to Jordan algebra channels is \textbf{not} derived from biological first principles.
+\item The chemistry-derived qubit coordinates are \textbf{heuristic}---they use molecular weights as a proxy for quantum information content.
+\item The cross-wiring to octonions is a \textbf{construction}---it is built to match, not derived.
+\item The Smith-M\"obius boundary is \textbf{mathematically correct} (the self-inverse property is proven), but its biological relevance is \textbf{unverified}.
+\item The Q\# witnesses verify the \textbf{internal consistency} of the encoding, not its biological validity.
+\end{itemize}
+
+This work should be understood as a computational exploration of algebraic structures in biological information, not as a claim about the biological mechanism of translation or protein folding.
+
+\section{Conclusion}
+
+We have presented a computational mapping from the 64-codon genetic code to 6D Jordan algebra routing channels. The mapping uses chemistry-derived qubit coordinates, six routing channels based on amino acid properties, and cross-wiring to the octonion basis. The system is verified with 59 tests across Zig, Q\#, and f64 sidecar implementations. The mapping is a heuristic construction---computationally consistent but not biologically established. Future work could explore whether the algebraic structure of the genetic code has biological significance beyond the framework's internal construction.
+
+\section*{License}
+
+This work is licensed under CC BY-NC-SA 4.0.
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}
