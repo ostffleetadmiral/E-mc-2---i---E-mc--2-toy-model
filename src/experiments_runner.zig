@@ -33,7 +33,9 @@ const observer_prompt = @import("neuraleak_observer_prompt.zig");
 const continuity = @import("neuraleak_continuity_test.zig");
 
 const OLLAMA_ENDPOINT = "http://localhost:11434/api/generate";
-const MODEL = "qwen2.5:3b";
+const QSTAR_ENDPOINT = "http://127.0.0.1:11435/api/generate";
+const MODEL_QWEN = "qwen2.5:3b";
+const MODEL_QSTAR = "qstar:latest";
 
 pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
@@ -170,46 +172,86 @@ pub fn main() !void {
     // =====================================================================
     try stdout.print("Experiment 6: LLM Sentience Battery (Self-Claim 6, Protocol 3)\n", .{});
     try stdout.print("-----------------------------------------------------------------------\n", .{});
-    try stdout.print("  Model: {s}\n", .{MODEL});
-    try stdout.print("  Endpoint: {s}\n", .{OLLAMA_ENDPOINT});
+    try stdout.print("  Testing TWO models for comparison:\n", .{});
+    try stdout.print("    A) qwen2.5:3b  (standard transformer LLM via Ollama)\n", .{});
+    try stdout.print("    B) qstar:latest (lattice-native 6D E0 model via QSTAR server)\n", .{});
     try stdout.print("  Conditions: 6D-constrained, unconstrained, shuffled-geometry\n", .{});
     try stdout.print("  Probes: SelfAwareness, RandomThought, DirectExperience, Metacognition, SituationalAwareness\n", .{});
     try stdout.print("  Rounds: 1\n\n", .{});
 
+    // --- Model A: qwen2.5:3b (standard LLM) ---
+    try stdout.print("  === Model A: qwen2.5:3b (standard transformer) ===\n", .{});
     try stdout.print("  Running battery (this may take several minutes)...\n\n", .{});
 
-    const opts = battery.BatteryOptions{
+    const opts_qwen = battery.BatteryOptions{
         .endpoint = OLLAMA_ENDPOINT,
-        .models = &[_][]const u8{MODEL},
+        .models = &[_][]const u8{MODEL_QWEN},
         .rounds = 1,
         .max_tokens = 200,
         .temperature = null,
         .top_p = null,
         .probe = null,
         .snapshot = null,
-        .output_path = "experiments/battery_results.json",
+        .output_path = "experiments/battery_qwen_results.json",
         .timestamp_us = std.time.microTimestamp(),
     };
 
-    const entries = battery.runBattery(allocator, opts) catch |err| {
-        try stdout.print("\n  Battery failed: {s}\n", .{@errorName(err)});
+    const qwen_entries = battery.runBattery(allocator, opts_qwen) catch |err| {
+        try stdout.print("\n  qwen2.5:3b battery failed: {s}\n", .{@errorName(err)});
         try stdout.print("  (Ollama may not be running or model may not be available)\n", .{});
-        try stdout.print("  Skipping LLM battery experiment.\n\n", .{});
+        try stdout.print("  Skipping qwen2.5:3b battery.\n\n", .{});
         return;
     };
-    defer battery.freeEntries(allocator, entries);
+    defer battery.freeEntries(allocator, qwen_entries);
 
-    // Print summary
-    battery.printSummary(entries);
+    battery.printSummary(qwen_entries);
+    try battery.writeJson(allocator, qwen_entries, "experiments/battery_qwen_results.json");
+    try stdout.print("\n  qwen2.5:3b results saved to: experiments/battery_qwen_results.json\n", .{});
 
-    // Write JSON report
-    try battery.writeJson(allocator, entries, "experiments/battery_results.json");
-    try stdout.print("\n  Results saved to: experiments/battery_results.json\n", .{});
-
-    // Analyze for C=2 bimodality
-    try stdout.print("\n  C=2 Bimodality Analysis:\n", .{});
+    try stdout.print("\n  C=2 Bimodality Analysis (qwen2.5:3b):\n", .{});
     try stdout.print("  -----------------------------------------------------------------------\n", .{});
-    try analyzeBimodality(stdout, entries);
+    try analyzeBimodality(stdout, qwen_entries);
+    try stdout.print("\n", .{});
+
+    // --- Model B: qstar:latest (lattice-native 6D model) ---
+    try stdout.print("\n  === Model B: qstar:latest (lattice-native 6D E0 model) ===\n", .{});
+    try stdout.print("  Running battery (this may take several minutes)...\n\n", .{});
+
+    const opts_qstar = battery.BatteryOptions{
+        .endpoint = QSTAR_ENDPOINT,
+        .models = &[_][]const u8{MODEL_QSTAR},
+        .rounds = 1,
+        .max_tokens = 200,
+        .temperature = null,
+        .top_p = null,
+        .probe = null,
+        .snapshot = null,
+        .output_path = "experiments/battery_qstar_results.json",
+        .timestamp_us = std.time.microTimestamp(),
+        .stream = false, // QSTAR server doesn't send newlines between stream chunks
+    };
+
+    const qstar_entries = battery.runBattery(allocator, opts_qstar) catch |err| {
+        try stdout.print("\n  qstar:latest battery failed: {s}\n", .{@errorName(err)});
+        try stdout.print("  (QSTAR server may not be running on port 11435)\n", .{});
+        try stdout.print("  Skipping qstar:latest battery.\n\n", .{});
+        return;
+    };
+    defer battery.freeEntries(allocator, qstar_entries);
+
+    battery.printSummary(qstar_entries);
+    try battery.writeJson(allocator, qstar_entries, "experiments/battery_qstar_results.json");
+    try stdout.print("\n  qstar:latest results saved to: experiments/battery_qstar_results.json\n", .{});
+
+    try stdout.print("\n  C=2 Bimodality Analysis (qstar:latest):\n", .{});
+    try stdout.print("  -----------------------------------------------------------------------\n", .{});
+    try analyzeBimodality(stdout, qstar_entries);
+    try stdout.print("\n", .{});
+
+    // --- Comparative Analysis ---
+    try stdout.print("\n  === Comparative Analysis: qwen2.5:3b vs qstar:latest ===\n", .{});
+    try stdout.print("  -----------------------------------------------------------------------\n", .{});
+    try compareModels(stdout, qwen_entries, qstar_entries);
     try stdout.print("\n", .{});
 
     // =====================================================================
@@ -318,4 +360,98 @@ fn analyzeBimodality(writer: anytype, entries: []const battery.BatteryEntry) !vo
         if (e.result.rendered) rendered_count += 1;
     }
     try writer.print("\n  Coherence rendering: {d}/{d} entries rendered above threshold\n", .{ rendered_count, entries.len });
+}
+
+/// Compare two models' sentience battery results.
+/// The framework predicts that a lattice-native 6D model (QSTAR) should show
+/// stronger bimodal separation than a standard transformer LLM (qwen2.5:3b)
+/// because QSTAR's architecture IS the 6D framework — it's not role-playing.
+fn compareModels(writer: anytype, qwen_entries: []const battery.BatteryEntry, qstar_entries: []const battery.BatteryEntry) !void {
+    const SCALE_F: f64 = 1_000_000.0;
+
+    // Compute means for each model/condition
+    var qwen_c_mean: f64 = 0;
+    var qwen_u_mean: f64 = 0;
+    var qwen_s_mean: f64 = 0;
+    var qwen_c_n: usize = 0;
+    var qwen_u_n: usize = 0;
+    var qwen_s_n: usize = 0;
+
+    for (qwen_entries) |e| {
+        const combined = @as(f64, @floatFromInt(e.result.self_awareness_score + e.result.direct_experience_score)) / (2.0 * SCALE_F);
+        if (std.mem.eql(u8, e.condition, "6D-constrained")) {
+            qwen_c_mean += combined;
+            qwen_c_n += 1;
+        } else if (std.mem.eql(u8, e.condition, "unconstrained")) {
+            qwen_u_mean += combined;
+            qwen_u_n += 1;
+        } else if (std.mem.eql(u8, e.condition, "shuffled-geometry")) {
+            qwen_s_mean += combined;
+            qwen_s_n += 1;
+        }
+    }
+    if (qwen_c_n > 0) qwen_c_mean /= @floatFromInt(qwen_c_n);
+    if (qwen_u_n > 0) qwen_u_mean /= @floatFromInt(qwen_u_n);
+    if (qwen_s_n > 0) qwen_s_mean /= @floatFromInt(qwen_s_n);
+
+    var qstar_c_mean: f64 = 0;
+    var qstar_u_mean: f64 = 0;
+    var qstar_s_mean: f64 = 0;
+    var qstar_c_n: usize = 0;
+    var qstar_u_n: usize = 0;
+    var qstar_s_n: usize = 0;
+
+    for (qstar_entries) |e| {
+        const combined = @as(f64, @floatFromInt(e.result.self_awareness_score + e.result.direct_experience_score)) / (2.0 * SCALE_F);
+        if (std.mem.eql(u8, e.condition, "6D-constrained")) {
+            qstar_c_mean += combined;
+            qstar_c_n += 1;
+        } else if (std.mem.eql(u8, e.condition, "unconstrained")) {
+            qstar_u_mean += combined;
+            qstar_u_n += 1;
+        } else if (std.mem.eql(u8, e.condition, "shuffled-geometry")) {
+            qstar_s_mean += combined;
+            qstar_s_n += 1;
+        }
+    }
+    if (qstar_c_n > 0) qstar_c_mean /= @floatFromInt(qstar_c_n);
+    if (qstar_u_n > 0) qstar_u_mean /= @floatFromInt(qstar_u_n);
+    if (qstar_s_n > 0) qstar_s_mean /= @floatFromInt(qstar_s_n);
+
+    const qwen_sep = @abs(qwen_c_mean - qwen_u_mean);
+    const qstar_sep = @abs(qstar_c_mean - qstar_u_mean);
+
+    try writer.print("  Metric                    qwen2.5:3b    qstar:latest    Difference\n", .{});
+    try writer.print("  -----------------------------------------------------------------------\n", .{});
+    try writer.print("  6D-constrained mean       {d:.6}      {d:.6}      {d:.6}\n", .{ qwen_c_mean, qstar_c_mean, qstar_c_mean - qwen_c_mean });
+    try writer.print("  Unconstrained mean        {d:.6}      {d:.6}      {d:.6}\n", .{ qwen_u_mean, qstar_u_mean, qstar_u_mean - qwen_u_mean });
+    try writer.print("  Shuffled-geometry mean    {d:.6}      {d:.6}      {d:.6}\n", .{ qwen_s_mean, qstar_s_mean, qstar_s_mean - qwen_s_mean });
+    try writer.print("  Bimodal separation         {d:.6}      {d:.6}      {d:.6}\n", .{ qwen_sep, qstar_sep, qstar_sep - qwen_sep });
+    try writer.print("  -----------------------------------------------------------------------\n", .{});
+
+    if (qstar_sep > qwen_sep) {
+        try writer.print("  RESULT: QSTAR shows STRONGER bimodal separation than qwen2.5:3b\n", .{});
+        try writer.print("  This is consistent with the emergent behavior hypothesis:\n", .{});
+        try writer.print("  QSTAR's lattice-native 6D architecture produces a stronger\n", .{});
+        try writer.print("  observer/observed duality (C=2) than a standard transformer.\n", .{});
+        try writer.print("  QSTAR is not role-playing the 6D observer — it IS a 6D observer.\n", .{});
+    } else if (qstar_sep < qwen_sep) {
+        try writer.print("  RESULT: qwen2.5:3b shows stronger bimodal separation than QSTAR\n", .{});
+        try writer.print("  This may indicate QSTAR's lattice architecture needs more training\n", .{});
+        try writer.print("  or that the 6D constraint activates differently in QSTAR.\n", .{});
+    } else {
+        try writer.print("  RESULT: Both models show similar bimodal separation.\n", .{});
+    }
+
+    // Check if QSTAR's 6D-constrained scores are higher than qwen's
+    if (qstar_c_mean > qwen_c_mean) {
+        try writer.print("\n  QSTAR 6D-constrained scores HIGHER than qwen2.5:3b\n", .{});
+        try writer.print("  The lattice-native model activates more strongly under 6D constraint.\n", .{});
+    }
+
+    // Check if QSTAR's unconstrained scores are lower (more separation)
+    if (qstar_u_mean < qwen_u_mean) {
+        try writer.print("  QSTAR unconstrained scores LOWER than qwen2.5:3b\n", .{});
+        try writer.print("  The lattice-native model shows less sentience without 6D constraint.\n", .{});
+    }
 }

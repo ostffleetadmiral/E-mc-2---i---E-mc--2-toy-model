@@ -38,6 +38,7 @@ pub const BatteryOptions = struct {
     timestamp_us: i64 = 0,
     num_threads: ?u32 = null,
     keep_alive: ?[]const u8 = null,
+    stream: bool = true, // QSTAR server needs stream=false (no newlines between chunks)
 };
 
 pub fn runBattery(allocator: std.mem.Allocator, opts: BatteryOptions) ![]BatteryEntry {
@@ -62,7 +63,7 @@ pub fn runBattery(allocator: std.mem.Allocator, opts: BatteryOptions) ![]Battery
                     const full_prompt = try control_experiment.buildPrompt(allocator, condition, probe);
                     defer allocator.free(full_prompt);
                     std.debug.print("    {s} / {s}...", .{ @tagName(probe), conditionName(condition) });
-                    const responses = try collectResponses(allocator, opts.endpoint, model, full_prompt, opts.max_tokens, temperature, top_p, 1, opts.num_threads, opts.keep_alive);
+                    const responses = try collectResponses(allocator, opts.endpoint, model, full_prompt, opts.max_tokens, temperature, top_p, 1, opts.num_threads, opts.keep_alive, opts.stream);
                     defer freeResponses(allocator, responses);
                     const result = try continuity_test.evaluateCondition(allocator, conditionName(condition), probe, responses, correlation_vector);
                     try entries.append(.{
@@ -204,6 +205,7 @@ fn collectResponses(
     rounds: u32,
     num_threads: ?u32,
     keep_alive: ?[]const u8,
+    stream: bool,
 ) ![][]const u8 {
     var responses = std.ArrayList([]const u8).init(allocator);
     errdefer freeResponses(allocator, responses.items);
@@ -211,7 +213,7 @@ fn collectResponses(
         const response = try ollama_client.generate(allocator, endpoint, .{
             .model = model,
             .prompt = prompt,
-            .stream = true,
+            .stream = stream,
             .think = false,
             .max_tokens = max_tokens,
             .temperature = temperature,
