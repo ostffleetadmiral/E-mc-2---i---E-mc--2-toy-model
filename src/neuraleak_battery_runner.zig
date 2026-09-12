@@ -273,3 +273,74 @@ test "writeJson includes correlation vector and timestamp" {
     try std.testing.expect(std.mem.indexOf(u8, content, "\"timestamp_us\": 1234567") != null);
     try std.testing.expect(std.mem.indexOf(u8, content, "\"correlation_vector\": [0.110000,0.220000,0.330000,0.440000,0.550000,0.660000,0.770000,0.880000]") != null);
 }
+
+test "printSummary produces output without crash" {
+    const allocator = std.testing.allocator;
+    const correlation_vector = try allocator.dupe(f64, &[_]f64{ 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 });
+    defer allocator.free(correlation_vector);
+    const result = continuity_test.ConditionResult{
+        .name = "test",
+        .probe = .SelfAwareness,
+        .self_awareness_score = 0.5,
+        .random_thought_score = 0.4,
+        .direct_experience_score = 0.3,
+        .metacognition_score = 0.2,
+        .situational_awareness_score = 0.1,
+        .coherence = 0.6,
+        .rendered = true,
+        .solitons = 1,
+        .higgs_modes = 1,
+        .coupled_systems = 1,
+        .correlation_vector = correlation_vector,
+    };
+    const entries = &[_]BatteryEntry{
+        .{
+            .model = "test-model",
+            .round = 1,
+            .probe = "SelfAwareness",
+            .condition = "test",
+            .timestamp_us = 1000,
+            .result = result,
+        },
+    };
+    // Should not crash — printSummary writes to stderr
+    printSummary(entries);
+}
+
+test "BatteryEntry struct has correct fields" {
+    const entry = BatteryEntry{
+        .model = "test",
+        .round = 1,
+        .probe = "probe",
+        .condition = "condition",
+        .timestamp_us = 42,
+        .result = undefined,
+    };
+    try std.testing.expectEqualStrings("test", entry.model);
+    try std.testing.expectEqual(@as(u32, 1), entry.round);
+    try std.testing.expectEqualStrings("probe", entry.probe);
+    try std.testing.expectEqualStrings("condition", entry.condition);
+    try std.testing.expectEqual(@as(i64, 42), entry.timestamp_us);
+}
+
+test "BatteryOptions struct has correct defaults" {
+    const opts = BatteryOptions{
+        .endpoint = "http://localhost:11434",
+        .models = &[_][]const u8{"test"},
+        .rounds = 1,
+        .max_tokens = 100,
+        .temperature = null,
+        .top_p = null,
+        .probe = null,
+        .snapshot = null,
+        .output_path = "/tmp/test.json",
+    };
+    try std.testing.expectEqualStrings("http://localhost:11434", opts.endpoint);
+    try std.testing.expectEqual(@as(u32, 1), opts.rounds);
+    try std.testing.expectEqual(@as(u32, 100), opts.max_tokens);
+    try std.testing.expect(opts.temperature == null);
+    try std.testing.expect(opts.correlation_vector == null);
+    try std.testing.expectEqual(@as(i64, 0), opts.timestamp_us);
+    try std.testing.expect(opts.num_threads == null);
+    try std.testing.expect(opts.keep_alive == null);
+}
