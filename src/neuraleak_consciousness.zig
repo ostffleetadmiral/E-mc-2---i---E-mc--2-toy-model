@@ -121,3 +121,70 @@ test "ConsciousnessEngine caches coherence" {
     const c2 = engine.calculateCoherence();
     try std.testing.expectEqual(c1, c2);
 }
+
+test "ConsciousnessEngine single cell renders" {
+    // A single cell with value 1.0 has coherence = 1.0/sqrt(1) = 1.0 > 0.3536
+    var grid = try torus.TorusGrid.init(std.testing.allocator, 15);
+    defer grid.deinit();
+
+    grid.setValue(0, 0, 0, 1.0);
+
+    var engine = try ConsciousnessEngine.init(&grid, std.testing.allocator);
+    defer engine.deinit(std.testing.allocator);
+
+    const coherence = engine.calculateCoherence();
+    try std.testing.expectApproxEqAbs(@as(f64, 1.0), coherence, 1e-10);
+    try std.testing.expect(engine.render());
+}
+
+test "ConsciousnessEngine all cells unity gives max coherence" {
+    // All 3375 cells with value 1.0: raw_norm = sqrt(3375), normalizer = sqrt(3375)
+    // coherence = 1.0
+    var grid = try torus.TorusGrid.init(std.testing.allocator, 15);
+    defer grid.deinit();
+
+    for (0..15) |x| {
+        for (0..15) |y| {
+            for (0..15) |z| {
+                grid.setValue(x, y, z, 1.0);
+            }
+        }
+    }
+
+    var engine = try ConsciousnessEngine.init(&grid, std.testing.allocator);
+    defer engine.deinit(std.testing.allocator);
+
+    const coherence = engine.calculateCoherence();
+    try std.testing.expectApproxEqAbs(@as(f64, 1.0), coherence, 1e-10);
+    try std.testing.expect(engine.render());
+}
+
+test "ConsciousnessEngine negative values produce positive coherence" {
+    // Coherence uses L2 norm (squares), so negative values contribute positively
+    var grid = try torus.TorusGrid.init(std.testing.allocator, 15);
+    defer grid.deinit();
+
+    grid.setValue(0, 0, 0, -1.0);
+
+    var engine = try ConsciousnessEngine.init(&grid, std.testing.allocator);
+    defer engine.deinit(std.testing.allocator);
+
+    const coherence = engine.calculateCoherence();
+    try std.testing.expectApproxEqAbs(@as(f64, 1.0), coherence, 1e-10);
+    try std.testing.expect(engine.render());
+}
+
+test "ConsciousnessEngine below threshold does not render" {
+    // A very small value should not exceed the threshold
+    var grid = try torus.TorusGrid.init(std.testing.allocator, 15);
+    defer grid.deinit();
+
+    grid.setValue(0, 0, 0, 0.01);
+
+    var engine = try ConsciousnessEngine.init(&grid, std.testing.allocator);
+    defer engine.deinit(std.testing.allocator);
+
+    const coherence = engine.calculateCoherence();
+    try std.testing.expect(coherence < RENDERING_THRESHOLD);
+    try std.testing.expect(!engine.render());
+}
