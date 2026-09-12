@@ -64,6 +64,8 @@ comptime {
     _ = @import("self_claims.zig");
     // Probability log use-case matrix for all verified operations
     _ = @import("probability_log.zig");
+    // Elevation paths for all 6 self-claims
+    _ = @import("elevation_paths.zig");
 }
 
 test "all 30 chunks pass" {

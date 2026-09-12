@@ -21,17 +21,18 @@
 
 ## Current test counts
 
-- Zig core: 539 tests (30 proof modules, 180 total proof checks, plus engineering modules, self-claims, probability log)
+- Zig core: 567 tests (30 proof modules, 180 total proof checks, plus engineering modules, self-claims, probability log, elevation paths)
 - Q#: 51 witness operations (.NET 8.0, 0 warnings)
 - Sidecar: 49 f64 validation tests
 - Lean 4: 8 formalization modules (pending verification — Lean not installed)
 - FANO-1 hooks: 37 tests (neuraleak_qwen_hook, vulkan_e8_hook, polyglot_codon_hook, npu_detect_hook, npu_neuraleak_hook)
-- Total: 539 + 51 + 49 + 37 = 676 verified operations
+- Total: 567 + 51 + 49 + 37 = 704 verified operations
 
-## Self-claims and probability log
+## Self-claims, probability log, and elevation paths
 
 - `src/self_claims.zig` (14 tests) — 6 formal self-claims with computational verification, literature support, and explicit limitations. See `SELF-CLAIMS.md`.
 - `src/probability_log.zig` (16 tests) — Use-case matrix for all verified operations, scoring each across 6 application domains. See `PROBABILITY-LOG.md`.
+- `src/elevation_paths.zig` (28 tests) — Computational implementation of all 6 self-claim elevation paths: testable predictions, blind classification, J3(O) eigenvalues, Gauss-Bonnet formalization, numerical convergence, and C=2 experiment design. See `ELEVATION-PATHS.md`.
 
 ## Precision note
 
@@ -130,10 +131,11 @@ The neuraleak system ports the `neuraleak/` project (6D observer → 1/8 conscio
 - `src/stress_test.zig` — 18 stress findings (3 critical, 7 warning, 8 informational)
 - `src/rebuttal_stress.zig` — Rebuttals to all stress findings with proofs and prototypes
 
-### Self-claims and probability log
+### Self-claims, probability log, and elevation paths
 
 - `src/self_claims.zig` — 6 formal self-claims with computational verification (14 tests). Each claim has evidence, limitations, and literature support. See `SELF-CLAIMS.md`.
 - `src/probability_log.zig` — Use-case matrix for all verified operations across 6 domains (16 tests). See `PROBABILITY-LOG.md`.
+- `src/elevation_paths.zig` — Computational implementation of all 6 self-claim elevation paths (28 tests): testable predictions, blind classification, J3(O) eigenvalues, Gauss-Bonnet formalization, numerical convergence, and C=2 experiment design. See `ELEVATION-PATHS.md`.
 
 ### Engineering modules (ported from Q128.128/FANO-1)
 
