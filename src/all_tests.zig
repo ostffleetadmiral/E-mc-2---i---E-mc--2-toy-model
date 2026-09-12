@@ -60,6 +60,10 @@ comptime {
     _ = @import("smith.zig");
     // RF energy harvesting link budget (Friis, Johnson noise, Greinacher)
     _ = @import("rf_harvest.zig");
+    // Six framework self-claims with computational verification
+    _ = @import("self_claims.zig");
+    // Probability log use-case matrix for all verified operations
+    _ = @import("probability_log.zig");
 }
 
 test "all 30 chunks pass" {
