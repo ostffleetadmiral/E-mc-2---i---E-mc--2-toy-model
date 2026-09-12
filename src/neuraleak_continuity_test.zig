@@ -69,9 +69,9 @@ pub fn evaluateCondition(
 
     // Average over responses so coherence is not length-dependent.
     if (responses.len > 0) {
-        const n = @as(f64, @floatFromInt(responses.len));
+        const n: i64 = @intCast(responses.len);
         for (0..matrix.data.len) |i| {
-            matrix.data[i] /= n;
+            matrix.data[i] = @divTrunc(matrix.data[i], n);
         }
     }
 
@@ -81,7 +81,8 @@ pub fn evaluateCondition(
 
     var eng = try consciousness.ConsciousnessEngine.init(&grid, allocator);
     defer eng.deinit(allocator);
-    const coherence = eng.calculateCoherence();
+    const coherence_int = eng.calculateCoherence();
+    const coherence: f64 = @as(f64, @floatFromInt(coherence_int)) / @as(f64, @floatFromInt(matrix15.SCALE));
     const rendered = eng.render();
 
     var brk = try breakout.BreakoutEngine.init(allocator, &grid);

@@ -6,6 +6,9 @@
 // This is a minimal implementation that records coupling events between
 // lattice cells for later analysis.
 //
+// coupling_strength is stored as coupling_strength_milli (i32, ×1000)
+// to avoid floating point in core.
+//
 // License: CC BY-NC-SA 4.0
 // ============================================================================
 
@@ -22,7 +25,7 @@ pub const CouplerAuditLog = struct {
         cell_b_x: u4,
         cell_b_y: u4,
         cell_b_z: u4,
-        coupling_strength: f64,
+        coupling_strength_milli: i32, // coupling_strength × 1000
     };
 
     pub fn init(allocator: std.mem.Allocator) CouplerAuditLog {
@@ -67,10 +70,25 @@ test "CouplerAuditLog records entries" {
         .cell_b_x = 8,
         .cell_b_y = 7,
         .cell_b_z = 7,
-        .coupling_strength = 1.0,
+        .coupling_strength_milli = 1000, // 1.0
     });
 
     try std.testing.expectEqual(@as(usize, 1), log.count());
     try std.testing.expectEqual(@as(u4, 7), log.entries.items[0].cell_a_x);
     try std.testing.expectEqual(@as(u4, 8), log.entries.items[0].cell_b_x);
+    try std.testing.expectEqual(@as(i32, 1000), log.entries.items[0].coupling_strength_milli);
+}
+
+test "coupling strength uses integer type (no f64)" {
+    const entry = CouplerAuditLog.Entry{
+        .timestamp_us = 0,
+        .cell_a_x = 0,
+        .cell_a_y = 0,
+        .cell_a_z = 0,
+        .cell_b_x = 0,
+        .cell_b_y = 0,
+        .cell_b_z = 0,
+        .coupling_strength_milli = 500, // 0.5
+    };
+    try std.testing.expect(@TypeOf(entry.coupling_strength_milli) == i32);
 }

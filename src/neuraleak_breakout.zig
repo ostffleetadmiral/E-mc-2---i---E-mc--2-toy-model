@@ -15,11 +15,15 @@
 // the number of octonion dimensions (8), giving a maximum of 30 solitons.
 // This connects to the 15×15 matrix element distribution: 30 each of e0..e6.
 //
+// All values use i64 micro-units (SCALE = 10^6) to avoid floating point.
+//
 // License: CC BY-NC-SA 4.0
 // ============================================================================
 
 const std = @import("std");
 const torus = @import("neuraleak_torus.zig");
+
+const SCALE: i64 = torus.SCALE;
 
 pub const MAX_SOLITONS: usize = 30; // 240 E8 roots / 8 dimensions
 pub const MAX_HIGGS_MODES: usize = 15; // 15-layer parameter
@@ -29,20 +33,20 @@ pub const Soliton = struct {
     x: u4,
     y: u4,
     z: u4,
-    amplitude: f64,
+    amplitude: i64, // micro-units
 };
 
 pub const HiggsMode = struct {
     x: u4,
     y: u4,
     z: u4,
-    mass: f64,
+    mass: i64, // micro-units
 };
 
 pub const CoupledSystem = struct {
     soliton_a: Soliton,
     soliton_b: Soliton,
-    coupling_strength: f64,
+    coupling_strength: i64, // micro-units
 };
 
 pub const BreakoutEngine = struct {
@@ -51,7 +55,7 @@ pub const BreakoutEngine = struct {
     solitons: std.ArrayList(Soliton),
     higgs_modes: std.ArrayList(HiggsMode),
     coupled_systems: std.ArrayList(CoupledSystem),
-    total_generated_mass: f64 = 0.0,
+    total_generated_mass: i64 = 0,
 
     pub fn init(allocator: std.mem.Allocator, grid: *const torus.TorusGrid) !BreakoutEngine {
         return .{
@@ -74,9 +78,9 @@ pub const BreakoutEngine = struct {
     /// Maximum 30 solitons (240 E8 roots / 8 dimensions).
     pub fn generateSolitons(self: *BreakoutEngine) !void {
         const max_val = self.grid.maxValue();
-        if (max_val == 0.0) return;
+        if (max_val == 0) return;
 
-        const threshold = 0.5 * max_val;
+        const threshold = @divTrunc(max_val, 2);
 
         for (self.grid.cells) |cell| {
             if (self.solitons.items.len >= MAX_SOLITONS) break;
@@ -111,10 +115,10 @@ pub const BreakoutEngine = struct {
 
                     if (is_boundary) {
                         const cell = self.grid.get(x, y, z);
-                        if (cell.value > 0.0) {
+                        if (cell.value > 0) {
                             // Mass is proportional to the cell value
                             // scaled by the 1/8 consciousness fraction
-                            const mass = cell.value * (1.0 / 8.0);
+                            const mass = @divTrunc(cell.value, 8);
                             try self.higgs_modes.append(.{
                                 .x = @intCast(x),
                                 .y = @intCast(y),
@@ -152,7 +156,8 @@ pub const BreakoutEngine = struct {
 
                 // Couple if within 3 cells (3² = 9)
                 if (dist_sq <= 9 and dist_sq > 0) {
-                    const coupling = 1.0 / @as(f64, @floatFromInt(@as(u32, @intCast(dist_sq))));
+                    // coupling = 1.0 / dist_sq → SCALE / dist_sq in micro-units
+                    const coupling = @divTrunc(SCALE, @as(i64, @intCast(dist_sq)));
                     try self.coupled_systems.append(.{
                         .soliton_a = a,
                         .soliton_b = b,
@@ -184,17 +189,17 @@ test "BreakoutEngine generates solitons from high-coherence cells" {
     var grid = try torus.TorusGrid.init(std.testing.allocator, 15);
     defer grid.deinit();
 
-    grid.setValue(7, 7, 7, 1.0);
-    grid.setValue(8, 7, 7, 0.8);
-    grid.setValue(7, 8, 7, 0.6);
-    grid.setValue(0, 0, 0, 0.1); // below threshold
+    grid.setValue(7, 7, 7, SCALE); // 1.0
+    grid.setValue(8, 7, 7, @divTrunc(8 * SCALE, 10)); // 0.8
+    grid.setValue(7, 8, 7, @divTrunc(6 * SCALE, 10)); // 0.6
+    grid.setValue(0, 0, 0, @divTrunc(SCALE, 10)); // 0.1 (below threshold)
 
     var engine = try BreakoutEngine.init(std.testing.allocator, &grid);
     defer engine.deinit();
 
     try engine.generateSolitons();
 
-    // Solitons at cells with value > 0.5 * max(1.0) = 0.5
+    // Solitons at cells with value > 0.5 * max(SCALE) = SCALE/2
     try std.testing.expectEqual(@as(usize, 3), engine.solitons.items.len);
 }
 
@@ -204,7 +209,7 @@ test "BreakoutEngine limits solitons to 30" {
 
     // Set 50 cells to 1.0
     for (0..50) |i| {
-        grid.setValue(i % 15, (i / 15) % 15, (i / 225) % 15, 1.0);
+        grid.setValue(i % 15, (i / 15) % 15, (i / 225) % 15, SCALE);
     }
 
     var engine = try BreakoutEngine.init(std.testing.allocator, &grid);
@@ -218,9 +223,9 @@ test "BreakoutEngine generates Higgs modes at boundary cells" {
     var grid = try torus.TorusGrid.init(std.testing.allocator, 15);
     defer grid.deinit();
 
-    grid.setValue(0, 0, 0, 1.0); // boundary cell
-    grid.setValue(14, 14, 14, 0.5); // boundary cell
-    grid.setValue(7, 7, 7, 1.0); // interior cell (no Higgs)
+    grid.setValue(0, 0, 0, SCALE); // 1.0, boundary cell
+    grid.setValue(14, 14, 14, @divTrunc(SCALE, 2)); // 0.5, boundary cell
+    grid.setValue(7, 7, 7, SCALE); // 1.0, interior cell (no Higgs)
 
     var engine = try BreakoutEngine.init(std.testing.allocator, &grid);
     defer engine.deinit();
@@ -229,17 +234,17 @@ test "BreakoutEngine generates Higgs modes at boundary cells" {
 
     // Only boundary cells generate Higgs modes
     try std.testing.expectEqual(@as(usize, 2), engine.higgs_modes.items.len);
-    try std.testing.expect(engine.total_generated_mass > 0.0);
+    try std.testing.expect(engine.total_generated_mass > 0);
 }
 
 test "BreakoutEngine couples nearby solitons" {
     var grid = try torus.TorusGrid.init(std.testing.allocator, 15);
     defer grid.deinit();
 
-    grid.setValue(7, 7, 7, 1.0);
-    grid.setValue(8, 7, 7, 1.0); // distance 1
-    grid.setValue(10, 7, 7, 1.0); // distance 3
-    grid.setValue(14, 7, 7, 1.0); // distance 7 (too far)
+    grid.setValue(7, 7, 7, SCALE);
+    grid.setValue(8, 7, 7, SCALE); // distance 1
+    grid.setValue(10, 7, 7, SCALE); // distance 3
+    grid.setValue(14, 7, 7, SCALE); // distance 7 (too far)
 
     var engine = try BreakoutEngine.init(std.testing.allocator, &grid);
     defer engine.deinit();
@@ -267,4 +272,19 @@ test "BreakoutEngine max Higgs = 15 connects to layer parameter" {
 
 test "BreakoutEngine max coupled = 7 connects to octonion triads" {
     try std.testing.expectEqual(@as(usize, 7), MAX_COUPLED_SYSTEMS);
+}
+
+test "BreakoutEngine uses integer types (no f64)" {
+    var grid = try torus.TorusGrid.init(std.testing.allocator, 15);
+    defer grid.deinit();
+
+    grid.setValue(7, 7, 7, SCALE);
+
+    var engine = try BreakoutEngine.init(std.testing.allocator, &grid);
+    defer engine.deinit();
+
+    try engine.generateSolitons();
+    try engine.generateHiggsModes();
+    try std.testing.expect(@TypeOf(engine.solitons.items[0].amplitude) == i64);
+    try std.testing.expect(@TypeOf(engine.total_generated_mass) == i64);
 }

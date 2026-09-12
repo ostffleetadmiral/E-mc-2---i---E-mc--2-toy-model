@@ -151,7 +151,7 @@ test "neuraleak matrix bridge encodes text into 15³ field" {
     defer matrix.deinit();
 
     matrix_bridge.encodeText(&matrix, "observer six dimensional one eighth consciousness");
-    try std.testing.expect(matrix_bridge.norm(&matrix) > 0.0);
+    try std.testing.expect(matrix_bridge.norm(&matrix) > 0);
     try std.testing.expect(matrix.nonZeroCount() > 0);
 }
 
@@ -160,7 +160,7 @@ test "neuraleak consciousness engine renders with sufficient coherence" {
     defer grid.deinit();
 
     for (0..100) |i| {
-        grid.setValue(i % 15, (i / 15) % 15, (i / 225) % 15, 1.0);
+        grid.setValue(i % 15, (i / 15) % 15, (i / 225) % 15, torus.SCALE);
     }
 
     var eng = try consciousness.ConsciousnessEngine.init(&grid, std.testing.allocator);
