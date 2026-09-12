@@ -64,8 +64,8 @@ pub const proven_claims = [_]Claim{
     .{ .id = 11, .claim = "421/3375 = 1/8 - 7/27000", .verdict = .proven, .basis = "Exact rational identity: cross-multiply 421×216000 = 3375×26944", .what_would_prove_it = "Already proven — exact rational arithmetic" },
     .{ .id = 12, .claim = "62 = 64 - 2", .verdict = .proven, .basis = "Exact arithmetic", .what_would_prove_it = "Already proven — trivial arithmetic" },
     .{ .id = 13, .claim = "31 = 2⁵ - 1 is a Mersenne prime", .verdict = .proven, .basis = "Number theory — 31 is prime and 2⁵-1", .what_would_prove_it = "Already proven — independent number theory" },
-    .{ .id = 14, .claim = "Möbius Γ=(z-1)/(z+1) is self-inverse", .verdict = .proven, .basis = "Complex analysis: Γ(Γ(z))=z by direct computation", .what_would_prove_it = "Already proven — verified in checksum_6d.zig" },
-    .{ .id = 15, .claim = "Smith chart boundaries: Γ(0)=-1, Γ(1)=0, Γ(∞)=+1", .verdict = .proven, .basis = "Electrical engineering — Smith chart is standard", .what_would_prove_it = "Already proven — verified in checksum_6d.zig" },
+    .{ .id = 14, .claim = "Self-inverse Möbius Γ=(1-z)/(1+z): Γ(Γ(z))=z", .verdict = .proven, .basis = "Direct computation: Γ(Γ(z)) = z for all z ≠ -1", .what_would_prove_it = "Already proven — verified in checksum_6d.zig mobiusSelfInverse" },
+    .{ .id = 15, .claim = "Smith chart Γ=(z-1)/(z+1): Γ(0)=-1, Γ(1)=0, Γ(∞)=+1", .verdict = .proven, .basis = "Standard electrical engineering — Smith chart is established", .what_would_prove_it = "Already proven — standard EE, verified in smith.zig" },
     .{ .id = 16, .claim = "15²=225, 15×16=240, 16³-15³=721=3(240)+1", .verdict = .proven, .basis = "Exact arithmetic — all identities are tautological", .what_would_prove_it = "Already proven — exact arithmetic" },
 };
 

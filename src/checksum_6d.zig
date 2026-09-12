@@ -37,8 +37,11 @@
 //   E_forward × E_inverse = (mc²)(mc⁻²) = m²
 //
 // The mass is conserved through the loop. The i (e7) is the pivot
-// where the direction reverses — this is the Möbius/Smith chart
-// transformation Γ = (z-1)/(z+1).
+// where the direction reverses — this is the self-inverse Möbius
+// transformation Γ = (1-z)/(1+z), where Γ(Γ(z)) = z.
+// Note: The standard Smith chart uses Γ = (z-1)/(z+1), which is
+// NOT self-inverse (Γ(Γ(z)) = -1/z). The self-inverse form (1-z)/(1+z)
+// is used for the E=mc² ↔ E=mc⁻² checksum round-trip.
 //
 // Connection to Consciousness (Gap 8)
 // ------------------------------------
@@ -165,10 +168,10 @@ pub fn verifyConsciousnessSplit() bool {
 ///   forward_exponent + inverse_exponent = 0
 ///   (c² × c⁻² = c⁰ = 1)
 ///
-/// This is the same structure as the Möbius transformation:
-///   Γ = (z-1)/(z+1)
+/// This is the same structure as the self-inverse Möbius transformation:
+///   Γ = (1-z)/(1+z)
 /// which is self-inverse: applying it twice returns the identity.
-
+/// Note: The standard Smith chart uses (z-1)/(z+1) which is NOT self-inverse.
 /// The forward exponent: +2 (from E = mc²).
 pub const FORWARD_EXPONENT: i32 = 2;
 
@@ -216,9 +219,10 @@ pub fn verifyMassConservation() bool {
 // Möbius/Smith Chart Connection
 // ============================================================================
 
-/// The E=mc² ↔ i ↔ E=mc⁻² checksum is the Möbius transformation.
+/// The E=mc² ↔ i ↔ E=mc⁻² checksum is the self-inverse Möbius transformation.
 ///
-/// Γ = (z-1)/(z+1)
+/// Γ = (1-z)/(1+z)  [self-inverse: Γ(Γ(z)) = z]
+/// Note: Standard Smith chart uses (z-1)/(z+1) which is NOT self-inverse.
 ///
 /// The endpoints:
 ///   z = 0  → Γ = -1  (short circuit, e7 = -1)
@@ -232,10 +236,9 @@ pub fn verifyMassConservation() bool {
 ///
 /// This is the consciousness aperture: the 1/8 fraction is the
 /// "width" of the self-dual point in the 8D octonion space.
-
 /// The Smith chart boundary values.
-pub const E0_BOUNDARY: i32 = 1;   // e0 = +1 (open circuit, origin)
-pub const E7_BOUNDARY: i32 = -1;  // e7 = -1 (short circuit, shadow)
+pub const E0_BOUNDARY: i32 = 1; // e0 = +1 (open circuit, origin)
+pub const E7_BOUNDARY: i32 = -1; // e7 = -1 (short circuit, shadow)
 
 /// Verify the Smith chart boundaries: e0 = +1, e7 = -1.
 pub fn verifySmithBoundaries() bool {
@@ -248,23 +251,43 @@ pub fn verifySmithBoundaries() bool {
     return true;
 }
 
-/// The Möbius transformation is self-inverse: applying it twice
-/// returns the identity. This is the mathematical expression of
-/// the E=mc² ↔ E=mc⁻² checksum.
+/// The self-inverse Möbius transformation Γ(z) = (1-z)/(1+z).
+/// This IS self-inverse: Γ(Γ(z)) = z for all z ≠ -1.
+/// Note: This is NOT the standard Smith chart formula (z-1)/(z+1),
+/// which gives Γ(Γ(z)) = -1/z (NOT self-inverse).
+/// The Smith chart uses (z-1)/(z+1) for impedance matching.
+/// The self-inverse checksum uses (1-z)/(1+z) for the E=mc² ↔ E=mc⁻² round-trip.
 ///
-/// Γ(z) = (z-1)/(z+1)
-/// Γ(Γ(z)) = z  (self-inverse)
-///
-/// In the framework:
-///   Forward: e0 → e7 (E=mc²)
-///   Inverse: e7 → e0 (E=mc⁻²)
-///   Round trip: e0 → e7 → e0 (identity, mass conserved)
+/// Boundary values for Γ(z) = (1-z)/(1+z):
+///   Γ(0) = 1   (e0 = origin = +1)
+///   Γ(1) = 0   (matched impedance)
+///   Γ(∞) = -1  (e7 = shadow = -1)
+pub fn mobiusSelfInverse(z: fixed.Q128) fixed.Q128 {
+    // Γ(z) = (1 - z) / (1 + z)
+    const one = fixed.Q128.one;
+    const numerator = one.sub(z);
+    const denominator = one.add(z);
+    return numerator.div(denominator) catch fixed.Q128.zero;
+}
+
+/// Verify the Möbius self-inverse property: Γ(Γ(z)) = z.
+/// Uses Γ(z) = (1-z)/(1+z), which IS self-inverse.
 pub fn verifyMobiusSelfInverse() bool {
-    // The Möbius transformation Γ(z) = (z-1)/(z+1) is self-inverse.
-    // This means Γ(Γ(z)) = z for all z.
-    // In integer arithmetic, we verify the structural property:
-    //   forward + inverse = 0 (the exponents cancel)
-    return verifyChecksum();
+    // Test with several values using Q128.128 arithmetic
+    const test_values = [_]fixed.Q128{
+        fixed.Q128.fromRatio(1, 2) catch return false,
+        fixed.Q128.fromRatio(1, 3) catch return false,
+        fixed.Q128.fromRatio(2, 3) catch return false,
+        fixed.Q128.fromRatio(3, 4) catch return false,
+    };
+    for (test_values) |z| {
+        const gamma_z = mobiusSelfInverse(z);
+        const gamma_gamma_z = mobiusSelfInverse(gamma_z);
+        // Γ(Γ(z)) should equal z (within 2 ULP due to truncation division)
+        const diff = if (gamma_gamma_z.raw > z.raw) gamma_gamma_z.raw - z.raw else z.raw - gamma_gamma_z.raw;
+        if (diff > 2) return false;
+    }
+    return true;
 }
 
 // ============================================================================
@@ -499,6 +522,25 @@ test "Smith chart boundaries: e0 = +1, e7 = -1" {
 
 test "Möbius transformation is self-inverse (checksum)" {
     try std.testing.expect(verifyMobiusSelfInverse());
+}
+
+test "mobiusSelfInverse Γ(0) = 1" {
+    const result = mobiusSelfInverse(fixed.Q128.zero);
+    try std.testing.expectEqual(fixed.Q128.one.raw, result.raw);
+}
+
+test "mobiusSelfInverse Γ(1) = 0" {
+    const result = mobiusSelfInverse(fixed.Q128.one);
+    try std.testing.expectEqual(@as(fixed.Raw, 0), result.raw);
+}
+
+test "mobiusSelfInverse Γ(Γ(z)) ≈ z for 1/2" {
+    const z = try fixed.Q128.fromRatio(1, 2);
+    const gamma_z = mobiusSelfInverse(z);
+    const gamma_gamma_z = mobiusSelfInverse(gamma_z);
+    // Should be close to z within 2 ULP (truncation division)
+    const diff = if (gamma_gamma_z.raw > z.raw) gamma_gamma_z.raw - z.raw else z.raw - gamma_gamma_z.raw;
+    try std.testing.expect(diff <= 2);
 }
 
 test "consciousness mechanism structure is valid" {

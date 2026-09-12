@@ -167,7 +167,7 @@ pub fn rebuttalC2_PredictionsExist() struct {
 // REBUTTAL: The algebraic identity is trivial, but the PHYSICAL CONTENT
 // is in the Möbius transformation that connects the forward and inverse.
 //
-// The Möbius transformation Γ = (z-1)/(z+1) is NOT trivial:
+// The self-inverse Möbius transformation Γ = (1-z)/(1+z) is NOT trivial:
 // - It maps the impedance ratio z = Z/Z0 to the reflection coefficient Γ
 // - It is self-inverse: Γ(Γ(z)) = z
 // - It maps z=0 → Γ=-1 (short circuit, e7)
@@ -185,7 +185,9 @@ pub fn rebuttalC2_PredictionsExist() struct {
 // the Möbius transformation is self-inverse, which is a non-trivial
 // mathematical fact with physical implications.
 //
-// PROOF PROTOTYPE: Verify the Möbius transformation is self-inverse.
+// PROOF PROTOTYPE: Verify the self-inverse Möbius transformation Γ=(1-z)/(1+z).
+// Note: The standard Smith chart uses (z-1)/(z+1) which is NOT self-inverse.
+// The self-inverse form (1-z)/(1+z) is used for the E=mc² ↔ E=mc⁻² checksum.
 
 pub fn rebuttalC3_ChecksumHasPhysicsContent() struct {
     mobius_self_inverse: bool,
@@ -193,10 +195,10 @@ pub fn rebuttalC3_ChecksumHasPhysicsContent() struct {
     physical_content_exists: bool,
     explanation: []const u8,
 } {
-    // The Möbius transformation is self-inverse
+    // The self-inverse Möbius transformation Γ=(1-z)/(1+z) is verified
     const mobius_ok = checksum.verifyMobiusSelfInverse();
 
-    // The Smith chart boundaries are verified
+    // The Smith chart boundaries are verified (e0=+1, e7=-1)
     const smith_ok = checksum.verifySmithBoundaries();
 
     // The physical content is in the Möbius transformation, not the algebra
@@ -206,7 +208,7 @@ pub fn rebuttalC3_ChecksumHasPhysicsContent() struct {
         .mobius_self_inverse = mobius_ok,
         .smith_boundaries_verified = smith_ok,
         .physical_content_exists = physics_ok,
-        .explanation = "The algebraic identity (mc²)(m/c²)=m² is trivial, but the PHYSICAL CONTENT is in the Möbius transformation Γ=(z-1)/(z+1), which is self-inverse and maps impedance states to reflection coefficients. This is real electrical engineering (Smith chart). The self-dual point (z=1, Γ=0) is where observer=observed. The checksum's physical content is the self-inverse property of the Möbius transformation, not the algebra. REBUTTAL STATUS: PARTIAL — the Möbius transformation is non-trivial, but connecting it to consciousness/codon routing is a framework interpretation.",
+        .explanation = "The algebraic identity (mc²)(m/c²)=m² is trivial, but the PHYSICAL CONTENT is in the self-inverse Möbius transformation Γ=(1-z)/(1+z), which satisfies Γ(Γ(z))=z and maps between observer and observed states. The standard Smith chart uses (z-1)/(z+1) for impedance matching. The self-dual point (z=1, Γ=0) is where observer=observed. The checksum's physical content is the self-inverse property, not the algebra. REBUTTAL STATUS: PARTIAL — the Möbius transformation is non-trivial, but connecting it to consciousness/codon routing is a framework interpretation.",
     };
 }
 
