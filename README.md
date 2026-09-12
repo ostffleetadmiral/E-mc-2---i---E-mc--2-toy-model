@@ -12,16 +12,16 @@ A computational mathematical framework based on the axiom $0^0 = i$, the octonio
 ## Quick Start
 
 ```bash
-# Zig core tests (440+ tests)
+# Zig core tests (502 tests)
 zig build test
 
 # Proof module summary (30 modules, 180 checks)
 zig build run
 
-# Q# witnesses (51 operations)
+# Q# witnesses (51 operations, .NET 8.0)
 cd qsharp && dotnet run
 
-# f64 sidecar validation
+# f64 sidecar validation (49 tests)
 cd sidecar && zig build test
 
 # Lean 4 formalization
@@ -35,15 +35,16 @@ cd wasm && zig build
 
 | Suite | Count | Status |
 |---|---|---|
-| Zig core | 440+ tests | ALL PASS |
+| Zig core | 502 tests | ALL PASS |
 | Zig proof modules | 30 modules (180 checks) | ALL PASS |
-| Q# witnesses | 51 operations | ALL PASS |
-| Sidecar | all f64 tests | ALL PASS |
+| Q# witnesses | 51 operations (.NET 8.0) | ALL PASS |
+| Sidecar | 49 f64 tests | ALL PASS |
 | Lean 4 | 8 formalization modules | CREATED |
 | WASM | wasm32-wasi target | CREATED |
 | Q128.128 physics | 393 tests (15 modules) | ALL PASS |
 | FANO-1 hooks | 37 tests (5 modules) | ALL PASS |
 | Orange Pi 3W NPU | VIP9000 3 TOPS @ INT8 | RESEARCH |
+| **Total** | **639 verified operations** | **ALL PASS** |
 
 ## Framework Structure
 
@@ -132,7 +133,7 @@ $$ 0^0 = i \to \mathbb{C} \to \mathbb{H} \to \mathbb{O} \to 8D \to 6D\text{ inte
 
 - `src/generative_chain.zig` — 0^0=i → C → H → O bootstrap
 - `src/dimensional_ladder.zig` — φ, π, triad exponents
-- `src/checksum_6d.zig` — E=mc²↔i↔E=mc⁻², Möbius, Smith chart
+- `src/checksum_6d.zig` — E=mc²↔i↔E=mc⁻², self-inverse Möbius Γ=(1-z)/(1+z), Smith chart Γ=(z-1)/(z+1)
 - `src/free_will_6d.zig` — Free will as 6D routing underdetermination
 - `src/scaling_analysis.zig` — Cubic scaling chain, 7-defect, 421/3375
 
@@ -208,8 +209,8 @@ $$ 0^0 = i \to \mathbb{C} \to \mathbb{H} \to \mathbb{O} \to 8D \to 6D\text{ inte
 - E8 root system (240 roots)
 - SO(10) chiral spinor decomposition (16 = 15 + 1)
 - J3(O) cubic characteristic polynomial
-- Möbius self-inverse transformation
-- Smith chart boundary formulas
+- Self-inverse Möbius transformation Γ=(1-z)/(1+z) with Γ(Γ(z))=z
+- Smith chart boundary formulas Γ=(z-1)/(z+1)
 - Cubic scaling chain and 7-defect
 - Codon routing rules (64 codons, 6-bit encoding)
 - Neuraleak framework cross-wiring (1/8 consciousness)
@@ -250,7 +251,7 @@ The audit independently found exactly this split: 16 determined claims, 20 free 
 
 Every passing state is archived under `archives/`. Archives are never deleted.
 
-Current archives (20):
+Current archives (28):
 - `archives/mathematical-proofs-20260911`
 - `archives/codon-integration-20260912`
 - `archives/neuraleak-integration-20260912`
@@ -271,6 +272,14 @@ Current archives (20):
 - `archives/surface-computation-20260911`
 - `archives/surface-computation-v2-20260911`
 - `archives/full-e2e-audit-20260912`
+- `archives/bidirectional-integration-fano1-20260911`
+- `archives/retrograde-baseline-20260912`
+- `archives/retrograde-layer00-foundation-20260912`
+- `archives/retrograde-layer01-deps-20260912`
+- `archives/retrograde-layer02-mobius-fix-20260912`
+- `archives/retrograde-layer03-deps3-20260912`
+- `archives/retrograde-layer05-entry-20260912`
+- `archives/retrograde-layer06-external-20260912`
 
 ## License
 
@@ -285,6 +294,6 @@ Copyright (c) 2026 Open Sentience Technology Foundation. Licensed under [CC BY-N
   organization = {Open Sentience Technology Foundation},
   year         = {2026},
   license      = {CC BY-NC-SA 4.0},
-  note         = {Computational mathematical framework: 440+ Zig tests, 30 proof modules, 180 proof checks, 51 Q\# witnesses, 8 Lean 4 modules, 5 engineering modules ported from Q128.128}
+  note         = {Computational mathematical framework: 502 Zig tests, 30 proof modules, 180 proof checks, 51 Q\# witnesses, 49 sidecar tests, 37 FANO-1 hook tests, 8 Lean 4 modules, 5 engineering modules ported from Q128.128}
 }
 ```

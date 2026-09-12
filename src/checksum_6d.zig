@@ -96,7 +96,6 @@
 const std = @import("std");
 const oct = @import("octonion.zig");
 const fixed = @import("fixed_point.zig");
-const constants = @import("constants.zig");
 
 // ============================================================================
 // Octonion Interior Structure
