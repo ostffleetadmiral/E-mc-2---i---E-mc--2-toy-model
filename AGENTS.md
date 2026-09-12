@@ -21,12 +21,12 @@
 
 ## Current test counts
 
-- Zig core: 440+ tests (30 proof modules, 180 total proof checks, plus engineering modules)
-- Q#: 51 witness operations
-- Sidecar: all f64 validation tests
-- Lean 4: 8 formalization modules
+- Zig core: 502 tests (30 proof modules, 180 total proof checks, plus engineering modules)
+- Q#: 51 witness operations (.NET 8.0, 0 warnings)
+- Sidecar: 49 f64 validation tests
+- Lean 4: 8 formalization modules (pending verification — Lean not installed)
 - FANO-1 hooks: 37 tests (neuraleak_qwen_hook, vulkan_e8_hook, polyglot_codon_hook, npu_detect_hook, npu_neuraleak_hook)
-- Total: 440+ + 51 + 37 + sidecar = 530+ verified operations
+- Total: 502 + 51 + 49 + 37 = 639 verified operations
 
 ## Precision note
 
