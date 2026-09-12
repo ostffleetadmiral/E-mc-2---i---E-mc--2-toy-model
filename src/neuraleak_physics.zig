@@ -9,24 +9,31 @@
 // This represents one octonion dimension out of eight, connecting to the
 // framework's 6D observer / 7/8 observed split.
 //
-// In exact arithmetic: 1/8 is represented as a rational. The f64 value is
-// only used for display and approximate computation in the neuraleak modules.
+// All fractions are represented as rational pairs (numerator, denominator)
+// to avoid floating point in core. f64 conversions are available only
+// in the sidecar for display purposes.
 //
 // License: CC BY-NC-SA 4.0
 // ============================================================================
 
 const std = @import("std");
 
+/// Rational fraction representation (numerator / denominator).
+pub const Rational = struct {
+    num: i32,
+    den: i32,
+};
+
 /// The consciousness fraction: 1/8 of the octonion space.
-/// Exact: 1/8. f64: 0.125.
-pub fn consciousnessOctonionLayerFraction() f64 {
-    return 1.0 / 8.0;
+/// Exact: 1/8.
+pub fn consciousnessOctonionLayerFraction() Rational {
+    return .{ .num = 1, .den = 8 };
 }
 
 /// The observed fraction: 7/8 of the octonion space.
-/// Exact: 7/8. f64: 0.875.
-pub fn observedOctonionLayerFraction() f64 {
-    return 7.0 / 8.0;
+/// Exact: 7/8.
+pub fn observedOctonionLayerFraction() Rational {
+    return .{ .num = 7, .den = 8 };
 }
 
 /// The observer dimension count: 1 (one octonion dimension).
@@ -75,21 +82,32 @@ pub fn verifyConsciousnessSplit() bool {
     return OBSERVER_DIMENSIONS + OBSERVED_DIMENSIONS == TOTAL_OCTONION_DIMENSIONS;
 }
 
+/// Verify that consciousness fraction + observed fraction = 1 (exact rational).
+pub fn verifyFractionSum() bool {
+    const c = consciousnessOctonionLayerFraction();
+    const o = observedOctonionLayerFraction();
+    // 1/8 + 7/8 = 8/8 = 1
+    return c.den == o.den and c.num + o.num == c.den;
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
 
 test "consciousness fraction is 1/8" {
-    try std.testing.expectApproxEqAbs(consciousnessOctonionLayerFraction(), 0.125, 1e-15);
+    const f = consciousnessOctonionLayerFraction();
+    try std.testing.expectEqual(@as(i32, 1), f.num);
+    try std.testing.expectEqual(@as(i32, 8), f.den);
 }
 
 test "observed fraction is 7/8" {
-    try std.testing.expectApproxEqAbs(observedOctonionLayerFraction(), 0.875, 1e-15);
+    const f = observedOctonionLayerFraction();
+    try std.testing.expectEqual(@as(i32, 7), f.num);
+    try std.testing.expectEqual(@as(i32, 8), f.den);
 }
 
-test "consciousness + observed = 1" {
-    const total = consciousnessOctonionLayerFraction() + observedOctonionLayerFraction();
-    try std.testing.expectApproxEqAbs(total, 1.0, 1e-15);
+test "consciousness + observed = 1 (exact rational)" {
+    try std.testing.expect(verifyFractionSum());
 }
 
 test "shell transition identity 16³ - 15³ = 3(240) + 1" {
@@ -109,4 +127,10 @@ test "observer dimensions connect to octonion" {
     try std.testing.expectEqual(@as(u8, 7), OBSERVED_DIMENSIONS);
     try std.testing.expectEqual(@as(u8, 8), TOTAL_OCTONION_DIMENSIONS);
     try std.testing.expectEqual(@as(u8, 6), JORDAN_LAYER_DIMENSIONS);
+}
+
+test "physics constants use integer types (no f64)" {
+    const f = consciousnessOctonionLayerFraction();
+    try std.testing.expect(@TypeOf(f.num) == i32);
+    try std.testing.expect(@TypeOf(f.den) == i32);
 }

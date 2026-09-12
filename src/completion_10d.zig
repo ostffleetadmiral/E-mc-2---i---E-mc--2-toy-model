@@ -28,7 +28,6 @@ const std = @import("std");
 const oct = @import("octonion.zig");
 const anti = @import("anti_octonion.zig");
 const dual = @import("dual_b_complex.zig");
-const physics = @import("neuraleak_physics.zig");
 
 /// Run all 10D completion proof checks. Returns the number of failures.
 pub fn proof() usize {

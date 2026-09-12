@@ -40,11 +40,17 @@ const constants = @import("neuraleak_constants.zig");
 pub fn proof() usize {
     var failures: usize = 0;
 
-    // Check 1: Consciousness fraction = 1/8
-    if (physics.consciousnessOctonionLayerFraction() != 1.0 / 8.0) failures += 1;
+    // Check 1: Consciousness fraction = 1/8 (exact rational)
+    {
+        const frac = physics.consciousnessOctonionLayerFraction();
+        if (frac.num != 1 or frac.den != 8) failures += 1;
+    }
 
-    // Check 2: Observed fraction = 7/8
-    if (physics.observedOctonionLayerFraction() != 7.0 / 8.0) failures += 1;
+    // Check 2: Observed fraction = 7/8 (exact rational)
+    {
+        const frac = physics.observedOctonionLayerFraction();
+        if (frac.num != 7 or frac.den != 8) failures += 1;
+    }
 
     // Check 3: Shell transition identity
     if (!physics.verifyShellTransition()) failures += 1;
@@ -112,7 +118,8 @@ test "neuraleak proof summary reports pass" {
 
 test "neuraleak consciousness fraction is exactly 1/8" {
     const frac = physics.consciousnessOctonionLayerFraction();
-    try std.testing.expectApproxEqAbs(frac, 0.125, 1e-15);
+    try std.testing.expectEqual(@as(i32, 1), frac.num);
+    try std.testing.expectEqual(@as(i32, 8), frac.den);
 }
 
 test "neuraleak shell transition connects to E8" {
@@ -185,9 +192,9 @@ test "neuraleak control experiment has three conditions" {
 
 test "neuraleak entropy stream validation" {
     const e = constants.EntropyStream{
-        .jitter_factor = 0.5,
-        .timing_delta_us = 100.0,
-        .rssi_dbm = -70.0,
+        .jitter_factor_milli = 500, // 0.5
+        .timing_delta_us = 100,
+        .rssi_centi_dbm = -7000, // -70.0 dBm
         .timestamp_us = 1000000,
     };
     try std.testing.expect(constants.validateEntropy(e));
