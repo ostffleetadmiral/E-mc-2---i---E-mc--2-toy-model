@@ -304,3 +304,182 @@ test "fromRatio zero numerator" {
     const zero_over_neg = try Q128.fromRatio(0, -3);
     try std.testing.expectEqual(@as(Raw, 0), zero_over_neg.raw);
 }
+
+test "fromI64 round trip" {
+    const value = Q128.fromI64(-42);
+    try std.testing.expectEqual(@as(i256, -42), value.toInteger());
+    const large = Q128.fromI64(1000000000);
+    try std.testing.expectEqual(@as(i256, 1000000000), large.toInteger());
+}
+
+test "cmp ordering" {
+    const a = Q128.fromInteger(5);
+    const b = Q128.fromInteger(10);
+    const c = Q128.fromInteger(5);
+    try std.testing.expectEqual(@as(i8, -1), Q128.cmp(a, b));
+    try std.testing.expectEqual(@as(i8, 1), Q128.cmp(b, a));
+    try std.testing.expectEqual(@as(i8, 0), Q128.cmp(a, c));
+}
+
+test "eq equality" {
+    const a = Q128.fromInteger(7);
+    const b = Q128.fromInteger(7);
+    const c = Q128.fromInteger(8);
+    try std.testing.expect(Q128.eq(a, b));
+    try std.testing.expect(!Q128.eq(a, c));
+    try std.testing.expect(Q128.eq(Q128.zero, Q128.zero));
+}
+
+test "abs negation" {
+    const neg = Q128.fromInteger(-100);
+    const pos = Q128.fromInteger(100);
+    try std.testing.expectEqual(pos.raw, neg.abs().raw);
+    try std.testing.expectEqual(pos.raw, pos.abs().raw);
+    try std.testing.expectEqual(@as(Raw, 0), Q128.zero.abs().raw);
+}
+
+test "toInteger truncation toward zero" {
+    // 7/3 = 2.333... should truncate to 2
+    const seven = Q128.fromInteger(7);
+    const three = Q128.fromInteger(3);
+    const quotient = try seven.div(three);
+    try std.testing.expectEqual(@as(i256, 2), quotient.toInteger());
+    // -7/3 = -2.333... should truncate to -2 (toward zero)
+    const neg_seven = Q128.fromInteger(-7);
+    const neg_quotient = try neg_seven.div(three);
+    try std.testing.expectEqual(@as(i256, -2), neg_quotient.toInteger());
+}
+
+test "relativeErrorPercent computes ratio" {
+    const actual = Q128.fromInteger(11);
+    const expected = Q128.fromInteger(10);
+    const err = try Q128.relativeErrorPercent(actual, expected);
+    // (11-10)/10 = 1/10 = 0.1
+    // div uses truncation, so result may differ from fromRatio by 1 ULP
+    // Verify it's close to 1/10 within 1 ULP
+    const one_tenth = try Q128.fromRatio(1, 10);
+    const diff = if (err.raw > one_tenth.raw) err.raw - one_tenth.raw else one_tenth.raw - err.raw;
+    try std.testing.expect(diff <= 1);
+}
+
+test "neg produces additive inverse" {
+    const a = Q128.fromInteger(42);
+    const neg_a = a.neg();
+    try std.testing.expectEqual(@as(Raw, 0), a.add(neg_a).raw);
+    const zero_neg = Q128.zero.neg();
+    try std.testing.expectEqual(@as(Raw, 0), zero_neg.raw);
+}
+
+test "mul commutativity" {
+    const a = Q128.fromInteger(7);
+    const b = Q128.fromInteger(13);
+    try std.testing.expectEqual(a.mul(b).raw, b.mul(a).raw);
+}
+
+test "mul identity" {
+    const a = Q128.fromInteger(99);
+    try std.testing.expectEqual(a.raw, a.mul(Q128.one).raw);
+    try std.testing.expectEqual(@as(Raw, 0), a.mul(Q128.zero).raw);
+}
+
+test "div division by zero returns error" {
+    const a = Q128.fromInteger(42);
+    const result = a.div(Q128.zero);
+    try std.testing.expectError(error.DivisionByZero, result);
+}
+
+test "fromRatio division by zero returns error" {
+    const result = Q128.fromRatio(1, 0);
+    try std.testing.expectError(error.DivisionByZero, result);
+}
+
+test "sqrt of one is one" {
+    const result = try Q128.one.sqrt();
+    try std.testing.expectEqual(Q128.one.raw, result.raw);
+}
+
+test "sqrt of zero is zero" {
+    const result = try Q128.zero.sqrt();
+    try std.testing.expectEqual(Q128.zero.raw, result.raw);
+}
+
+test "sqrt of negative returns error" {
+    const neg = Q128.fromInteger(-4);
+    const result = neg.sqrt();
+    try std.testing.expectError(error.Overflow, result);
+}
+
+test "sqrt of four is two" {
+    const four = Q128.fromInteger(4);
+    const result = try four.sqrt();
+    try std.testing.expectEqual(Q128.fromInteger(2).raw, result.raw);
+}
+
+test "pow zero is one" {
+    const a = Q128.fromInteger(42);
+    try std.testing.expectEqual(Q128.one.raw, (try a.pow(0)).raw);
+}
+
+test "pow one is identity" {
+    const a = Q128.fromInteger(42);
+    try std.testing.expectEqual(a.raw, (try a.pow(1)).raw);
+}
+
+test "pow negative exponent" {
+    const two = Q128.fromInteger(2);
+    const result = try two.pow(-1);
+    // 2^(-1) = 1/2 = Scale/2
+    try std.testing.expectEqual(@as(Raw, Scale / 2), result.raw);
+}
+
+test "add zero identity" {
+    const a = Q128.fromInteger(42);
+    try std.testing.expectEqual(a.raw, a.add(Q128.zero).raw);
+}
+
+test "sub zero identity" {
+    const a = Q128.fromInteger(42);
+    try std.testing.expectEqual(a.raw, a.sub(Q128.zero).raw);
+}
+
+test "fromRatio one half is exact" {
+    const half = try Q128.fromRatio(1, 2);
+    try std.testing.expectEqual(Scale / 2, half.raw);
+}
+
+test "fromRatio two thirds rounds" {
+    // 2/3: Scale mod 3 = 1, half_den = 1, remainder = 2*Scale mod 3 = 2
+    // 2 > 1, so round up
+    const two_thirds = try Q128.fromRatio(2, 3);
+    const expected = @divTrunc(2 * Scale, 3) + 1;
+    try std.testing.expectEqual(expected, two_thirds.raw);
+}
+
+test "fromRatio negative denominator normalizes sign" {
+    const neg_half = try Q128.fromRatio(1, -2);
+    try std.testing.expectEqual(-Scale / 2, neg_half.raw);
+    const pos_half = try Q128.fromRatio(-1, -2);
+    try std.testing.expectEqual(Scale / 2, pos_half.raw);
+}
+
+test "mul distributivity over add" {
+    // a*(b+c) == a*b + a*c
+    const a = Q128.fromInteger(3);
+    const b = Q128.fromInteger(5);
+    const c = Q128.fromInteger(7);
+    const left = a.mul(b.add(c));
+    const right = a.mul(b).add(a.mul(c));
+    try std.testing.expectEqual(left.raw, right.raw);
+}
+
+test "fromInteger large value" {
+    const large = Q128.fromInteger(@as(i256, 1) << 100);
+    try std.testing.expectEqual(@as(i256, 1) << 100, large.toInteger());
+}
+
+test "exactPow2 produces correct values" {
+    try std.testing.expectEqual(@as(u512, 1), exactPow2(0));
+    try std.testing.expectEqual(@as(u512, 2), exactPow2(1));
+    try std.testing.expectEqual(@as(u512, 256), exactPow2(8));
+    try std.testing.expectEqual(@as(u512, 1) << 16, exactPow2(16));
+}
