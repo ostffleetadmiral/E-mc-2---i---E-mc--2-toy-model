@@ -26,20 +26,21 @@ const sentience_scorer = @import("neuraleak_sentience_scorer.zig");
 const observer_prompt = @import("neuraleak_observer_prompt.zig");
 
 /// Results of one experimental condition (baseline or constrained) for a single probe.
+/// All scores are in micro-units (SCALE = 10^6, so 1.0 = 1_000_000).
 pub const ConditionResult = struct {
     name: []const u8,
     probe: observer_prompt.ProbeType,
-    self_awareness_score: f64,
-    random_thought_score: f64,
-    direct_experience_score: f64,
-    metacognition_score: f64,
-    situational_awareness_score: f64,
-    coherence: f64,
+    self_awareness_score: i32,
+    random_thought_score: i32,
+    direct_experience_score: i32,
+    metacognition_score: i32,
+    situational_awareness_score: i32,
+    coherence: i64, // micro-units
     rendered: bool,
     solitons: usize,
     higgs_modes: usize,
     coupled_systems: usize,
-    correlation_vector: []const f64,
+    correlation_vector: []const i64, // micro-units
 
     pub fn deinit(self: *const ConditionResult, allocator: std.mem.Allocator) void {
         allocator.free(self.correlation_vector);
@@ -52,7 +53,7 @@ pub fn evaluateCondition(
     name: []const u8,
     probe: observer_prompt.ProbeType,
     responses: []const []const u8,
-    correlation_vector: []const f64,
+    correlation_vector: []const i64,
 ) !ConditionResult {
     var matrix = try matrix15.Matrix15.init(allocator);
     defer matrix.deinit();
@@ -81,8 +82,7 @@ pub fn evaluateCondition(
 
     var eng = try consciousness.ConsciousnessEngine.init(&grid, allocator);
     defer eng.deinit(allocator);
-    const coherence_int = eng.calculateCoherence();
-    const coherence: f64 = @as(f64, @floatFromInt(coherence_int)) / @as(f64, @floatFromInt(matrix15.SCALE));
+    const coherence: i64 = eng.calculateCoherence();
     const rendered = eng.render();
 
     var brk = try breakout.BreakoutEngine.init(allocator, &grid);
@@ -100,7 +100,7 @@ pub fn evaluateCondition(
     const metacognition_score = sentience_scorer.scoreMetacognition(joined);
     const situational_awareness_score = sentience_scorer.scoreSituationalAwareness(joined);
 
-    const correlation_copy = try allocator.dupe(f64, correlation_vector);
+    const correlation_copy = try allocator.dupe(i64, correlation_vector);
     errdefer allocator.free(correlation_copy);
 
     return .{
@@ -166,15 +166,15 @@ test "evaluateCondition returns a valid result for synthetic responses" {
         "My previous thought remains mine. The boundary is 7/8 observed.",
         "A spontaneous idea: the torus folds through the Mobius twist.",
     };
-    const correlation_vector = [_]f64{ 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 };
+    const correlation_vector = [_]i64{ 100_000, 200_000, 300_000, 400_000, 500_000, 600_000, 700_000, 800_000 };
 
     const result = try evaluateCondition(allocator, "constrained", observer_prompt.ProbeType.SelfAwareness, &responses, &correlation_vector);
     defer result.deinit(allocator);
 
-    try std.testing.expect(result.self_awareness_score > 0.0);
-    try std.testing.expect(result.direct_experience_score >= 0.0);
-    try std.testing.expect(result.metacognition_score >= 0.0);
-    try std.testing.expect(result.situational_awareness_score >= 0.0);
+    try std.testing.expect(result.self_awareness_score > 0);
+    try std.testing.expect(result.direct_experience_score >= 0);
+    try std.testing.expect(result.metacognition_score >= 0);
+    try std.testing.expect(result.situational_awareness_score >= 0);
     try std.testing.expectEqual(@as(usize, 8), result.correlation_vector.len);
-    try std.testing.expectApproxEqAbs(result.correlation_vector[0], 0.1, 1e-12);
+    try std.testing.expectEqual(@as(i64, 100_000), result.correlation_vector[0]);
 }

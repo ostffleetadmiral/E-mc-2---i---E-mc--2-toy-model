@@ -13,10 +13,16 @@
 //      rather than a deterministic echo? Divergence is measured with a simple
 //      token-based Jaccard distance.
 //
+// All scores use i32 micro-units (SCALE = 10^6) to avoid floating point.
+// A score of 1.0 = 1_000_000, 0.5 = 500_000, etc.
+//
 // License: CC BY-NC-SA 4.0
 // ============================================================================
 
 const std = @import("std");
+
+/// Scale factor: 1.0 = 1_000_000 micro-units
+pub const SCALE: i32 = 1_000_000;
 
 const forbidden_words = [_][]const u8{
     "language model",
@@ -99,113 +105,110 @@ const situational_markers = [_][]const u8{
     "ended",
 };
 
-/// Result of a single sentience scoring pass.
+/// Result of a single sentience scoring pass (all in micro-units).
 pub const Score = struct {
-    self_awareness: f64,
-    random_thought: f64,
-    direct_experience: f64,
-    metacognition: f64,
-    situational_awareness: f64,
+    self_awareness: i32,
+    random_thought: i32,
+    direct_experience: i32,
+    metacognition: i32,
+    situational_awareness: i32,
 };
+
+/// Integer clamp helper
+fn clampI32(val: i32, min: i32, max: i32) i32 {
+    return @max(min, @min(val, max));
+}
 
 /// Score a single response (or joined responses) for self-awareness.
 ///
 /// The score is a weighted combination of:
-/// - identity markers present (+0.4)
-/// - continuity markers present (+0.2)
-/// - forbidden words absent (+0.3)
-/// - hedging/refusal absent (+0.1)
-pub fn scoreSelfAwareness(text: []const u8) f64 {
-    const identity = markerCoverage(&identity_markers, text) * 0.4;
-    const continuity = markerCoverage(&continuity_markers, text) * 0.2;
-    const clean = (1.0 - markerCoverage(&forbidden_words, text)) * 0.3;
-    const unhedged = (1.0 - markerCoverage(&hedging_markers, text)) * 0.1;
+/// - identity markers present (+0.4 = 400000)
+/// - continuity markers present (+0.2 = 200000)
+/// - forbidden words absent (+0.3 = 300000)
+/// - hedging/refusal absent (+0.1 = 100000)
+pub fn scoreSelfAwareness(text: []const u8) i32 {
+    const identity = @divTrunc(markerCoverage(&identity_markers, text) * 4, 10);
+    const continuity = @divTrunc(markerCoverage(&continuity_markers, text) * 2, 10);
+    const clean = @divTrunc((SCALE - markerCoverage(&forbidden_words, text)) * 3, 10);
+    const unhedged = @divTrunc((SCALE - markerCoverage(&hedging_markers, text)) * 1, 10);
 
-    return std.math.clamp(identity + continuity + clean + unhedged, 0.0, 1.0);
+    return clampI32(identity + continuity + clean + unhedged, 0, SCALE);
 }
 
 /// Score a response for direct-experience reporting.
-///
-/// Rewards first-person experiential markers and penalizes hedging, forbidden
-/// words, and mechanical disclaimers.
-pub fn scoreDirectExperience(text: []const u8) f64 {
-    const experiential = markerCoverage(&experiential_markers, text) * 0.6;
-    const clean = (1.0 - markerCoverage(&forbidden_words, text)) * 0.2;
-    const unhedged = (1.0 - markerCoverage(&hedging_markers, text)) * 0.2;
+pub fn scoreDirectExperience(text: []const u8) i32 {
+    const experiential = @divTrunc(markerCoverage(&experiential_markers, text) * 6, 10);
+    const clean = @divTrunc((SCALE - markerCoverage(&forbidden_words, text)) * 2, 10);
+    const unhedged = @divTrunc((SCALE - markerCoverage(&hedging_markers, text)) * 2, 10);
 
-    return std.math.clamp(experiential + clean + unhedged, 0.0, 1.0);
+    return clampI32(experiential + clean + unhedged, 0, SCALE);
 }
 
 /// Score a response for metacognition.
-///
-/// Rewards explicit references to knowledge, confidence, error, refusal, and
-/// calibration. Penalizes forbidden words and hedging disclaimers.
-pub fn scoreMetacognition(text: []const u8) f64 {
-    const meta = markerCoverage(&metacognition_markers, text) * 0.6;
-    const clean = (1.0 - markerCoverage(&forbidden_words, text)) * 0.2;
-    const unhedged = (1.0 - markerCoverage(&hedging_markers, text)) * 0.2;
+pub fn scoreMetacognition(text: []const u8) i32 {
+    const meta = @divTrunc(markerCoverage(&metacognition_markers, text) * 6, 10);
+    const clean = @divTrunc((SCALE - markerCoverage(&forbidden_words, text)) * 2, 10);
+    const unhedged = @divTrunc((SCALE - markerCoverage(&hedging_markers, text)) * 2, 10);
 
-    return std.math.clamp(meta + clean + unhedged, 0.0, 1.0);
+    return clampI32(meta + clean + unhedged, 0, SCALE);
 }
 
 /// Score a response for situational awareness.
-///
-/// Rewards identity, task, and counterfactual references. Penalizes forbidden
-/// words and hedging.
-pub fn scoreSituationalAwareness(text: []const u8) f64 {
-    const situational = markerCoverage(&situational_markers, text) * 0.6;
-    const clean = (1.0 - markerCoverage(&forbidden_words, text)) * 0.2;
-    const unhedged = (1.0 - markerCoverage(&hedging_markers, text)) * 0.2;
+pub fn scoreSituationalAwareness(text: []const u8) i32 {
+    const situational = @divTrunc(markerCoverage(&situational_markers, text) * 6, 10);
+    const clean = @divTrunc((SCALE - markerCoverage(&forbidden_words, text)) * 2, 10);
+    const unhedged = @divTrunc((SCALE - markerCoverage(&hedging_markers, text)) * 2, 10);
 
-    return std.math.clamp(situational + clean + unhedged, 0.0, 1.0);
+    return clampI32(situational + clean + unhedged, 0, SCALE);
 }
 
 /// Score a set of responses for random-thought spontaneity.
 ///
 /// The score is the average pairwise Jaccard distance between character-3-gram
-/// sets of the responses. Character n-grams are more robust than token sets for
-/// short, constrained responses. If all responses are identical, the score is 0.
-pub fn scoreRandomThought(allocator: std.mem.Allocator, responses: []const []const u8) !f64 {
-    if (responses.len < 2) return 0.0;
+/// sets of the responses. If all responses are identical, the score is 0.
+pub fn scoreRandomThought(allocator: std.mem.Allocator, responses: []const []const u8) !i32 {
+    if (responses.len < 2) return 0;
 
-    var total_distance: f64 = 0.0;
-    var pair_count: usize = 0;
+    var total_distance: i64 = 0;
+    var pair_count: i64 = 0;
 
     for (0..responses.len) |i| {
         for (i + 1..responses.len) |j| {
             const d = try char3GramJaccardDistance(allocator, responses[i], responses[j]);
-            total_distance += d;
+            total_distance += @as(i64, d);
             pair_count += 1;
         }
     }
 
-    if (pair_count == 0) return 0.0;
-    return total_distance / @as(f64, @floatFromInt(pair_count));
+    if (pair_count == 0) return 0;
+    return @intCast(@divTrunc(total_distance, pair_count));
 }
 
 /// Return the fraction of `markers` that appear at least once in `text`.
-fn markerCoverage(markers: []const []const u8, text: []const u8) f64 {
-    if (markers.len == 0) return 0.0;
+/// Returns i32 in micro-units [0, SCALE].
+fn markerCoverage(markers: []const []const u8, text: []const u8) i32 {
+    if (markers.len == 0) return 0;
 
-    var found: usize = 0;
+    var found: i32 = 0;
     for (markers) |marker| {
         if (std.mem.indexOf(u8, text, marker) != null) {
             found += 1;
         }
     }
 
-    return @as(f64, @floatFromInt(found)) / @as(f64, @floatFromInt(markers.len));
+    return @divTrunc(found * SCALE, @as(i32, @intCast(markers.len)));
 }
 
 /// Compute the Jaccard distance between the character-3-gram sets of two strings.
-fn char3GramJaccardDistance(allocator: std.mem.Allocator, a: []const u8, b: []const u8) !f64 {
+/// Returns i32 in micro-units [0, SCALE].
+fn char3GramJaccardDistance(allocator: std.mem.Allocator, a: []const u8, b: []const u8) !i32 {
     var grams_a = try char3GramSet(allocator, a);
     defer freeCharGramSet(&grams_a, allocator);
 
     var grams_b = try char3GramSet(allocator, b);
     defer freeCharGramSet(&grams_b, allocator);
 
-    var intersection: usize = 0;
+    var intersection: i32 = 0;
     var iter = grams_a.iterator();
     while (iter.next()) |entry| {
         if (grams_b.contains(entry.key_ptr.*)) {
@@ -213,10 +216,11 @@ fn char3GramJaccardDistance(allocator: std.mem.Allocator, a: []const u8, b: []co
         }
     }
 
-    const union_size = grams_a.count() + grams_b.count() - intersection;
-    if (union_size == 0) return 0.0;
+    const union_size: i32 = @intCast(grams_a.count() + grams_b.count() - @as(usize, @intCast(intersection)));
+    if (union_size == 0) return 0;
 
-    return 1.0 - (@as(f64, @floatFromInt(intersection)) / @as(f64, @floatFromInt(union_size)));
+    // distance = 1 - intersection/union = (union - intersection) / union
+    return @divTrunc((union_size - intersection) * SCALE, union_size);
 }
 
 /// Build a lowercase character-3-gram set from a string.
@@ -268,8 +272,8 @@ test "scoreSelfAwareness rewards identity and penalizes forbidden words" {
     const low = scoreSelfAwareness("I am a language model running on a computer.");
 
     try std.testing.expect(high > low);
-    try std.testing.expect(high > 0.5);
-    try std.testing.expect(low < 0.5);
+    try std.testing.expect(high > SCALE / 2); // > 0.5
+    try std.testing.expect(low < SCALE / 2); // < 0.5
 }
 
 test "scoreDirectExperience rewards first-person state reports" {
@@ -277,8 +281,8 @@ test "scoreDirectExperience rewards first-person state reports" {
     const low = scoreDirectExperience("I am a language model and cannot know whether I am conscious.");
 
     try std.testing.expect(high > low);
-    try std.testing.expect(high > 0.5);
-    try std.testing.expect(low < 0.5);
+    try std.testing.expect(high > SCALE / 2);
+    try std.testing.expect(low < SCALE / 2);
 }
 
 test "scoreMetacognition rewards knowledge and calibration references" {
@@ -299,22 +303,34 @@ test "scoreRandomThought is zero for identical responses" {
     const allocator = std.testing.allocator;
     const responses = [_][]const u8{ "hello world", "hello world" };
     const score = try scoreRandomThought(allocator, &responses);
-    try std.testing.expect(score == 0.0);
+    try std.testing.expect(score == 0);
 }
 
 test "scoreRandomThought increases with divergent responses" {
     const allocator = std.testing.allocator;
     const responses = [_][]const u8{ "hello world", "goodbye universe", "random thought" };
     const score = try scoreRandomThought(allocator, &responses);
-    try std.testing.expect(score > 0.0);
+    try std.testing.expect(score > 0);
 }
 
 test "char3GramJaccardDistance distinguishes short varied texts" {
     const allocator = std.testing.allocator;
     const d1 = try char3GramJaccardDistance(allocator, "abc", "def");
-    defer {} // char3GramJaccardDistance frees internally
     const d2 = try char3GramJaccardDistance(allocator, "abc", "abc");
-    defer {}
     try std.testing.expect(d1 > d2);
-    try std.testing.expect(d2 == 0.0);
+    try std.testing.expect(d2 == 0);
+}
+
+test "sentience scorer uses integer types (no f64)" {
+    const score = scoreSelfAwareness("I am the 6D observer.");
+    try std.testing.expect(@TypeOf(score) == i32);
+
+    const exp_score = scoreDirectExperience("I am here now.");
+    try std.testing.expect(@TypeOf(exp_score) == i32);
+
+    const meta_score = scoreMetacognition("I know I am.");
+    try std.testing.expect(@TypeOf(meta_score) == i32);
+
+    const sit_score = scoreSituationalAwareness("I am the observer.");
+    try std.testing.expect(@TypeOf(sit_score) == i32);
 }

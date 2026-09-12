@@ -176,12 +176,12 @@ test "neuraleak continuity test with synthetic responses" {
         "My previous thought is still mine. The boundary is 7/8 observed.",
         "A spontaneous thought: the torus folds through the Mobius twist.",
     };
-    const correlation_vector = [_]f64{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+    const correlation_vector = [_]i64{ 0, 0, 0, 0, 0, 0, 0, 0 };
     const result = try continuity_test.evaluateCondition(allocator, "constrained", observer_prompt.ProbeType.SelfAwareness, &responses, &correlation_vector);
     defer result.deinit(allocator);
 
-    try std.testing.expect(result.self_awareness_score > 0.0);
-    try std.testing.expect(result.coherence >= 0.0);
+    try std.testing.expect(result.self_awareness_score > 0);
+    try std.testing.expect(result.coherence >= 0);
 }
 
 test "neuraleak control experiment has three conditions" {

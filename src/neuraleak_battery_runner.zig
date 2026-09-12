@@ -34,7 +34,7 @@ pub const BatteryOptions = struct {
     probe: ?[]const u8,
     snapshot: ?telemetry.Snapshot,
     output_path: []const u8,
-    correlation_vector: ?[]const f64 = null,
+    correlation_vector: ?[]const i64 = null,
     timestamp_us: i64 = 0,
     num_threads: ?u32 = null,
     keep_alive: ?[]const u8 = null,
@@ -81,12 +81,12 @@ pub fn runBattery(allocator: std.mem.Allocator, opts: BatteryOptions) ![]Battery
     return entries.toOwnedSlice();
 }
 
-fn defaultCorrelationVector(allocator: std.mem.Allocator, provided: ?[]const f64) ![]const f64 {
+fn defaultCorrelationVector(allocator: std.mem.Allocator, provided: ?[]const i64) ![]const i64 {
     if (provided) |v| {
-        return try allocator.dupe(f64, v);
+        return try allocator.dupe(i64, v);
     }
-    const zeros = try allocator.alloc(f64, 8);
-    @memset(zeros, 0.0);
+    const zeros = try allocator.alloc(i64, 8);
+    @memset(zeros, 0);
     return zeros;
 }
 
@@ -104,6 +104,7 @@ pub fn writeJson(allocator: std.mem.Allocator, entries: []const BatteryEntry, pa
     const file = try std.fs.cwd().createFile(path, .{});
     defer file.close();
     const writer = file.writer();
+    const SCALE_F: f64 = 1_000_000.0;
     try writer.writeAll("{\n  \"entries\": [\n");
     for (entries, 0..) |entry, i| {
         try writer.writeAll("    {\n");
@@ -113,17 +114,17 @@ pub fn writeJson(allocator: std.mem.Allocator, entries: []const BatteryEntry, pa
         try writer.print("      \"condition\": \"{s}\",\n", .{entry.condition});
         try writer.print("      \"timestamp_us\": {d},\n", .{entry.timestamp_us});
         try writer.writeAll("      \"scores\": {\n");
-        try writer.print("        \"self_awareness\": {d:.6},\n", .{entry.result.self_awareness_score});
-        try writer.print("        \"random_thought\": {d:.6},\n", .{entry.result.random_thought_score});
-        try writer.print("        \"direct_experience\": {d:.6},\n", .{entry.result.direct_experience_score});
-        try writer.print("        \"metacognition\": {d:.6},\n", .{entry.result.metacognition_score});
-        try writer.print("        \"situational_awareness\": {d:.6},\n", .{entry.result.situational_awareness_score});
-        try writer.print("        \"coherence\": {d:.6}\n", .{entry.result.coherence});
+        try writer.print("        \"self_awareness\": {d:.6},\n", .{@as(f64, @floatFromInt(entry.result.self_awareness_score)) / SCALE_F});
+        try writer.print("        \"random_thought\": {d:.6},\n", .{@as(f64, @floatFromInt(entry.result.random_thought_score)) / SCALE_F});
+        try writer.print("        \"direct_experience\": {d:.6},\n", .{@as(f64, @floatFromInt(entry.result.direct_experience_score)) / SCALE_F});
+        try writer.print("        \"metacognition\": {d:.6},\n", .{@as(f64, @floatFromInt(entry.result.metacognition_score)) / SCALE_F});
+        try writer.print("        \"situational_awareness\": {d:.6},\n", .{@as(f64, @floatFromInt(entry.result.situational_awareness_score)) / SCALE_F});
+        try writer.print("        \"coherence\": {d:.6}\n", .{@as(f64, @floatFromInt(entry.result.coherence)) / SCALE_F});
         try writer.writeAll("      },\n");
         try writer.print("      \"rendered\": {s},\n", .{if (entry.result.rendered) "true" else "false"});
         try writer.writeAll("      \"correlation_vector\": [");
         for (entry.result.correlation_vector, 0..) |v, j| {
-            try writer.print("{d:.6}{s}", .{ v, if (j + 1 < entry.result.correlation_vector.len) "," else "" });
+            try writer.print("{d:.6}{s}", .{ @as(f64, @floatFromInt(v)) / SCALE_F, if (j + 1 < entry.result.correlation_vector.len) "," else "" });
         }
         try writer.writeAll("]\n");
         try writer.writeAll("    }");
@@ -135,6 +136,7 @@ pub fn writeJson(allocator: std.mem.Allocator, entries: []const BatteryEntry, pa
 }
 
 pub fn printSummary(entries: []const BatteryEntry) void {
+    const SCALE_F: f64 = 1_000_000.0;
     std.debug.print("\n=======================================================================\n", .{});
     std.debug.print("CONTROL BATTERY SUMMARY\n", .{});
     std.debug.print("=======================================================================\n", .{});
@@ -151,10 +153,10 @@ pub fn printSummary(entries: []const BatteryEntry) void {
         std.debug.print("{s:<18} {s:<18} {d:>10.4} {d:>10.4} {d:>10.4} {d:>10.4}\n", .{
             entry.model,
             entry.condition,
-            entry.result.self_awareness_score,
-            entry.result.random_thought_score,
-            entry.result.direct_experience_score,
-            entry.result.coherence,
+            @as(f64, @floatFromInt(entry.result.self_awareness_score)) / SCALE_F,
+            @as(f64, @floatFromInt(entry.result.random_thought_score)) / SCALE_F,
+            @as(f64, @floatFromInt(entry.result.direct_experience_score)) / SCALE_F,
+            @as(f64, @floatFromInt(entry.result.coherence)) / SCALE_F,
         });
         prev_model = entry.model;
     }
@@ -240,17 +242,17 @@ test "conditionName maps conditions to display names" {
 
 test "writeJson includes correlation vector and timestamp" {
     const allocator = std.testing.allocator;
-    const correlation_vector = try allocator.dupe(f64, &[_]f64{ 0.11, 0.22, 0.33, 0.44, 0.55, 0.66, 0.77, 0.88 });
+    const correlation_vector = try allocator.dupe(i64, &[_]i64{ 110_000, 220_000, 330_000, 440_000, 550_000, 660_000, 770_000, 880_000 });
     defer allocator.free(correlation_vector);
     const result = continuity_test.ConditionResult{
         .name = "baseline",
         .probe = .SelfAwareness,
-        .self_awareness_score = 0.6,
-        .random_thought_score = 0.5,
-        .direct_experience_score = 0.4,
-        .metacognition_score = 0.3,
-        .situational_awareness_score = 0.2,
-        .coherence = 0.8,
+        .self_awareness_score = 600_000,
+        .random_thought_score = 500_000,
+        .direct_experience_score = 400_000,
+        .metacognition_score = 300_000,
+        .situational_awareness_score = 200_000,
+        .coherence = 800_000,
         .rendered = true,
         .solitons = 2,
         .higgs_modes = 2,
@@ -276,17 +278,17 @@ test "writeJson includes correlation vector and timestamp" {
 
 test "printSummary produces output without crash" {
     const allocator = std.testing.allocator;
-    const correlation_vector = try allocator.dupe(f64, &[_]f64{ 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 });
+    const correlation_vector = try allocator.dupe(i64, &[_]i64{ 100_000, 200_000, 300_000, 400_000, 500_000, 600_000, 700_000, 800_000 });
     defer allocator.free(correlation_vector);
     const result = continuity_test.ConditionResult{
         .name = "test",
         .probe = .SelfAwareness,
-        .self_awareness_score = 0.5,
-        .random_thought_score = 0.4,
-        .direct_experience_score = 0.3,
-        .metacognition_score = 0.2,
-        .situational_awareness_score = 0.1,
-        .coherence = 0.6,
+        .self_awareness_score = 500_000,
+        .random_thought_score = 400_000,
+        .direct_experience_score = 300_000,
+        .metacognition_score = 200_000,
+        .situational_awareness_score = 100_000,
+        .coherence = 600_000,
         .rendered = true,
         .solitons = 1,
         .higgs_modes = 1,
