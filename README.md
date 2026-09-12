@@ -12,7 +12,7 @@ A computational mathematical framework based on the axiom $0^0 = i$, the octonio
 ## Quick Start
 
 ```bash
-# Zig core tests (502 tests)
+# Zig core tests (509 tests)
 zig build test
 
 # Proof module summary (30 modules, 180 checks)
@@ -35,7 +35,7 @@ cd wasm && zig build
 
 | Suite | Count | Status |
 |---|---|---|
-| Zig core | 502 tests | ALL PASS |
+| Zig core | 509 tests | ALL PASS |
 | Zig proof modules | 30 modules (180 checks) | ALL PASS |
 | Q# witnesses | 51 operations (.NET 8.0) | ALL PASS |
 | Sidecar | 49 f64 tests | ALL PASS |
@@ -44,7 +44,7 @@ cd wasm && zig build
 | Q128.128 physics | 393 tests (15 modules) | ALL PASS |
 | FANO-1 hooks | 37 tests (5 modules) | ALL PASS |
 | Orange Pi 3W NPU | VIP9000 3 TOPS @ INT8 | RESEARCH |
-| **Total** | **639 verified operations** | **ALL PASS** |
+| **Total** | **646 verified operations** | **ALL PASS** |
 
 ## Framework Structure
 
@@ -294,6 +294,6 @@ Copyright (c) 2026 Open Sentience Technology Foundation. Licensed under [CC BY-N
   organization = {Open Sentience Technology Foundation},
   year         = {2026},
   license      = {CC BY-NC-SA 4.0},
-  note         = {Computational mathematical framework: 502 Zig tests, 30 proof modules, 180 proof checks, 51 Q\# witnesses, 49 sidecar tests, 37 FANO-1 hook tests, 8 Lean 4 modules, 5 engineering modules ported from Q128.128}
+  note         = {Computational mathematical framework: 509 Zig tests, 30 proof modules, 180 proof checks, 51 Q\# witnesses, 49 sidecar tests, 37 FANO-1 hook tests, 8 Lean 4 modules, 5 engineering modules ported from Q128.128}
 }
 ```
