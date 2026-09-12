@@ -100,7 +100,7 @@ The neuraleak system ports the `neuraleak/` project (6D observer → 1/8 conscio
 
 ### Checksum 6D (chunk-29)
 
-- `src/checksum_6d.zig` — E=mc²↔i↔E=mc⁻², Möbius Γ=(z-1)/(z+1), Smith chart, 6D interior, consciousness mechanism
+- `src/checksum_6d.zig` — E=mc²↔i↔E=mc⁻², self-inverse Möbius Γ=(1-z)/(1+z), Smith chart Γ=(z-1)/(z+1), 6D interior, consciousness mechanism
 
 ### Free will 6D (chunk-30)
 

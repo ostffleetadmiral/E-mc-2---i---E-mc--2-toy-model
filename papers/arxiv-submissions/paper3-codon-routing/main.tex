@@ -35,7 +35,7 @@ Paul P. Ramsey\thanks{Open Sentience Technology Foundation} \\
 \noindent\textbf{DOI:} \href{https://doi.org/10.5281/zenodo.22715355}{10.5281/zenodo.22715355}
 
 \begin{abstract}
-We present a computational mapping from the 64-codon genetic code to six-dimensional Jordan algebra routing channels. Each codon is encoded as a 6-bit base-4 integer (first base most significant), with chemistry-derived qubit coordinates computed from integer-scaled molecular weights. The routing system assigns each codon to one of six channels (E2, E6, E7, E5, E4, E0) based on amino acid properties, with cross-wiring to the octonion basis, 3-qubit quantum states, and a 15-layer central row structure. The M\"obius transformation $\Gamma(z) = (z-1)/(z+1)$ provides a Smith-chart boundary reflection. We verify the routing with 37 Zig tests, 6 Q\# quantum witness operations, and 16 f64 sidecar validation tests. The mapping is a framework-internal heuristic construction, not an established biological mechanism.
+We present a computational mapping from the 64-codon genetic code to six-dimensional Jordan algebra routing channels. Each codon is encoded as a 6-bit base-4 integer (first base most significant), with chemistry-derived qubit coordinates computed from integer-scaled molecular weights. The routing system assigns each codon to one of six channels (E2, E6, E7, E5, E4, E0) based on amino acid properties, with cross-wiring to the octonion basis, 3-qubit quantum states, and a 15-layer central row structure. The Smith chart boundary uses $\Gamma(z) = (z-1)/(z+1)$ for impedance matching, while the self-inverse M\"obius checksum uses $\Gamma(z) = (1-z)/(1+z)$ satisfying $\Gamma(\Gamma(z)) = z$. We verify the routing with 37 Zig tests, 6 Q\# quantum witness operations, and 16 f64 sidecar validation tests. The mapping is a framework-internal heuristic construction, not an established biological mechanism.
 \end{abstract}
 
 \tableofcontents
@@ -115,7 +115,15 @@ E0 & Nonpolar & Ala, Val, Leu, Ile, Pro, Phe, Trp, Met, Gly & Hydrophobic \\
 
 \section{Smith-M\"obius Boundary}
 
-The routing system uses the M\"obius transformation as a boundary reflection:
+The routing system uses two related M\"obius transformations:
+
+\textbf{Smith chart} (impedance matching, standard EE):
+\begin{equation}
+\Gamma_{\text{SC}}(z) = \frac{z - 1}{z + 1}
+\end{equation}
+with boundaries $\Gamma_{\text{SC}}(0) = -1$, $\Gamma_{\text{SC}}(1) = 0$, $\Gamma_{\text{SC}}(\infty) = +1$.
+
+\textbf{Self-inverse checksum} (E=mc$^2$ $\leftrightarrow$ E=mc$^{-2}$ round-trip):
 \begin{equation}
 \Gamma(z) = \frac{1 - z}{1 + z}
 \end{equation}
@@ -131,10 +139,12 @@ $\Gamma(\Gamma(z)) = z$, i.e., the M\"obius transformation $\Gamma(z) = (1-z)/(1
 \end{align*}
 \end{proof}
 
-The Smith chart boundaries are:
+The self-inverse boundaries are:
 \begin{equation}
 \Gamma(0) = 1, \quad \Gamma(1) = 0, \quad \Gamma(\infty) = -1
 \end{equation}
+
+Note: $\Gamma_{\text{SC}}(z) = -\Gamma(z)$. The Smith chart formula is NOT self-inverse ($\Gamma_{\text{SC}}(\Gamma_{\text{SC}}(z)) = -1/z$), while the self-inverse form is NOT the standard Smith chart. Both are used for their respective purposes.
 
 \section{Cross-Wiring to Octonion Basis}
 

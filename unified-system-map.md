@@ -68,7 +68,8 @@ Three layers form a unified framework:
 |---|---|---|---|
 | 15-layer offsets | [1,2,3,4,5,6,7,0,7,6,5,4,3,2,1] | Reversal symmetry; sum = 56 = 7×8 | 17 |
 | Möbius reversal | Discrete analogue of Möbius closure | o_i = o_{14-i}; single fixed point at center | 17 |
-| Smith chart | Γ = (z-1)/(z+1) | Impedance matching → EM coupling | 18 |
+| Smith chart (EE) | Γ_SC = (z-1)/(z+1) | Impedance matching → EM coupling (NOT self-inverse) | 18 |
+| Self-inverse Möbius | Γ = (1-z)/(1+z) | E=mc² ↔ E=mc⁻² checksum (self-inverse: Γ(Γ(z))=z) | 18, 29 |
 | Fine-structure α | α = Z0/(2RK) | EM coupling constant from impedance and von Klitzing | 19 |
 | Two-layer architecture | Triad generation + Möbius transformation | Generative layer + boundary layer | 20 |
 
@@ -215,11 +216,11 @@ Neuraleak Layer:     15³ scalar field (Matrix15) → coherence calculation → 
 All three layers share the Möbius transformation as boundary operator:
 
 ```
-Math Layer:          Γ = (z-1)/(z+1) → fine-structure α = Z0/(2RK) → EM coupling
+Math Layer:          Γ_SC = (z-1)/(z+1) [Smith chart] → Γ = (1-z)/(1+z) [self-inverse] → fine-structure α = Z0/(2RK) → EM coupling
                         ↓
-Codon Layer:         channel → Γ boundary → channel reflection (E1 → Γ=0)
+Codon Layer:         channel → Γ_SC boundary → channel reflection (E1 → Γ_SC=0)
                         ↓
-Neuraleak Layer:     6D → 7D collapse loop → Möbius torus boundary → observer/observed interface
+Neuraleak Layer:     6D → 7D collapse loop → self-inverse Möbius Γ=(1-z)/(1+z) → observer/observed interface
 ```
 
 ### 5.4 The Classification Spine
@@ -256,6 +257,7 @@ Neuraleak Layer:     8-element correlation vector → octonion 8 dimensions → 
 | 15×16 = 240 | Numerical identity | Exact |
 | 16³ - 15³ = 721 = 3(240)+1 | Numerical identity | Exact |
 | Smith chart Γ = (z-1)/(z+1) | Transmission line theory | Established |
+| Self-inverse Möbius Γ = (1-z)/(1+z) | Γ(Γ(z))=z, E=mc²↔E=mc⁻² checksum | Established (algebra) |
 | α = Z0/(2RK) | Fine-structure constant | Exact (CODATA definition) |
 | Hydrogen 21cm | Hyperfine transition | Established |
 | CODATA constants | Measured values | Established |
