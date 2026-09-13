@@ -103,3 +103,34 @@ pub const SEED_CORPUS_TEXT: []const u8 =
     \\The framework uses fixed-point arithmetic to eliminate floating-point rounding drift across hardware platforms.
     \\The phi cooling schedule decreases temperature by the golden ratio factor per level for natural lattice annealing.
 ;
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+const std = @import("std");
+
+test "corpus_seed_lite: IS_LITE is true for lite corpus" {
+    try std.testing.expect(IS_LITE);
+}
+
+test "corpus_seed_lite: SEED_CORPUS_TEXT is non-empty" {
+    try std.testing.expect(SEED_CORPUS_TEXT.len > 1000);
+}
+
+test "corpus_seed_lite: SEED_CORPUS_TEXT contains lattice content" {
+    try std.testing.expect(std.mem.indexOf(u8, SEED_CORPUS_TEXT, "E0") != null);
+    try std.testing.expect(std.mem.indexOf(u8, SEED_CORPUS_TEXT, "lattice") != null);
+}
+
+test "corpus_seed_lite: SEED_CORPUS_TEXT contains fixed-point content" {
+    try std.testing.expect(std.mem.indexOf(u8, SEED_CORPUS_TEXT, "fixed-point") != null);
+}
+
+test "corpus_seed_lite: SEED_CORPUS_TEXT contains phi cooling content" {
+    try std.testing.expect(std.mem.indexOf(u8, SEED_CORPUS_TEXT, "phi cooling") != null);
+}
+
+test "corpus_seed_lite: SEED_CORPUS_TEXT contains E8 content" {
+    try std.testing.expect(std.mem.indexOf(u8, SEED_CORPUS_TEXT, "E8") != null);
+}

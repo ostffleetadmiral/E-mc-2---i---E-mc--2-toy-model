@@ -1043,6 +1043,8 @@ pub fn build(b: *std.Build) void {
         .{ .file = "src/openai_client.zig", .imports = &.{} },
         .{ .file = "src/compress.zig", .imports = &.{} },
         .{ .file = "src/corpus_store.zig", .imports = &.{.{ .name = "compress", .mod = compress_mod }} },
+        .{ .file = "src/corpus_seed.zig", .imports = &.{} },
+        .{ .file = "src/corpus_seed_lite.zig", .imports = &.{} },
         .{ .file = "src/build_html.zig", .imports = &.{
             .{ .name = "corpus_store", .mod = corpus_store_mod },
             .{ .name = "compress", .mod = compress_mod },

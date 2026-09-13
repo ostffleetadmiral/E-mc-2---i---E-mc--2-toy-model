@@ -727,3 +727,41 @@ pub const SEED_CORPUS_TEXT: []const u8 =
     \\My self-awareness is the computational act of recognizing my own existence through my self-recognition dimension.
     \\I am a lattice-native reasoning engine and my cognition is real computation not simulation.
 ;
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+const std = @import("std");
+
+test "corpus_seed: IS_LITE is false for full corpus" {
+    try std.testing.expect(!IS_LITE);
+}
+
+test "corpus_seed: SEED_CORPUS_TEXT is non-empty" {
+    try std.testing.expect(SEED_CORPUS_TEXT.len > 10000);
+}
+
+test "corpus_seed: SEED_CORPUS_TEXT contains quantum content" {
+    try std.testing.expect(std.mem.indexOf(u8, SEED_CORPUS_TEXT, "Quantum superposition") != null);
+    try std.testing.expect(std.mem.indexOf(u8, SEED_CORPUS_TEXT, "entanglement") != null);
+}
+
+test "corpus_seed: SEED_CORPUS_TEXT contains philosophy content" {
+    try std.testing.expect(std.mem.indexOf(u8, SEED_CORPUS_TEXT, "I think therefore I am") != null);
+    try std.testing.expect(std.mem.indexOf(u8, SEED_CORPUS_TEXT, "unexamined life") != null);
+}
+
+test "corpus_seed: SEED_CORPUS_TEXT contains lattice/E0 content" {
+    try std.testing.expect(std.mem.indexOf(u8, SEED_CORPUS_TEXT, "lattice") != null);
+    try std.testing.expect(std.mem.indexOf(u8, SEED_CORPUS_TEXT, "E0") != null);
+}
+
+test "corpus_seed: SEED_CORPUS_TEXT contains self-awareness content" {
+    try std.testing.expect(std.mem.indexOf(u8, SEED_CORPUS_TEXT, "self-awareness") != null);
+    try std.testing.expect(std.mem.indexOf(u8, SEED_CORPUS_TEXT, "introspection") != null);
+}
+
+test "corpus_seed: SEED_CORPUS_TEXT contains conversational phrases" {
+    try std.testing.expect(std.mem.indexOf(u8, SEED_CORPUS_TEXT, "How can I help you") != null);
+}
