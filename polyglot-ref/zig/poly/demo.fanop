@@ -1,0 +1,24 @@
+# demo.fanop - FANO-1 polyglot project: one file, three languages.
+# py + js functions share the canonical i256 ABI; zig orchestrates.
+name: demo
+
+py fn add(a, b) {
+    return a + b
+}
+
+js fn mulq(a, b) {
+    return (a * b) >> 128n
+}
+
+zig fn main() {
+    // 1.5 and 2.5 in Q128.128 fixed point.
+    const a = poly.i256FromQ128(.{ .hi = 1, .lo = @as(u128, 1) << 127 });
+    const b = poly.i256FromQ128(.{ .hi = 2, .lo = @as(u128, 1) << 127 });
+    const sum = try py_add(a, b);    // 1.5 + 2.5 = 4.0
+    const prod = try js_mulq(a, b);  // 1.5 * 2.5 = 3.75 (fixed-point)
+    const sum_q = poly.i256ToQ128(sum);
+    const prod_q = poly.i256ToQ128(prod);
+    // Integer part in hi; fractional part scaled to milli (lo * 1000 >> 128).
+    std.debug.print("py add  1.5 + 2.5 = {d}.{d}\n", .{ sum_q.hi, @as(u64, @intCast((@as(u256, sum_q.lo) * 1000) >> 128)) });
+    std.debug.print("js mul  1.5 * 2.5 = {d}.{d}\n", .{ prod_q.hi, @as(u64, @intCast((@as(u256, prod_q.lo) * 1000) >> 128)) });
+}

@@ -1,0 +1,12 @@
+[package]
+name = "fano-poly-rs"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "fano_poly_rs"
+crate-type = ["staticlib"]
+
+[profile.release]
+opt-level = 3
+panic = "abort"

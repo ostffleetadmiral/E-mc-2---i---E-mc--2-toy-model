@@ -1,0 +1,17 @@
+{"plugins": [],
+ "package": "fano1",
+ "options": {"pp.unicode.fun": true, "linter.unusedVariables": false},
+ "name": "Fano1.Module1.Verification",
+ "isModule": false,
+ "importArts":
+ {"Fano1.Module1.RNE":
+  [["/home/projects/Q128.128/formalize/.lake/build/lib/lean/Fano1/Module1/RNE.olean"]],
+  "Fano1.Module1.Orthogonality":
+  [["/home/projects/Q128.128/formalize/.lake/build/lib/lean/Fano1/Module1/Orthogonality.olean"]],
+  "Fano1.Module1.FloorInvariance":
+  [["/home/projects/Q128.128/formalize/.lake/build/lib/lean/Fano1/Module1/FloorInvariance.olean"]],
+  "Fano1.Module1.FixedPoint":
+  [["/home/projects/Q128.128/formalize/.lake/build/lib/lean/Fano1/Module1/FixedPoint.olean"]],
+  "Fano1.Module1.ErrorBound":
+  [["/home/projects/Q128.128/formalize/.lake/build/lib/lean/Fano1/Module1/ErrorBound.olean"]]},
+ "dynlibs": []}

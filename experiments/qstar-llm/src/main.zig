@@ -456,6 +456,8 @@ pub fn main() !void {
         try runEnrichCorpus(allocator, args);
     } else if (std.mem.eql(u8, cmd, "train-corpus")) {
         try runTrainCorpus(allocator, args);
+    } else if (std.mem.eql(u8, cmd, "train-all")) {
+        try runTrainAll(allocator, args);
     } else if (std.mem.eql(u8, cmd, "train-metacog")) {
         try runTrainMetacog(allocator, args);
     } else if (std.mem.eql(u8, cmd, "corpus")) {
@@ -1405,6 +1407,7 @@ fn printHelp() void {
         \\  qstar ingest-corpus <dir>       Directly ingest .md/.txt/.tex documents into corpus
         \\  qstar enrich-corpus <dir>       Ollama-enriched corpus from documents
         \\  qstar train-corpus [options]    Full pipeline: ingest + Ollama enrich + OpenAI reinforce
+        \\  qstar train-all [options]        Ingest from datasets/ + entire hardware dir (skips build artifacts)
         \\  qstar kg query <entity>         Query knowledge graph for entity neighbors
         \\  qstar kg dump                   Dump all knowledge graph triplets
         \\  qstar start-heartbeat [options] Start background continual learning heartbeat
@@ -2122,6 +2125,104 @@ fn runTrainCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     std.debug.print("Final corpus saved to: {s}\n", .{corpus_file});
 }
 
+/// Ingests from datasets/ then the entire hardware directory tree (../).
+/// The walker skips excluded dirs (bin, obj, .zig-cache, zig-out, vendor, data,
+/// deps, models, .devin, .foundations, .codeium, .venv, __pycache__, etc.)
+/// so only source/text files are ingested. Archives are included per policy.
+fn runTrainAll(allocator: std.mem.Allocator, args: [][:0]u8) !void {
+    var corpus_file: []const u8 = "qstar_corpus.txt";
+    var level: u8 = 0;
+    var autoscale: bool = false;
+    var skip_corpus_load: bool = false;
+
+    var i: usize = 2;
+    while (i < args.len) : (i += 1) {
+        if (std.mem.eql(u8, args[i], "--corpus-file") and i + 1 < args.len) {
+            corpus_file = args[i + 1];
+            i += 1;
+        } else if (std.mem.eql(u8, args[i], "--level") and i + 1 < args.len) {
+            level = std.fmt.parseInt(u8, args[i + 1], 10) catch 0;
+            i += 1;
+        } else if (std.mem.eql(u8, args[i], "--autoscale")) {
+            autoscale = true;
+        } else if (std.mem.eql(u8, args[i], "--skip-corpus-load")) {
+            skip_corpus_load = true;
+        }
+    }
+
+    std.debug.print("=== Qstar Train-All: Datasets + Hardware Dir ===\n", .{});
+    std.debug.print("Corpus file: {s}\n\n", .{corpus_file});
+
+    var agent = agent_mod.Agent.init(allocator, level, fp.ONE);
+    defer agent.deinit();
+
+    // Load existing corpus unless --skip-corpus-load
+    if (skip_corpus_load) {
+        std.debug.print("Skipping corpus load (--skip-corpus-load).\n\n", .{});
+    } else if (std.fs.cwd().openFile(corpus_file, .{})) |file| {
+        file.close();
+        const loaded = training.loadCorpusFromFile(&agent, corpus_file) catch 0;
+        std.debug.print("Loaded existing corpus: {d} bytes\n\n", .{loaded});
+    } else |_| {
+        std.debug.print("No existing corpus file. Starting fresh.\n\n", .{});
+    }
+
+    var total_files_scanned: usize = 0;
+    var total_files_read: usize = 0;
+    var total_sentences_learned: usize = 0;
+    var total_bytes_processed: usize = 0;
+
+    // Phase 1: Ingest from datasets/ directory
+    std.debug.print("--- Phase 1: Ingest datasets/ ---\n", .{});
+    if (training.ingestFromDirectory(&agent, "datasets", true, allocator)) |result| {
+        total_files_scanned += result.files_scanned;
+        total_files_read += result.files_read;
+        total_sentences_learned += result.sentences_learned;
+        total_bytes_processed += result.bytes_processed;
+        std.debug.print("\nPhase 1 Results:\n", .{});
+        std.debug.print("  Files: {d}/{d}, Sentences: {d}, Corpus: {d} sentences\n\n", .{ result.files_read, result.files_scanned, result.sentences_learned, result.corpus_size_after });
+        try training.saveCorpusToFile(&agent, corpus_file);
+        std.debug.print("Intermediate corpus saved.\n\n", .{});
+    } else |err| {
+        std.debug.print("Warning: datasets/ ingestion failed: {s}\n\n", .{@errorName(err)});
+    }
+
+    // Phase 2: Ingest from hardware root (../) — walker skips excluded dirs
+    std.debug.print("--- Phase 2: Ingest hardware root (../) ---\n", .{});
+    std.debug.print("  (skips: bin, obj, .zig-cache, zig-out, vendor, data, deps, models, .devin, .foundations, .codeium, .venv, __pycache__, node_modules, .git, target, build, dist, .cache, publish)\n", .{});
+    if (training.ingestFromDirectory(&agent, "..", true, allocator)) |result| {
+        total_files_scanned += result.files_scanned;
+        total_files_read += result.files_read;
+        total_sentences_learned += result.sentences_learned;
+        total_bytes_processed += result.bytes_processed;
+        std.debug.print("\nPhase 2 Results:\n", .{});
+        std.debug.print("  Files: {d}/{d}, Sentences: {d}, Corpus: {d} sentences\n\n", .{ result.files_read, result.files_scanned, result.sentences_learned, result.corpus_size_after });
+        try training.saveCorpusToFile(&agent, corpus_file);
+        std.debug.print("Final corpus saved.\n\n", .{});
+    } else |err| {
+        std.debug.print("Warning: hardware root ingestion failed: {s}\n\n", .{@errorName(err)});
+    }
+
+    // Autoscale if requested
+    if (autoscale and total_bytes_processed > 0) {
+        var scaler = agent_mod.Autoscaler.init(level, .{});
+        const recommended = scaler.simulateCorpus(agent.getCorpusSentenceCount() * 15, total_bytes_processed);
+        if (recommended != level) {
+            level = recommended;
+            agent.setLevel(level);
+            std.debug.print("[Autoscaler] Scaled lattice to s={d} ({s})\n", .{ level, scaler.currentVocab().name });
+        }
+    }
+
+    std.debug.print("=== Train-All Complete ===\n", .{});
+    std.debug.print("Total files scanned: {d}\n", .{total_files_scanned});
+    std.debug.print("Total files read: {d}\n", .{total_files_read});
+    std.debug.print("Total sentences learned: {d}\n", .{total_sentences_learned});
+    std.debug.print("Total bytes processed: {d}\n", .{total_bytes_processed});
+    std.debug.print("Final corpus: {d} sentences\n", .{agent.getCorpusSentenceCount()});
+    std.debug.print("Corpus saved to: {s}\n", .{corpus_file});
+}
+
 fn runTrainMetacog(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     var corpus_dir: []const u8 = ".";
     var corpus_file: []const u8 = "qstar_corpus.txt";
@@ -2826,14 +2927,15 @@ fn runFrameworkAuditCmd(allocator: std.mem.Allocator, args: [][:0]u8) !void {
 /// Used by tests to verify command dispatch coverage.
 pub fn isKnownCommand(cmd: []const u8) bool {
     const known = [_][]const u8{
-        "serve",           "master-serve",  "master",        "dns-update",
-        "run",             "chat",          "call",          "train",
-        "train-internet",  "ingest-corpus", "enrich-corpus", "train-corpus",
-        "train-metacog",   "corpus",        "kg",            "start-heartbeat",
-        "turing-test",     "experiment",    "diagnose",      "geoview",
-        "list",            "models",        "pull",          "push",
-        "mesh",            "transport",     "quine",         "collapse",
-        "framework-audit", "version",       "-v",            "--version",
+        "serve",           "master-serve",    "master",        "dns-update",
+        "run",             "chat",            "call",          "train",
+        "train-internet",  "ingest-corpus",   "enrich-corpus", "train-corpus",
+        "train-all",       "train-metacog",   "corpus",        "kg",
+        "start-heartbeat", "turing-test",     "experiment",    "diagnose",
+        "geoview",         "list",            "models",        "pull",
+        "push",            "mesh",            "transport",     "quine",
+        "collapse",        "framework-audit", "version",       "-v",
+        "--version",
     };
     for (known) |k| {
         if (std.mem.eql(u8, cmd, k)) return true;
@@ -2918,6 +3020,7 @@ test "main: isKnownCommand recognizes train" {
     try std.testing.expect(isKnownCommand("train"));
     try std.testing.expect(isKnownCommand("train-internet"));
     try std.testing.expect(isKnownCommand("train-corpus"));
+    try std.testing.expect(isKnownCommand("train-all"));
     try std.testing.expect(isKnownCommand("train-metacog"));
 }
 

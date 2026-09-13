@@ -1,0 +1,15 @@
+#!/bin/sh
+# demo.fano - FANO-sh polyglot: one file, three levels.
+# Level 0 (sh): this preamble is a valid shell script; it hands off:
+exec fano-sh "$0" "$@"
+# Level 1 (FANO-sh) begins below. Level 2 (codec) is the __HOLO__ payload.
+__FANO__
+q128 m = 2.5
+q128 E = m * c2
+print E
+holo h = m
+unfold h @ 0 -> m0
+unfold h @ 2 -> m2
+print m0
+print m2
+__HOLO__

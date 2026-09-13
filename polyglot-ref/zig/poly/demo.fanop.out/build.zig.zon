@@ -1,0 +1,5 @@
+.{
+    .name = "demo",
+    .version = "0.0.1",
+    .paths = .{"main.zig", "polygen.py", "polygen.js", "build.zig"},
+}

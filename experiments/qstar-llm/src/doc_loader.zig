@@ -39,6 +39,20 @@ pub const EXCLUDED_DIRS = [_][]const u8{
     "build",
     "dist",
     ".cache",
+    // Build output directories (not hidden, must be explicitly excluded)
+    "zig-out",
+    "bin",
+    "obj",
+    "publish",
+    "vendor",
+    // Large data directories (genome data, ML models, dependency repos)
+    "data",
+    "models",
+    "deps",
+    // Tool/config directories (already extracted or not training content)
+    ".devin",
+    ".foundations",
+    ".codeium",
 };
 
 /// File extensions that should never be ingested (binaries, archives, media).
@@ -157,6 +171,17 @@ fn isSupportedFile(name: []const u8) bool {
     if (std.mem.endsWith(u8, name, ".d")) return true;
     if (std.mem.endsWith(u8, name, ".asm")) return true;
     if (std.mem.endsWith(u8, name, ".s")) return true;
+    // Polyglot / formalization / project metadata extensions
+    if (std.mem.endsWith(u8, name, ".qs")) return true; // Q# quantum programming
+    if (std.mem.endsWith(u8, name, ".lean")) return true; // Lean 4 formalization
+    if (std.mem.endsWith(u8, name, ".fano")) return true; // FANO-sh polyglot shell scripts
+    if (std.mem.endsWith(u8, name, ".fanop")) return true; // FANO-1 polyglot project files
+    if (std.mem.endsWith(u8, name, ".bib")) return true; // BibTeX bibliography
+    if (std.mem.endsWith(u8, name, ".csproj")) return true; // .NET project files (XML)
+    if (std.mem.endsWith(u8, name, ".zon")) return true; // Zig dependency manifests
+    if (std.mem.endsWith(u8, name, ".spec")) return true; // RPM spec files
+    if (std.mem.endsWith(u8, name, ".cff")) return true; // Citation File Format
+    if (std.mem.endsWith(u8, name, ".desktop")) return true; // Desktop entry files
     return false;
 }
 
@@ -517,6 +542,19 @@ test "doc_loader: isSupportedFile recognizes extensions" {
     try std.testing.expect(!isSupportedFile("binary.bin"));
 }
 
+test "doc_loader: isSupportedFile recognizes polyglot/formalization extensions" {
+    try std.testing.expect(isSupportedFile("Program.qs"));
+    try std.testing.expect(isSupportedFile("FixedPoint.lean"));
+    try std.testing.expect(isSupportedFile("demo.fano"));
+    try std.testing.expect(isSupportedFile("demo.fanop"));
+    try std.testing.expect(isSupportedFile("references.bib"));
+    try std.testing.expect(isSupportedFile("project.csproj"));
+    try std.testing.expect(isSupportedFile("build.zig.zon"));
+    try std.testing.expect(isSupportedFile("package.spec"));
+    try std.testing.expect(isSupportedFile("CITATION.cff"));
+    try std.testing.expect(isSupportedFile("app.desktop"));
+}
+
 test "doc_loader: isExcludedDir rejects known excluded dirs" {
     try std.testing.expect(isExcludedDir(".venv"));
     try std.testing.expect(isExcludedDir("__pycache__"));
@@ -530,6 +568,20 @@ test "doc_loader: isExcludedDir rejects known excluded dirs" {
     try std.testing.expect(isExcludedDir("build"));
     try std.testing.expect(isExcludedDir("dist"));
     try std.testing.expect(isExcludedDir(".cache"));
+    // Build output directories
+    try std.testing.expect(isExcludedDir("zig-out"));
+    try std.testing.expect(isExcludedDir("bin"));
+    try std.testing.expect(isExcludedDir("obj"));
+    try std.testing.expect(isExcludedDir("publish"));
+    try std.testing.expect(isExcludedDir("vendor"));
+    // Large data / dependency directories
+    try std.testing.expect(isExcludedDir("data"));
+    try std.testing.expect(isExcludedDir("models"));
+    try std.testing.expect(isExcludedDir("deps"));
+    // Tool / config directories
+    try std.testing.expect(isExcludedDir(".devin"));
+    try std.testing.expect(isExcludedDir(".foundations"));
+    try std.testing.expect(isExcludedDir(".codeium"));
 }
 
 test "doc_loader: isExcludedDir accepts normal dirs" {
@@ -541,6 +593,19 @@ test "doc_loader: isExcludedDir accepts normal dirs" {
     try std.testing.expect(!isExcludedDir("dictionaries"));
     try std.testing.expect(!isExcludedDir("src"));
     try std.testing.expect(!isExcludedDir("tests"));
+    // archives is NOT excluded (per policy: include historical provenance)
+    try std.testing.expect(!isExcludedDir("archives"));
+    // polyglot-ref is NOT excluded (local copy of Q128.128 polyglot source)
+    try std.testing.expect(!isExcludedDir("polyglot-ref"));
+    // Hardware subdirectories are NOT excluded
+    try std.testing.expect(!isExcludedDir("codon"));
+    try std.testing.expect(!isExcludedDir("qsharp"));
+    try std.testing.expect(!isExcludedDir("sidecar"));
+    try std.testing.expect(!isExcludedDir("neuraleak"));
+    try std.testing.expect(!isExcludedDir("formalize"));
+    try std.testing.expect(!isExcludedDir("wasm"));
+    try std.testing.expect(!isExcludedDir("os"));
+    try std.testing.expect(!isExcludedDir("papers"));
 }
 
 test "doc_loader: isExcludedExtension rejects binary/media/archive files" {
