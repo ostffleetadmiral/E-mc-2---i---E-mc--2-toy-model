@@ -11,6 +11,7 @@ const std = @import("std");
 const agent_mod = @import("agent");
 const ollama = @import("ollama_client");
 const fp = @import("fixed_point");
+const q128 = @import("q128");
 
 // =============================================================================
 // Configuration & Result Types
@@ -373,13 +374,13 @@ pub fn runTuringTestRound(
             // Use self-evaluation directly (no Ollama dependency)
             const self_eval = agent.evaluateResponse(tp.text, response);
             judge_scores = .{
-                .coherence = self_eval.coherence(),
-                .relevance = self_eval.relevance(),
-                .naturalness = self_eval.naturalness(),
-                .informativeness = self_eval.specificity(),
+                .coherence = q128.toF64(self_eval.coherence()),
+                .relevance = q128.toF64(self_eval.relevance()),
+                .naturalness = q128.toF64(self_eval.naturalness()),
+                .informativeness = q128.toF64(self_eval.specificity()),
                 .human_likeness = blk: {
                     const mem_consistency: f64 = if (agent_mod.detectCallbackPhrases(response)) 1.0 else if (agent_mod.detectContextualReferences(response)) 0.5 else 0.0;
-                    break :blk self_eval.coherence() * 0.30 + self_eval.naturalness() * 0.30 + self_eval.selfAwareness() * 0.25 + mem_consistency * 0.15;
+                    break :blk q128.toF64(self_eval.coherence()) * 0.30 + q128.toF64(self_eval.naturalness()) * 0.30 + q128.toF64(self_eval.selfAwareness()) * 0.25 + mem_consistency * 0.15;
                 },
             };
             judge_scores.overall = judge_scores.computeOverall();
@@ -401,13 +402,13 @@ pub fn runTuringTestRound(
                     // Ollama unavailable — use self-evaluation as fallback
                     const self_eval = agent.evaluateResponse(tp.text, response);
                     judge_scores = .{
-                        .coherence = self_eval.coherence(),
-                        .relevance = self_eval.relevance(),
-                        .naturalness = self_eval.naturalness(),
-                        .informativeness = self_eval.specificity(),
+                        .coherence = q128.toF64(self_eval.coherence()),
+                        .relevance = q128.toF64(self_eval.relevance()),
+                        .naturalness = q128.toF64(self_eval.naturalness()),
+                        .informativeness = q128.toF64(self_eval.specificity()),
                         .human_likeness = blk: {
                             const mem_consistency: f64 = if (agent_mod.detectCallbackPhrases(response)) 1.0 else if (agent_mod.detectContextualReferences(response)) 0.5 else 0.0;
-                            break :blk self_eval.coherence() * 0.30 + self_eval.naturalness() * 0.30 + self_eval.selfAwareness() * 0.25 + mem_consistency * 0.15;
+                            break :blk q128.toF64(self_eval.coherence()) * 0.30 + q128.toF64(self_eval.naturalness()) * 0.30 + q128.toF64(self_eval.selfAwareness()) * 0.25 + mem_consistency * 0.15;
                         },
                     };
                     judge_scores.overall = judge_scores.computeOverall();
@@ -435,16 +436,16 @@ pub fn runTuringTestRound(
         {
             const eval_result = agent_mod.EvaluationResult{
                 .scores = .{
-                    judge_scores.relevance, // DIM_RELEVANCE
-                    judge_scores.coherence, // DIM_COHERENCE
-                    judge_scores.informativeness, // DIM_SPECIFICITY
-                    judge_scores.naturalness, // DIM_NATURALNESS
-                    judge_scores.human_likeness, // DIM_SELF_AWARENESS
-                    0.5, // DIM_DIRECT_EXPERIENCE
-                    0.5, // DIM_METACOGNITION
-                    0.5, // DIM_SITUATIONAL_AWARENESS
+                    q128.fromF64(judge_scores.relevance), // DIM_RELEVANCE
+                    q128.fromF64(judge_scores.coherence), // DIM_COHERENCE
+                    q128.fromF64(judge_scores.informativeness), // DIM_SPECIFICITY
+                    q128.fromF64(judge_scores.naturalness), // DIM_NATURALNESS
+                    q128.fromF64(judge_scores.human_likeness), // DIM_SELF_AWARENESS
+                    q128.fromRatio(1, 2), // DIM_DIRECT_EXPERIENCE
+                    q128.fromRatio(1, 2), // DIM_METACOGNITION
+                    q128.fromRatio(1, 2), // DIM_SITUATIONAL_AWARENESS
                 },
-                .overall = judge_scores.overall,
+                .overall = q128.fromF64(judge_scores.overall),
                 .passed = passed,
             };
             agent.metacognition.recordEvaluation(eval_result) catch {};
@@ -454,16 +455,16 @@ pub fn runTuringTestRound(
         if (config.use_memory) {
             const eval_for_memory = agent_mod.EvaluationResult{
                 .scores = .{
-                    judge_scores.relevance,
-                    judge_scores.coherence,
-                    judge_scores.informativeness,
-                    judge_scores.naturalness,
-                    judge_scores.human_likeness,
-                    0.5, // DIM_DIRECT_EXPERIENCE
-                    0.5, // DIM_METACOGNITION
-                    0.5, // DIM_SITUATIONAL_AWARENESS
+                    q128.fromF64(judge_scores.relevance),
+                    q128.fromF64(judge_scores.coherence),
+                    q128.fromF64(judge_scores.informativeness),
+                    q128.fromF64(judge_scores.naturalness),
+                    q128.fromF64(judge_scores.human_likeness),
+                    q128.fromRatio(1, 2), // DIM_DIRECT_EXPERIENCE
+                    q128.fromRatio(1, 2), // DIM_METACOGNITION
+                    q128.fromRatio(1, 2), // DIM_SITUATIONAL_AWARENESS
                 },
-                .overall = judge_scores.overall,
+                .overall = q128.fromF64(judge_scores.overall),
                 .passed = passed,
             };
             agent.addToHistoryWithMeta(tp.text, response, cat_name, eval_for_memory) catch {};

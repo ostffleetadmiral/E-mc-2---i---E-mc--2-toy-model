@@ -408,7 +408,7 @@ pub fn main() !void {
                 const avg = mc.averageScore();
                 const pass = mc.passRate();
                 std.debug.print("\n--- Metacognitive Annotation ---\n", .{});
-                std.debug.print("Reflection cycles: {d} | Evaluations: {d} | Avg score: {d:.3} | Pass rate: {d:.1}%\n", .{ mc.reflection_depth, eval_count, avg, pass * 100.0 });
+                std.debug.print("Reflection cycles: {d} | Evaluations: {d} | Avg score: {d:.3} | Pass rate: {d:.1}%\n", .{ mc.reflection_depth, eval_count, q128.toF64(avg), q128.toF64(pass) * 100.0 });
                 if (mc.correction_history.items.len > 0) {
                     std.debug.print("Mid-response corrections: {d}\n", .{mc.correction_history.items.len});
                 }
@@ -625,8 +625,8 @@ fn runTuringTestCmd(allocator: std.mem.Allocator, args: [][:0]u8) !void {
             const mc = &agent.metacognition;
             std.debug.print("\nMetacognitive stats:\n", .{});
             std.debug.print("  Evaluations recorded: {d}\n", .{mc.evaluation_history.items.len});
-            std.debug.print("  Average self-score: {d:.3}\n", .{mc.averageScore()});
-            std.debug.print("  Self-evaluation pass rate: {d:.1}%\n", .{mc.passRate() * 100.0});
+            std.debug.print("  Average self-score: {d:.3}\n", .{q128.toF64(mc.averageScore())});
+            std.debug.print("  Self-evaluation pass rate: {d:.1}%\n", .{q128.toF64(mc.passRate()) * 100.0});
             if (mc.correction_history.items.len > 0) {
                 std.debug.print("  Mid-response corrections: {d}\n", .{mc.correction_history.items.len});
             }
@@ -967,7 +967,7 @@ fn runExperimentCmd(allocator: std.mem.Allocator, args: [][:0]u8) !void {
             constrained_agent.buildBigramModelFromCombined() catch {};
         }
     }
-    constrained_agent.metacognition.confidence_threshold = 0.5;
+    constrained_agent.metacognition.confidence_threshold = q128.fromRatio(1, 2);
     constrained_agent.metacognition.reflection_depth = 2;
 
     // Lattice observer system prompt — constrains the agent to the E0/421/7-channel geometry

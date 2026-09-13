@@ -3722,8 +3722,8 @@ pub const Agent = struct {
     /// Stores up to 20 entries (10 exchanges) with key fact extraction.
     pub fn addToHistory(self: *Agent, user_msg: []const u8, agent_response: []const u8) !void {
         const eval_result = EvaluationResult{
-            .scores = .{ 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 },
-            .overall = 0.5,
+            .scores = .{ q128.fromRatio(1, 2), q128.fromRatio(1, 2), q128.fromRatio(1, 2), q128.fromRatio(1, 2), q128.fromRatio(1, 2), q128.fromRatio(1, 2), q128.fromRatio(1, 2), q128.fromRatio(1, 2) },
+            .overall = q128.fromRatio(1, 2),
             .passed = true,
         };
         try self.working_memory.addExchange(user_msg, agent_response, "", eval_result);
@@ -3811,7 +3811,7 @@ pub const Agent = struct {
                 }
             }
 
-            try em.addEpisode(summary, topic, entry.category, entry.evaluation.overall, insight);
+            try em.addEpisode(summary, topic, entry.category, q128.toF64(entry.evaluation.overall), insight);
         }
     }
 
@@ -5293,14 +5293,14 @@ pub const Agent = struct {
             2.0;
 
         var model = SelfModel{
-            .activation_entropy = entropy,
+            .activation_entropy = q128.fromF64(entropy),
             .peak_node = peak_node,
             .peak_channel = peak_channel,
-            .channel_imbalance = channel_imbalance,
+            .channel_imbalance = q128.fromF64(channel_imbalance),
             .temperature = self.state.temperature,
             .output_token_count = token_count,
-            .vocabulary_richness = vocab_richness,
-            .consciousness_bandwidth_ratio = consciousness_ratio,
+            .vocabulary_richness = q128.fromF64(vocab_richness),
+            .consciousness_bandwidth_ratio = q128.fromF64(consciousness_ratio),
             .description = std.mem.zeroes([256]u8),
             .description_len = 0,
         };
@@ -5315,14 +5315,14 @@ pub const Agent = struct {
 
         // Update metacognition engine state
         self.metacognition.updateSelfModel(
-            entropy,
+            q128.fromF64(entropy),
             peak_node,
             peak_channel,
-            channel_imbalance,
+            q128.fromF64(channel_imbalance),
             self.state.temperature,
             token_count,
-            vocab_richness,
-            consciousness_ratio,
+            q128.fromF64(vocab_richness),
+            q128.fromF64(consciousness_ratio),
         );
 
         return model;
@@ -5637,18 +5637,22 @@ pub const Agent = struct {
         const metacognition_dim_score = q128.toF64(scoreMetacognition(response));
         const situational_awareness_score = q128.toF64(scoreSituationalAwareness(response));
 
-        const scores = [_]f64{ relevance_score, coherence_score, specificity_score, naturalness_score, self_awareness_score, direct_experience_score, metacognition_dim_score, situational_awareness_score };
+        const scores_f64 = [_]f64{ relevance_score, coherence_score, specificity_score, naturalness_score, self_awareness_score, direct_experience_score, metacognition_dim_score, situational_awareness_score };
         // Weighted average: relevance and coherence most important, sentience dims lighter
         const weights = [_]f64{ 0.20, 0.18, 0.10, 0.10, 0.12, 0.10, 0.10, 0.10 };
         var overall: f64 = 0.0;
-        for (scores, weights) |s, w| overall += s * w;
+        for (scores_f64, weights) |s, w| overall += s * w;
 
-        const threshold = self.metacognition.confidence_threshold;
-        const passed = overall >= threshold;
+        const threshold_f64 = q128.toF64(self.metacognition.confidence_threshold);
+        const passed = overall >= threshold_f64;
+
+        // Convert f64 scores to Q128 for EvaluationResult
+        var scores_q128: [8]q128.Fp = undefined;
+        for (scores_f64, 0..) |s, i| scores_q128[i] = q128.fromF64(s);
 
         const result = EvaluationResult{
-            .scores = scores,
-            .overall = overall,
+            .scores = scores_q128,
+            .overall = q128.fromF64(overall),
             .passed = passed,
         };
 
@@ -5672,7 +5676,7 @@ pub const Agent = struct {
 
         var best_response: ?[]u8 = null;
         var best_score: f64 = -1.0;
-        var last_eval: EvaluationResult = .{ .scores = [_]f64{0} ** 8, .overall = 0.0, .passed = false };
+        var last_eval: EvaluationResult = .{ .scores = [_]q128.Fp{0} ** 8, .overall = 0, .passed = false };
         var prev_eval: ?EvaluationResult = null;
 
         for (0..max_cycles) |cycle| {
@@ -5708,9 +5712,9 @@ pub const Agent = struct {
             self.metacognition.updateSharedState(
                 introspection.channel_imbalance,
                 introspection.activation_entropy,
-                0.0, // relevance not yet computed
+                0, // relevance not yet computed
                 introspection.output_token_count,
-                coherence_f64,
+                q128.fromF64(coherence_f64),
                 self.state.consciousness.isConscious(),
             );
 
@@ -5720,7 +5724,7 @@ pub const Agent = struct {
             // Quadrivium: use stability metric to modulate confidence
             const stability = self.quadrivium_pipeline.stabilityScore(&self.state.activations);
             if (stability < 0.3) {
-                last_eval.overall *= 0.8;
+                last_eval.overall = q128.mul(last_eval.overall, q128.fromRatio(8, 10));
                 last_eval.passed = false;
             }
 
@@ -5729,7 +5733,7 @@ pub const Agent = struct {
 
             // Logic stage: check non-contradiction
             if (!trivium.LogicStage.checkNonContradiction(prompt, response)) {
-                last_eval.overall *= 0.7;
+                last_eval.overall = q128.mul(last_eval.overall, q128.fromRatio(7, 10));
                 last_eval.passed = false;
             }
 
@@ -5743,7 +5747,7 @@ pub const Agent = struct {
                         // Free old best and replace with corrected version
                         allocator.free(prev_resp);
                         best_response = @constCast(corrected);
-                        best_score = last_eval.overall;
+                        best_score = q128.toF64(last_eval.overall);
                         self.metacognition.recordCorrection(@intCast(cycle), phrase, corrected, "mid-response improvement") catch {};
                         prev_eval = last_eval;
                         continue;
@@ -5752,10 +5756,10 @@ pub const Agent = struct {
             }
 
             // Track best response
-            if (last_eval.overall > best_score) {
+            if (q128.toF64(last_eval.overall) > best_score) {
                 if (best_response) |old| allocator.free(old);
                 best_response = @constCast(response);
-                best_score = last_eval.overall;
+                best_score = q128.toF64(last_eval.overall);
                 // Store partial response for correction comparison on next cycle
                 self.metacognition.storePartialResponse(response) catch {};
             } else {
@@ -5767,11 +5771,11 @@ pub const Agent = struct {
 
             // Self-correction: use engine's suggestion for parameter adjustment
             if (cycle < max_cycles - 1) {
-                if (self.metacognition.suggestAdjustment(last_eval, q128.toF64(self.sample_config.temperature), self.sample_config.top_k, @intCast(cycle))) |adj| {
+                if (self.metacognition.suggestAdjustment(last_eval, self.sample_config.temperature, self.sample_config.top_k, @intCast(cycle))) |adj| {
                     if (std.mem.eql(u8, adj.dimension, "specificity")) {
-                        self.sample_config.top_k = @intFromFloat(adj.new_value);
+                        self.sample_config.top_k = @intCast(q128.toInt(adj.new_value));
                     } else {
-                        self.sample_config.temperature = q128.fromF64(adj.new_value);
+                        self.sample_config.temperature = adj.new_value;
                     }
                 }
             }
@@ -5790,7 +5794,7 @@ pub const Agent = struct {
             // Phase 2 evaluation loop: register high-scoring responses as dynamic routes
             if (self.route_generator) |*gen| {
                 if (best_score >= 0.7) {
-                    gen.evaluateAndRegister(prompt, r, best_score) catch {};
+                    gen.evaluateAndRegister(prompt, r, q128.fromF64(best_score)) catch {};
                 }
             }
             return r;

@@ -181,6 +181,7 @@ pub fn build(b: *std.Build) void {
     });
     metacognition_engine_mod.addImport("dynamic_routes", dynamic_routes_mod);
     metacognition_engine_mod.addImport("hw_bridge", hw_bridge_mod);
+    metacognition_engine_mod.addImport("q128", q128_mod);
 
     const trivium_mod = b.addModule("trivium", .{
         .root_source_file = b.path("src/trivium.zig"),
@@ -593,6 +594,7 @@ pub fn build(b: *std.Build) void {
     turing_test_mod.addImport("agent", agent_mod);
     turing_test_mod.addImport("ollama_client", ollama_mod);
     turing_test_mod.addImport("fixed_point", fixed_point_mod);
+    turing_test_mod.addImport("q128", q128_mod);
 
     const tools_mod = b.addModule("tools", .{
         .root_source_file = b.path("src/tools.zig"),
@@ -1233,6 +1235,7 @@ pub fn build(b: *std.Build) void {
     });
     agent_metacog_mod.addImport("dynamic_routes", agent_dyn_routes_mod);
     agent_metacog_mod.addImport("hw_bridge", hw_bridge_mod);
+    agent_metacog_mod.addImport("q128", q128_mod);
     agent_tests.root_module.addImport("dynamic_routes", agent_dyn_routes_mod);
     const agent_trivium_mod = b.addModule("trivium", .{
         .root_source_file = b.path("src/trivium.zig"),
@@ -1360,6 +1363,7 @@ pub fn build(b: *std.Build) void {
     turing_test_bin.root_module.addImport("agent", agent_mod);
     turing_test_bin.root_module.addImport("ollama_client", ollama_mod);
     turing_test_bin.root_module.addImport("fixed_point", fixed_point_mod);
+    turing_test_bin.root_module.addImport("q128", q128_mod);
     test_turing_step.dependOn(&b.addRunArtifact(turing_test_bin).step);
 
     const test_agent_step = b.step("test-agent", "Run only agent tests");
@@ -1453,6 +1457,7 @@ pub fn build(b: *std.Build) void {
     });
     cli_metacog_mod.addImport("dynamic_routes", cli_dyn_routes_mod);
     cli_metacog_mod.addImport("hw_bridge", hw_bridge_mod);
+    cli_metacog_mod.addImport("q128", q128_mod);
     cli_mod.addImport("dynamic_routes", cli_dyn_routes_mod);
     const cli_trivium_mod = b.addModule("trivium", .{
         .root_source_file = b.path("src/trivium.zig"),
@@ -1544,6 +1549,7 @@ pub fn build(b: *std.Build) void {
     cli_turing_mod.addImport("agent", cli_mod);
     cli_turing_mod.addImport("ollama_client", cli_ollama_mod);
     cli_turing_mod.addImport("fixed_point", fixed_point_mod);
+    cli_turing_mod.addImport("q128", q128_mod);
 
     const cli_tools_mod = b.addModule("tools", .{
         .root_source_file = b.path("src/tools.zig"),
@@ -1722,6 +1728,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         ob_metacog_mod.addImport("dynamic_routes", ob_dyn_routes_mod);
+        ob_metacog_mod.addImport("q128", q128_mod);
         ob_agent_mod.addImport("dynamic_routes", ob_dyn_routes_mod);
         const ob_trivium_mod = b.addModule("trivium", .{
             .root_source_file = b.path("src/trivium.zig"),
@@ -1853,6 +1860,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         au_metacog_mod.addImport("dynamic_routes", au_dyn_routes_mod);
+        au_metacog_mod.addImport("q128", q128_mod);
         au_agent_mod.addImport("dynamic_routes", au_dyn_routes_mod);
         const au_trivium_mod = b.addModule("trivium", .{
             .root_source_file = b.path("src/trivium.zig"),
@@ -1958,6 +1966,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         ma_metacog_mod.addImport("dynamic_routes", ma_dyn_routes_mod);
+        ma_metacog_mod.addImport("q128", q128_mod);
         ma_agent_mod.addImport("dynamic_routes", ma_dyn_routes_mod);
         const ma_trivium_mod = b.addModule("trivium", .{
             .root_source_file = b.path("src/trivium.zig"),
@@ -2577,6 +2586,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         cb_metacog_mod.addImport("dynamic_routes", cb_dyn_routes_mod);
+        cb_metacog_mod.addImport("q128", q128_mod);
         cb_agent_mod.addImport("dynamic_routes", cb_dyn_routes_mod);
         const cb_trivium_mod = b.addModule("trivium", .{
             .root_source_file = b.path("src/trivium.zig"),
@@ -2783,6 +2793,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         mb_metacog_mod.addImport("dynamic_routes", mb_dyn_routes_mod);
+        mb_metacog_mod.addImport("q128", q128_mod);
         mb_agent_mod.addImport("dynamic_routes", mb_dyn_routes_mod);
 
         const mb_trivium_mod = b.addModule("trivium", .{
@@ -2963,6 +2974,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         st_metacog_mod.addImport("dynamic_routes", st_dyn_routes_mod);
+        st_metacog_mod.addImport("q128", q128_mod);
         st_agent_mod.addImport("dynamic_routes", st_dyn_routes_mod);
 
         const st_trivium_mod = b.addModule("trivium", .{
@@ -3133,6 +3145,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         ct_metacog_mod.addImport("dynamic_routes", ct_dyn_routes_mod);
+        ct_metacog_mod.addImport("q128", q128_mod);
         ct_agent_mod.addImport("dynamic_routes", ct_dyn_routes_mod);
 
         const ct_trivium_mod = b.addModule("trivium", .{
@@ -3297,6 +3310,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         hb_metacog_mod.addImport("dynamic_routes", hb_dyn_routes_mod);
+        hb_metacog_mod.addImport("q128", q128_mod);
         hb_agent_mod.addImport("dynamic_routes", hb_dyn_routes_mod);
         const hb_trivium_mod = b.addModule("trivium", .{
             .root_source_file = b.path("src/trivium.zig"),
@@ -3552,6 +3566,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         mb_metacog_mod.addImport("dynamic_routes", mb_dyn_routes_mod2);
+        mb_metacog_mod.addImport("q128", q128_mod);
         mb_agent_mod.addImport("dynamic_routes", mb_dyn_routes_mod2);
         const mb_trivium_mod = b.addModule("trivium", .{
             .root_source_file = b.path("src/trivium.zig"),

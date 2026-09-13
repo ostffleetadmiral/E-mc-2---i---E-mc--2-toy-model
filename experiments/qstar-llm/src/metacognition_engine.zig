@@ -18,6 +18,7 @@
 const std = @import("std");
 const dyn_routes = @import("dynamic_routes");
 const hw_bridge = @import("hw_bridge");
+const q128 = @import("q128");
 
 // =============================================================================
 // Constants
@@ -93,8 +94,8 @@ pub const Mood = enum {
 // =============================================================================
 
 pub const EvaluationResult = struct {
-    scores: [8]f64,
-    overall: f64,
+    scores: [8]q128.Fp,
+    overall: q128.Fp,
     passed: bool,
 
     pub const DIM_RELEVANCE: usize = 0;
@@ -106,35 +107,35 @@ pub const EvaluationResult = struct {
     pub const DIM_METACOGNITION: usize = 6;
     pub const DIM_SITUATIONAL_AWARENESS: usize = 7;
 
-    pub fn relevance(self: EvaluationResult) f64 {
+    pub fn relevance(self: EvaluationResult) q128.Fp {
         return self.scores[DIM_RELEVANCE];
     }
-    pub fn coherence(self: EvaluationResult) f64 {
+    pub fn coherence(self: EvaluationResult) q128.Fp {
         return self.scores[DIM_COHERENCE];
     }
-    pub fn specificity(self: EvaluationResult) f64 {
+    pub fn specificity(self: EvaluationResult) q128.Fp {
         return self.scores[DIM_SPECIFICITY];
     }
-    pub fn naturalness(self: EvaluationResult) f64 {
+    pub fn naturalness(self: EvaluationResult) q128.Fp {
         return self.scores[DIM_NATURALNESS];
     }
-    pub fn selfAwareness(self: EvaluationResult) f64 {
+    pub fn selfAwareness(self: EvaluationResult) q128.Fp {
         return self.scores[DIM_SELF_AWARENESS];
     }
-    pub fn directExperience(self: EvaluationResult) f64 {
+    pub fn directExperience(self: EvaluationResult) q128.Fp {
         return self.scores[DIM_DIRECT_EXPERIENCE];
     }
-    pub fn metacognitionScore(self: EvaluationResult) f64 {
+    pub fn metacognitionScore(self: EvaluationResult) q128.Fp {
         return self.scores[DIM_METACOGNITION];
     }
-    pub fn situationalAwareness(self: EvaluationResult) f64 {
+    pub fn situationalAwareness(self: EvaluationResult) q128.Fp {
         return self.scores[DIM_SITUATIONAL_AWARENESS];
     }
 
     pub fn empty() EvaluationResult {
         return .{
-            .scores = [_]f64{0.0} ** 8,
-            .overall = 0.0,
+            .scores = [_]q128.Fp{0} ** 8,
+            .overall = 0,
             .passed = false,
         };
     }
@@ -145,14 +146,14 @@ pub const EvaluationResult = struct {
 // =============================================================================
 
 pub const SelfModel = struct {
-    activation_entropy: f64,
+    activation_entropy: q128.Fp,
     peak_node: usize,
     peak_channel: u3,
-    channel_imbalance: f64,
+    channel_imbalance: q128.Fp,
     temperature: i128,
     output_token_count: usize,
-    vocabulary_richness: f64,
-    consciousness_bandwidth_ratio: f64 = 2.0,
+    vocabulary_richness: q128.Fp,
+    consciousness_bandwidth_ratio: q128.Fp = q128.fromInt(2),
     mood: Mood = .relaxed,
     description: [256]u8 = std.mem.zeroes([256]u8),
     description_len: usize = 0,
@@ -163,13 +164,13 @@ pub const SelfModel = struct {
 
     pub fn defaultModel() SelfModel {
         return .{
-            .activation_entropy = 0.0,
+            .activation_entropy = 0,
             .peak_node = 0,
             .peak_channel = 0,
-            .channel_imbalance = 0.0,
+            .channel_imbalance = 0,
             .temperature = 0,
             .output_token_count = 0,
-            .vocabulary_richness = 0.0,
+            .vocabulary_richness = 0,
             .mood = .relaxed,
         };
     }
@@ -182,8 +183,8 @@ pub const SelfModel = struct {
 pub const ParameterAdjustment = struct {
     cycle: u8,
     dimension: []const u8,
-    old_value: f64,
-    new_value: f64,
+    old_value: q128.Fp,
+    new_value: q128.Fp,
     reason: []const u8,
 };
 
@@ -207,7 +208,7 @@ pub const MetacognitionEngine = struct {
     evaluation_history: std.ArrayList(EvaluationResult),
     adjustment_history: std.ArrayList(ParameterAdjustment),
     correction_history: std.ArrayList(CorrectionEvent),
-    confidence_threshold: f64,
+    confidence_threshold: q128.Fp,
     reflection_depth: u8,
     mood: Mood,
     allocator: std.mem.Allocator,
@@ -228,12 +229,12 @@ pub const MetacognitionEngine = struct {
 
     // Mutex-protected shared state for thread communication
     state_mutex: std.Thread.Mutex = .{},
-    shared_channel_imbalance: f64 = 0.0,
-    shared_activation_entropy: f64 = 0.0,
-    shared_relevance_score: f64 = 0.0,
+    shared_channel_imbalance: q128.Fp = 0,
+    shared_activation_entropy: q128.Fp = 0,
+    shared_relevance_score: q128.Fp = 0,
     shared_token_count: usize = 0,
     // Framework bridge state: coherence and self-recognition from hw_bridge
-    shared_coherence: f64 = 0.0,
+    shared_coherence: q128.Fp = 0,
     shared_self_recognition_active: bool = false,
 
     pub fn init(allocator: std.mem.Allocator) MetacognitionEngine {
@@ -242,7 +243,7 @@ pub const MetacognitionEngine = struct {
             .evaluation_history = std.ArrayList(EvaluationResult).init(allocator),
             .adjustment_history = std.ArrayList(ParameterAdjustment).init(allocator),
             .correction_history = std.ArrayList(CorrectionEvent).init(allocator),
-            .confidence_threshold = 0.5,
+            .confidence_threshold = q128.fromRatio(1, 2),
             .reflection_depth = STANDARD_CYCLES,
             .mood = .relaxed,
             .allocator = allocator,
@@ -287,11 +288,11 @@ pub const MetacognitionEngine = struct {
                 self.state_mutex.lock();
                 defer self.state_mutex.unlock();
 
-                const imbalance = self.shared_channel_imbalance;
-                const entropy = self.shared_activation_entropy;
-                const relevance = self.shared_relevance_score;
+                const imbalance = q128.toF64(self.shared_channel_imbalance);
+                const entropy = q128.toF64(self.shared_activation_entropy);
+                const relevance = q128.toF64(self.shared_relevance_score);
                 const token_count = self.shared_token_count;
-                const coherence = self.shared_coherence;
+                const coherence = q128.toF64(self.shared_coherence);
                 const sr_active = self.shared_self_recognition_active;
 
                 // Framework-based correction triggers (hw_bridge.shouldSelfCorrectF64):
@@ -328,11 +329,11 @@ pub const MetacognitionEngine = struct {
     /// Called during generation to provide real-time introspection data.
     pub fn updateSharedState(
         self: *MetacognitionEngine,
-        channel_imbalance: f64,
-        activation_entropy: f64,
-        relevance_score: f64,
+        channel_imbalance: q128.Fp,
+        activation_entropy: q128.Fp,
+        relevance_score: q128.Fp,
         token_count: usize,
-        coherence: f64,
+        coherence: q128.Fp,
         self_recognition_active: bool,
     ) void {
         self.state_mutex.lock();
@@ -377,31 +378,31 @@ pub const MetacognitionEngine = struct {
     }
 
     /// Returns the average overall score from recent evaluations.
-    pub fn averageScore(self: MetacognitionEngine) f64 {
-        if (self.evaluation_history.items.len == 0) return 0.0;
-        var sum: f64 = 0.0;
+    pub fn averageScore(self: MetacognitionEngine) q128.Fp {
+        if (self.evaluation_history.items.len == 0) return 0;
+        var sum: q128.Fp = 0;
         for (self.evaluation_history.items) |ev| {
-            sum += ev.overall;
+            sum = q128.add(sum, ev.overall);
         }
-        return sum / @as(f64, @floatFromInt(self.evaluation_history.items.len));
+        return q128.div(sum, q128.fromI256(@intCast(self.evaluation_history.items.len)));
     }
 
     /// Returns the pass rate from recent evaluations.
-    pub fn passRate(self: MetacognitionEngine) f64 {
-        if (self.evaluation_history.items.len == 0) return 0.0;
+    pub fn passRate(self: MetacognitionEngine) q128.Fp {
+        if (self.evaluation_history.items.len == 0) return 0;
         var passed: usize = 0;
         for (self.evaluation_history.items) |ev| {
             if (ev.passed) passed += 1;
         }
-        return @as(f64, @floatFromInt(passed)) / @as(f64, @floatFromInt(self.evaluation_history.items.len));
+        return q128.div(q128.fromI256(@intCast(passed)), q128.fromI256(@intCast(self.evaluation_history.items.len)));
     }
 
     /// Returns the dynamically calibrated threshold based on recent performance.
-    pub fn dynamicThreshold(self: MetacognitionEngine) f64 {
+    pub fn dynamicThreshold(self: MetacognitionEngine) q128.Fp {
         if (self.evaluation_history.items.len >= 3) {
             const pass_rate = self.passRate();
-            const adjustment = (pass_rate - 0.5) * 0.2;
-            return @max(0.3, @min(0.8, self.confidence_threshold + adjustment));
+            const adjustment = q128.mul(q128.sub(pass_rate, q128.fromRatio(1, 2)), q128.fromRatio(2, 10));
+            return q128.maxVal(q128.fromRatio(3, 10), q128.minVal(q128.fromRatio(8, 10), q128.add(self.confidence_threshold, adjustment)));
         }
         return self.confidence_threshold;
     }
@@ -424,14 +425,14 @@ pub const MetacognitionEngine = struct {
     /// Updates the self-model from introspected lattice state.
     pub fn updateSelfModel(
         self: *MetacognitionEngine,
-        entropy: f64,
+        entropy: q128.Fp,
         peak_node: usize,
         peak_channel: u3,
-        channel_imbalance: f64,
+        channel_imbalance: q128.Fp,
         temperature: i128,
         token_count: usize,
-        vocab_richness: f64,
-        consciousness_ratio: f64,
+        vocab_richness: q128.Fp,
+        consciousness_ratio: q128.Fp,
     ) void {
         self.self_model = .{
             .activation_entropy = entropy,
@@ -459,32 +460,32 @@ pub const MetacognitionEngine = struct {
 
         // Correction triggers:
         // 1. Relevance improved significantly (new response is more on-topic)
-        if (curr_eval.relevance() - prev_eval.relevance() > 0.2) {
+        if (q128.sub(curr_eval.relevance(), prev_eval.relevance()) > q128.fromRatio(2, 10)) {
             return CORRECTION_PHRASES[0];
         }
 
         // 2. Coherence improved significantly (new response is more logical)
-        if (curr_eval.coherence() - prev_eval.coherence() > 0.2) {
+        if (q128.sub(curr_eval.coherence(), prev_eval.coherence()) > q128.fromRatio(2, 10)) {
             return CORRECTION_PHRASES[1];
         }
 
         // 3. Previous response had very low relevance but new one is better
-        if (prev_eval.relevance() < 0.3 and curr_eval.relevance() > prev_eval.relevance()) {
+        if (prev_eval.relevance() < q128.fromRatio(3, 10) and curr_eval.relevance() > prev_eval.relevance()) {
             return CORRECTION_PHRASES[2];
         }
 
         // 4. Channel imbalance was high (hallucination risk) and improved
-        if (self.self_model.channel_imbalance > 0.7 and curr_eval.overall > prev_eval.overall) {
+        if (self.self_model.channel_imbalance > q128.fromRatio(7, 10) and curr_eval.overall > prev_eval.overall) {
             return CORRECTION_PHRASES[3];
         }
 
         // 5. Specificity improved significantly (new response is more precise)
-        if (curr_eval.specificity() - prev_eval.specificity() > 0.25) {
+        if (q128.sub(curr_eval.specificity(), prev_eval.specificity()) > q128.fromRatio(25, 100)) {
             return CORRECTION_PHRASES[4];
         }
 
         // 6. Overall score jumped significantly
-        if (curr_eval.overall - prev_eval.overall > 0.15) {
+        if (q128.sub(curr_eval.overall, prev_eval.overall) > q128.fromRatio(15, 100)) {
             return CORRECTION_PHRASES[5];
         }
 
@@ -550,42 +551,42 @@ pub const MetacognitionEngine = struct {
     pub fn suggestAdjustment(
         self: *MetacognitionEngine,
         eval: EvaluationResult,
-        current_temp: f64,
+        current_temp: q128.Fp,
         current_top_k: usize,
         cycle: u8,
     ) ?ParameterAdjustment {
         var adj: ?ParameterAdjustment = null;
 
-        if (eval.relevance() < 0.3) {
+        if (eval.relevance() < q128.fromRatio(3, 10)) {
             adj = .{
                 .cycle = cycle,
                 .dimension = "relevance",
                 .old_value = current_temp,
-                .new_value = @min(3.0, current_temp + 0.3),
+                .new_value = q128.minVal(q128.fromInt(3), q128.add(current_temp, q128.fromRatio(3, 10))),
                 .reason = "Low relevance: increasing temperature for diverse retrieval",
             };
-        } else if (eval.coherence() < 0.3) {
+        } else if (eval.coherence() < q128.fromRatio(3, 10)) {
             adj = .{
                 .cycle = cycle,
                 .dimension = "coherence",
                 .old_value = current_temp,
-                .new_value = @max(0.5, current_temp - 0.3),
+                .new_value = q128.maxVal(q128.fromRatio(1, 2), q128.sub(current_temp, q128.fromRatio(3, 10))),
                 .reason = "Low coherence: reducing temperature for focused output",
             };
-        } else if (eval.specificity() < 0.3) {
+        } else if (eval.specificity() < q128.fromRatio(3, 10)) {
             adj = .{
                 .cycle = cycle,
                 .dimension = "specificity",
-                .old_value = @as(f64, @floatFromInt(current_top_k)),
-                .new_value = @as(f64, @floatFromInt(@min(20, current_top_k + 2))),
+                .old_value = q128.fromI256(@intCast(current_top_k)),
+                .new_value = q128.fromI256(@intCast(@min(20, current_top_k + 2))),
                 .reason = "Low specificity: increasing top_k for broader vocabulary",
             };
-        } else if (eval.naturalness() < 0.2) {
+        } else if (eval.naturalness() < q128.fromRatio(2, 10)) {
             adj = .{
                 .cycle = cycle,
                 .dimension = "naturalness",
                 .old_value = current_temp,
-                .new_value = 1.2 + @as(f64, @floatFromInt(cycle)) * 0.2,
+                .new_value = q128.add(q128.fromRatio(12, 10), q128.mul(q128.fromI256(@intCast(cycle)), q128.fromRatio(2, 10))),
                 .reason = "Low naturalness: varying temperature for conversational tone",
             };
         }
@@ -627,10 +628,10 @@ pub const MetacognitionEngine = struct {
             "Mood={s}, Entropy={d:.2}, Imbalance={d:.3}, Threshold={d:.2}, PassRate={d:.2}, Evals={d}, Corrections={d}",
             .{
                 self.mood.label(),
-                self.self_model.activation_entropy,
-                self.self_model.channel_imbalance,
-                self.dynamicThreshold(),
-                self.passRate(),
+                q128.toF64(self.self_model.activation_entropy),
+                q128.toF64(self.self_model.channel_imbalance),
+                q128.toF64(self.dynamicThreshold()),
+                q128.toF64(self.passRate()),
                 self.evaluation_history.items.len,
                 self.correction_history.items.len,
             },
@@ -687,12 +688,12 @@ fn isComplexPrompt(prompt: []const u8) bool {
 }
 
 /// Derives mood from activation entropy and channel balance.
-fn deriveMood(entropy: f64, channel_imbalance: f64, is_small_talk: bool) Mood {
+fn deriveMood(entropy: q128.Fp, channel_imbalance: q128.Fp, is_small_talk: bool) Mood {
     if (is_small_talk) return .relaxed;
 
-    if (channel_imbalance > 0.7) return .uncertain;
-    if (entropy > 4.0) return .focused;
-    if (entropy > 2.0) return .curious;
+    if (channel_imbalance > q128.fromRatio(7, 10)) return .uncertain;
+    if (entropy > q128.fromInt(4)) return .focused;
+    if (entropy > q128.fromInt(2)) return .curious;
     return .relaxed;
 }
 
@@ -827,9 +828,10 @@ pub const RouteGenerator = struct {
         self: *RouteGenerator,
         prompt: []const u8,
         response: []const u8,
-        eval_score: f64,
+        eval_score: q128.Fp,
     ) !void {
-        const score_bp: u16 = @intFromFloat(@min(1.0, @max(0.0, eval_score)) * @as(f64, dyn_routes.BP_PER_UNIT));
+        const score_f64 = q128.toF64(eval_score);
+        const score_bp: u16 = @intFromFloat(@min(1.0, @max(0.0, score_f64)) * @as(f64, dyn_routes.BP_PER_UNIT));
 
         if (score_bp >= dyn_routes.HIGH_CONFIDENCE_BP) {
             var kws: [dyn_routes.MAX_KEYWORDS][]const u8 = undefined;
@@ -885,7 +887,7 @@ pub const RouteGenerator = struct {
 test "MetacognitionEngine: init and deinit" {
     var engine = MetacognitionEngine.init(std.testing.allocator);
     defer engine.deinit();
-    try std.testing.expectEqual(@as(f64, 0.5), engine.confidence_threshold);
+    try std.testing.expectEqual(q128.fromRatio(1, 2), engine.confidence_threshold);
     try std.testing.expectEqual(@as(u8, STANDARD_CYCLES), engine.reflection_depth);
     try std.testing.expectEqual(Mood.relaxed, engine.mood);
     try std.testing.expectEqual(false, engine.stop_flag.load(.acquire));
@@ -909,7 +911,7 @@ test "MetacognitionEngine: mid-generation correction detection" {
 
     // Simulate generation active with poor relevance
     engine.setGenerationActive(true);
-    engine.updateSharedState(0.9, 9.0, 0.15, 20, 0.3, false);
+    engine.updateSharedState(q128.fromRatio(9, 10), q128.fromInt(9), q128.fromRatio(15, 100), 20, q128.fromRatio(3, 10), false);
 
     // Wait briefly for thread to detect
     std.time.sleep(150 * std.time.ns_per_ms);
@@ -927,7 +929,7 @@ test "MetacognitionEngine: no correction when state is healthy" {
     try engine.startThread();
 
     engine.setGenerationActive(true);
-    engine.updateSharedState(0.2, 3.0, 0.8, 50, 0.9, true);
+    engine.updateSharedState(q128.fromRatio(2, 10), q128.fromInt(3), q128.fromRatio(8, 10), 50, q128.fromRatio(9, 10), true);
 
     std.time.sleep(100 * std.time.ns_per_ms);
 
@@ -941,11 +943,11 @@ test "MetacognitionEngine: recordEvaluation and averageScore" {
     var engine = MetacognitionEngine.init(std.testing.allocator);
     defer engine.deinit();
 
-    try engine.recordEvaluation(.{ .scores = [_]f64{0.5} ** 8, .overall = 0.6, .passed = true });
-    try engine.recordEvaluation(.{ .scores = [_]f64{0.4} ** 8, .overall = 0.4, .passed = false });
+    try engine.recordEvaluation(.{ .scores = [_]q128.Fp{q128.fromRatio(1, 2)} ** 8, .overall = q128.fromRatio(6, 10), .passed = true });
+    try engine.recordEvaluation(.{ .scores = [_]q128.Fp{q128.fromRatio(4, 10)} ** 8, .overall = q128.fromRatio(4, 10), .passed = false });
 
-    try std.testing.expectApproxEqAbs(@as(f64, 0.5), engine.averageScore(), 1e-10);
-    try std.testing.expectApproxEqAbs(@as(f64, 0.5), engine.passRate(), 1e-10);
+    try std.testing.expectEqual(q128.fromRatio(1, 2), engine.averageScore());
+    try std.testing.expectEqual(q128.fromRatio(1, 2), engine.passRate());
 }
 
 test "MetacognitionEngine: dynamicThreshold adjusts based on pass rate" {
@@ -954,18 +956,18 @@ test "MetacognitionEngine: dynamicThreshold adjusts based on pass rate" {
 
     // High pass rate → raise threshold
     for (0..5) |_| {
-        try engine.recordEvaluation(.{ .scores = [_]f64{0.8} ** 8, .overall = 0.8, .passed = true });
+        try engine.recordEvaluation(.{ .scores = [_]q128.Fp{q128.fromRatio(8, 10)} ** 8, .overall = q128.fromRatio(8, 10), .passed = true });
     }
     const high_threshold = engine.dynamicThreshold();
-    try std.testing.expect(high_threshold > 0.5);
+    try std.testing.expect(high_threshold > q128.fromRatio(1, 2));
 
     // Reset with low pass rate → lower threshold
     engine.evaluation_history.clearRetainingCapacity();
     for (0..5) |_| {
-        try engine.recordEvaluation(.{ .scores = [_]f64{0.2} ** 8, .overall = 0.2, .passed = false });
+        try engine.recordEvaluation(.{ .scores = [_]q128.Fp{q128.fromRatio(2, 10)} ** 8, .overall = q128.fromRatio(2, 10), .passed = false });
     }
     const low_threshold = engine.dynamicThreshold();
-    try std.testing.expect(low_threshold < 0.5);
+    try std.testing.expect(low_threshold < q128.fromRatio(1, 2));
 }
 
 test "MetacognitionEngine: classifyPrompt detects small talk" {
@@ -996,10 +998,10 @@ test "MetacognitionEngine: updateSelfModel sets mood" {
     var engine = MetacognitionEngine.init(std.testing.allocator);
     defer engine.deinit();
 
-    engine.updateSelfModel(5.0, 42, 3, 0.3, 100, 50, 0.7, 2.0);
+    engine.updateSelfModel(q128.fromInt(5), 42, 3, q128.fromRatio(3, 10), 100, 50, q128.fromRatio(7, 10), q128.fromInt(2));
     try std.testing.expectEqual(Mood.focused, engine.mood);
 
-    engine.updateSelfModel(1.0, 10, 1, 0.8, 50, 5, 0.3, 1.5);
+    engine.updateSelfModel(q128.ONE, 10, 1, q128.fromRatio(8, 10), 50, 5, q128.fromRatio(3, 10), q128.fromRatio(15, 10));
     try std.testing.expectEqual(Mood.uncertain, engine.mood);
 }
 
@@ -1015,13 +1017,13 @@ test "MetacognitionEngine: shouldCorrect detects improvement" {
     }
 
     const prev = EvaluationResult{
-        .scores = [_]f64{ 0.2, 0.5, 0.3, 0.5, 0.5, 0.5, 0.5, 0.5 },
-        .overall = 0.4,
+        .scores = [_]q128.Fp{ q128.fromRatio(2, 10), q128.fromRatio(5, 10), q128.fromRatio(3, 10), q128.fromRatio(5, 10), q128.fromRatio(5, 10), q128.fromRatio(5, 10), q128.fromRatio(5, 10), q128.fromRatio(5, 10) },
+        .overall = q128.fromRatio(4, 10),
         .passed = false,
     };
     const curr = EvaluationResult{
-        .scores = [_]f64{ 0.6, 0.7, 0.5, 0.6, 0.5, 0.5, 0.5, 0.5 },
-        .overall = 0.6,
+        .scores = [_]q128.Fp{ q128.fromRatio(6, 10), q128.fromRatio(7, 10), q128.fromRatio(5, 10), q128.fromRatio(6, 10), q128.fromRatio(5, 10), q128.fromRatio(5, 10), q128.fromRatio(5, 10), q128.fromRatio(5, 10) },
+        .overall = q128.fromRatio(6, 10),
         .passed = true,
     };
 
@@ -1040,8 +1042,8 @@ test "MetacognitionEngine: shouldCorrect returns null when no improvement" {
     }
 
     const prev = EvaluationResult{
-        .scores = [_]f64{ 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7 },
-        .overall = 0.7,
+        .scores = [_]q128.Fp{ q128.fromRatio(7, 10), q128.fromRatio(7, 10), q128.fromRatio(7, 10), q128.fromRatio(7, 10), q128.fromRatio(7, 10), q128.fromRatio(7, 10), q128.fromRatio(7, 10), q128.fromRatio(7, 10) },
+        .overall = q128.fromRatio(7, 10),
         .passed = true,
     };
     const curr = prev; // Same eval, no improvement
@@ -1077,12 +1079,12 @@ test "MetacognitionEngine: suggestAdjustment for low relevance" {
     defer engine.deinit();
 
     const eval = EvaluationResult{
-        .scores = [_]f64{ 0.2, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 },
-        .overall = 0.4,
+        .scores = [_]q128.Fp{ q128.fromRatio(2, 10), q128.fromRatio(5, 10), q128.fromRatio(5, 10), q128.fromRatio(5, 10), q128.fromRatio(5, 10), q128.fromRatio(5, 10), q128.fromRatio(5, 10), q128.fromRatio(5, 10) },
+        .overall = q128.fromRatio(4, 10),
         .passed = false,
     };
 
-    const adj = engine.suggestAdjustment(eval, 1.5, 10, 0);
+    const adj = engine.suggestAdjustment(eval, q128.fromRatio(15, 10), 10, 0);
     try std.testing.expect(adj != null);
     try std.testing.expectEqualStrings("relevance", adj.?.dimension);
     try std.testing.expect(adj.?.new_value > adj.?.old_value);
@@ -1093,12 +1095,12 @@ test "MetacognitionEngine: suggestAdjustment returns null when all good" {
     defer engine.deinit();
 
     const eval = EvaluationResult{
-        .scores = [_]f64{ 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8 },
-        .overall = 0.8,
+        .scores = [_]q128.Fp{ q128.fromRatio(8, 10), q128.fromRatio(8, 10), q128.fromRatio(8, 10), q128.fromRatio(8, 10), q128.fromRatio(8, 10), q128.fromRatio(8, 10), q128.fromRatio(8, 10), q128.fromRatio(8, 10) },
+        .overall = q128.fromRatio(8, 10),
         .passed = true,
     };
 
-    const adj = engine.suggestAdjustment(eval, 1.5, 10, 0);
+    const adj = engine.suggestAdjustment(eval, q128.fromRatio(15, 10), 10, 0);
     try std.testing.expect(adj == null);
 }
 
@@ -1135,7 +1137,7 @@ test "MetacognitionEngine: statusString produces output" {
     var engine = MetacognitionEngine.init(std.testing.allocator);
     defer engine.deinit();
 
-    try engine.recordEvaluation(.{ .scores = [_]f64{0.5} ** 8, .overall = 0.5, .passed = true });
+    try engine.recordEvaluation(.{ .scores = [_]q128.Fp{q128.fromRatio(1, 2)} ** 8, .overall = q128.fromRatio(1, 2), .passed = true });
 
     var buf: [256]u8 = undefined;
     const status = engine.statusString(&buf);
@@ -1195,7 +1197,7 @@ test "RouteGenerator: evaluateAndRegister high score creates route" {
     defer reg.deinit();
 
     var gen = RouteGenerator.init(std.testing.allocator, &reg);
-    try gen.evaluateAndRegister("What is photosynthesis process", "Photosynthesis is how plants make food.", 0.85);
+    try gen.evaluateAndRegister("What is photosynthesis process", "Photosynthesis is how plants make food.", q128.fromRatio(85, 100));
     try std.testing.expectEqual(@as(usize, 1), reg.count());
     try std.testing.expect(gen.routes_created == 1);
 }
@@ -1205,7 +1207,7 @@ test "RouteGenerator: evaluateAndRegister low score skips" {
     defer reg.deinit();
 
     var gen = RouteGenerator.init(std.testing.allocator, &reg);
-    try gen.evaluateAndRegister("What is photosynthesis", "I don't know.", 0.3);
+    try gen.evaluateAndRegister("What is photosynthesis", "I don't know.", q128.fromRatio(3, 10));
     try std.testing.expectEqual(@as(usize, 0), reg.count());
     try std.testing.expect(gen.routes_skipped == 1);
 }
@@ -1215,7 +1217,7 @@ test "RouteGenerator: statsString produces output" {
     defer reg.deinit();
 
     var gen = RouteGenerator.init(std.testing.allocator, &reg);
-    try gen.evaluateAndRegister("What is quantum mechanics", "Quantum mechanics is physics.", 0.9);
+    try gen.evaluateAndRegister("What is quantum mechanics", "Quantum mechanics is physics.", q128.fromRatio(9, 10));
 
     var buf: [128]u8 = undefined;
     const stats = gen.statsString(&buf);
