@@ -1085,21 +1085,12 @@ const BigramModel = struct {
         } else {
             total_gop.value_ptr.* = 1;
         }
-        // Build trigram successor list
+        // Build trigram successor list — no duplicate check (O(n) per token was the bottleneck).
         const succ_gop = try self.trigram_successors.getOrPut(row_key);
         if (!succ_gop.found_existing) {
             succ_gop.value_ptr.* = std.ArrayList(u32).init(self.allocator);
         }
-        var found = false;
-        for (succ_gop.value_ptr.items) |s| {
-            if (s == next) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            try succ_gop.value_ptr.append(next);
-        }
+        try succ_gop.value_ptr.append(next);
     }
 
     /// Returns the trigram probability P(next | prev2, prev1) as f64.
@@ -1174,22 +1165,13 @@ const BigramModel = struct {
         for (0..token_ids.len - 1) |i| {
             try self.addTransition(token_ids[i], token_ids[i + 1]);
 
-            // Build successor list
+            // Build successor list — no duplicate check (O(n) per token was the bottleneck).
+            // Duplicates are correct: frequent successors appear more often in sampling.
             const gop = try self.successors.getOrPut(token_ids[i]);
             if (!gop.found_existing) {
                 gop.value_ptr.* = std.ArrayList(u32).init(self.allocator);
             }
-            // Avoid duplicates in successor list
-            var found = false;
-            for (gop.value_ptr.items) |s| {
-                if (s == token_ids[i + 1]) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                try gop.value_ptr.append(token_ids[i + 1]);
-            }
+            try gop.value_ptr.append(token_ids[i + 1]);
         }
 
         // Trigram transitions
@@ -3988,7 +3970,7 @@ pub const Agent = struct {
     }
 
     /// Builds the bigram model from the combined corpus (static seed + dynamic learned).
-    /// Uses a bounded portion of the dynamic corpus (up to 500KB) for performance.
+    /// Uses a bounded portion of the dynamic corpus (up to 100KB) for performance.
     /// This gives the bigram model vocabulary coverage from trained corpus text.
     pub fn buildBigramModelFromCombined(self: *Agent) !void {
         if (self.tokenizer == null) return error.NoTokenizer;
@@ -4003,7 +3985,7 @@ pub const Agent = struct {
         try model.buildFromText(&self.tokenizer.?, SEED_CORPUS_TEXT);
 
         // Build from bounded portion of dynamic corpus for vocabulary expansion
-        const DYNAMIC_LIMIT: usize = 500 * 1024; // 500KB
+        const DYNAMIC_LIMIT: usize = 100 * 1024; // 100KB (was 500KB — BPE tokenization is the bottleneck)
         if (self.dynamic_corpus.items.len > 0) {
             const slice_len = @min(self.dynamic_corpus.items.len, DYNAMIC_LIMIT);
             try model.buildFromText(&self.tokenizer.?, self.dynamic_corpus.items[0..slice_len]);
@@ -5243,10 +5225,68 @@ pub const Agent = struct {
         return total;
     }
 
+    /// Streams a corpus from a .qsc container, learning sentence-by-sentence
+    /// without storing the full corpus in dynamic_corpus. Pages are decompressed
+    /// lazily and fed through learnFromText, which trims dynamic_corpus to stay
+    /// within the bounded window. This is the "holo VFS streaming" path:
+    /// compressed on disk, bounded in memory, streamed on demand.
+    ///
+    /// Returns the number of sentences learned.
+    pub fn loadCorpusStreaming(self: *Agent, corpus_store: anytype) !usize {
+        return self.loadCorpusStreamingMax(corpus_store, 0);
+    }
+
+    /// Streams up to max_pages from a .qsc container. If max_pages is 0,
+    /// streams all pages. Pages are decompressed lazily and fed through
+    /// learnFromTextStreaming, which trims dynamic_corpus to stay within
+    /// the bounded window. Since the window is 12MB and pages are ~1MB,
+    /// streaming more than ~15 pages is wasted work.
+    pub fn loadCorpusStreamingMax(self: *Agent, corpus_store: anytype, max_pages: usize) !usize {
+        var total_sentences: usize = 0;
+        const page_count = corpus_store.pageCount();
+        const limit = if (max_pages > 0) @min(max_pages, page_count) else page_count;
+        for (0..limit) |page_idx| {
+            const page = try corpus_store.readPage(page_idx);
+            defer self.allocator.free(page);
+            total_sentences += try self.learnFromTextStreaming(page);
+        }
+        self.cached_corpus_sentence_count = null;
+        return total_sentences;
+    }
+
     /// Relaxed filters for technical/scientific text ingestion.
     /// Performance: Uses fast prefix-hash dedup for large corpora instead of O(n*m) search.
+    /// When dynamic_corpus exceeds DYNAMIC_CORPUS_LIMIT, the oldest text is trimmed
+    /// to keep memory bounded during streaming ingestion.
     pub fn learnFromText(self: *Agent, text: []const u8) !usize {
-        // Guard against excessive corpus growth (4GB max)
+        return self.learnFromTextOpts(text, false);
+    }
+
+    /// Fast streaming ingestion: skips all dedup checks.
+    /// Use for curated .qsc corpus pages where dedup is unnecessary.
+    pub fn learnFromTextStreaming(self: *Agent, text: []const u8) !usize {
+        return self.learnFromTextOpts(text, true);
+    }
+
+    fn learnFromTextOpts(self: *Agent, text: []const u8, skip_dedup: bool) !usize {
+        // Bounded corpus window: keep at most 12MB in dynamic_corpus.
+        // buildBigramModelFromCombined uses first 500KB, getCombinedCorpus uses last 10MB.
+        // 12MB covers both with headroom for incremental growth.
+        const DYNAMIC_CORPUS_LIMIT: usize = 12 * 1024 * 1024;
+        if (self.dynamic_corpus.items.len > DYNAMIC_CORPUS_LIMIT) {
+            // Trim to last 10MB (aligned to sentence boundary)
+            const trim_keep: usize = 10 * 1024 * 1024;
+            if (self.dynamic_corpus.items.len > trim_keep) {
+                const start = self.dynamic_corpus.items.len - trim_keep;
+                // Find next sentence boundary after start
+                const boundary = std.mem.indexOfScalarPos(u8, self.dynamic_corpus.items, start, '\n') orelse start;
+                const kept_len = self.dynamic_corpus.items.len - boundary;
+                std.mem.copyForwards(u8, self.dynamic_corpus.items[0..kept_len], self.dynamic_corpus.items[boundary..]);
+                self.dynamic_corpus.shrinkRetainingCapacity(kept_len);
+            }
+        }
+
+        // Guard against excessive corpus growth
         const MAX_CORPUS_SIZE: usize = 4 * 1024 * 1024 * 1024;
         if (self.dynamic_corpus.items.len >= MAX_CORPUS_SIZE) return 0;
 
@@ -5268,24 +5308,26 @@ pub const Agent = struct {
             }
             if (alpha_count * 2 < trimmed.len) continue; // <50% alpha
 
-            // Dedup check — skip for large corpora (too slow), use fingerprint for medium
-            if (use_fast_dedup) {
-                // For very large corpora (>5MB), skip dedup entirely for speed
-                if (self.dynamic_corpus.items.len > 5 * 1024 * 1024) {
-                    // No dedup — accept potential duplicates
+            // Dedup check — skip for streaming or large corpora
+            if (!skip_dedup) {
+                if (use_fast_dedup) {
+                    // For very large corpora (>5MB), skip dedup entirely for speed
+                    if (self.dynamic_corpus.items.len > 5 * 1024 * 1024) {
+                        // No dedup — accept potential duplicates
+                    } else {
+                        // Medium corpus: check first 32 chars as fingerprint
+                        const fingerprint = trimmed[0..@min(32, trimmed.len)];
+                        if (std.mem.indexOf(u8, self.dynamic_corpus.items, fingerprint) != null) continue;
+                    }
                 } else {
-                    // Medium corpus: check first 32 chars as fingerprint
-                    const fingerprint = trimmed[0..@min(32, trimmed.len)];
-                    if (std.mem.indexOf(u8, self.dynamic_corpus.items, fingerprint) != null) continue;
+                    // Full dedup for small corpora
+                    const in_static = std.mem.indexOf(u8, SEED_CORPUS_TEXT, trimmed) != null;
+                    const in_dynamic = if (self.dynamic_corpus.items.len > 0)
+                        std.mem.indexOf(u8, self.dynamic_corpus.items, trimmed) != null
+                    else
+                        false;
+                    if (in_static or in_dynamic) continue;
                 }
-            } else {
-                // Full dedup for small corpora
-                const in_static = std.mem.indexOf(u8, SEED_CORPUS_TEXT, trimmed) != null;
-                const in_dynamic = if (self.dynamic_corpus.items.len > 0)
-                    std.mem.indexOf(u8, self.dynamic_corpus.items, trimmed) != null
-                else
-                    false;
-                if (in_static or in_dynamic) continue;
             }
 
             // Append to dynamic corpus

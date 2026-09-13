@@ -474,14 +474,36 @@ pub fn loadCorpusFromFile(agent: *agent_mod.Agent, path: []const u8) !usize {
     var magic: [4]u8 = undefined;
     const n = try file.readAll(&magic);
     if (n == 4 and std.mem.eql(u8, &magic, &corpus_store.QSC_MAGIC)) {
+        // Use streaming path: learn sentence-by-sentence with bounded memory
         var store = try corpus_store.CorpusStore.init(agent.allocator, path);
         defer store.deinit();
-        var reader = store.reader();
-        defer reader.deinit();
-        return agent.loadCorpus(&reader);
+        return agent.loadCorpusStreaming(&store);
     }
 
     return agent.loadCorpus(file.reader());
+}
+
+/// Streams a .qsc corpus container through the agent's learnFromText,
+/// building the bigram model and knowledge graph without loading the
+/// full corpus into memory. Pages are decompressed lazily from the
+/// compressed .qsc container (holo VFS streaming pattern).
+/// Only streams enough pages to fill the bounded 12MB dynamic_corpus window.
+/// Returns the number of sentences learned.
+pub fn streamCorpusFromQsc(agent: *agent_mod.Agent, qsc_path: []const u8) !usize {
+    return streamCorpusFromQscMax(agent, qsc_path, 16);
+}
+
+/// Streams up to max_pages from a .qsc container. If max_pages is 0, streams all.
+pub fn streamCorpusFromQscMax(agent: *agent_mod.Agent, qsc_path: []const u8, max_pages: usize) !usize {
+    var store = try corpus_store.CorpusStore.init(agent.allocator, qsc_path);
+    defer store.deinit();
+    return agent.loadCorpusStreamingMax(&store, max_pages);
+}
+
+/// Converts a raw corpus .txt file to a compressed .qsc container.
+/// Returns the number of pages written.
+pub fn convertCorpusToQsc(allocator: std.mem.Allocator, raw_path: []const u8, qsc_path: []const u8) !usize {
+    return corpus_store.buildCorpusStore(allocator, raw_path, qsc_path, corpus_store.DEFAULT_PAGE_SIZE);
 }
 
 /// Result for directory ingestion operations.

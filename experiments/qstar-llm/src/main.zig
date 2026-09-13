@@ -362,25 +362,52 @@ pub fn main() !void {
             agent.attachNeuralLM(lm);
         }
 
-        // Load trained corpus if available
-        if (std.fs.cwd().openFile("qstar_corpus.txt", .{})) |file| {
-            file.close();
-            const loaded = training.loadCorpusFromFile(&agent, "qstar_corpus.txt") catch 0;
-            if (autoscale and loaded > 0) {
-                var scaler = agent_mod.Autoscaler.init(level, .{});
-                const recommended = scaler.simulateCorpus(agent.getCorpusSentenceCount() * 15, loaded);
-                if (recommended != level) {
-                    level = recommended;
-                    agent.setLevel(level);
-                    std.debug.print("[Autoscaler] Scaled lattice to s={d} ({s})\n", .{ level, scaler.currentVocab().name });
-                }
+        // Load trained corpus — prefer .qsc streaming (holo VFS) for speed
+        // .qsc: compressed pages, streamed through learnFromText with bounded memory
+        // .txt: legacy full-load (slow, 178MB into memory)
+        const qsc_path = "qstar_corpus.qsc";
+        const txt_path = "qstar_corpus.txt";
+        const t0 = std.time.milliTimestamp();
+        const loaded = blk: {
+            if (std.fs.cwd().access(qsc_path, .{})) |_| {
+                // .qsc exists — stream it (fast, bounded memory)
+                const sentences = training.streamCorpusFromQsc(&agent, qsc_path) catch 0;
+                const t1 = std.time.milliTimestamp();
+                std.debug.print("Corpus: streamed {d} sentences from {s} in {d}ms\n", .{ sentences, qsc_path, t1 - t0 });
+                break :blk sentences;
+            } else |_| {
+                // No .qsc — try raw .txt (legacy full-load)
+                if (std.fs.cwd().openFile(txt_path, .{})) |file| {
+                    file.close();
+                    const bytes = training.loadCorpusFromFile(&agent, txt_path) catch 0;
+                    const t1 = std.time.milliTimestamp();
+                    std.debug.print("Corpus: loaded {d} bytes from {s} in {d}ms\n", .{ bytes, txt_path, t1 - t0 });
+                    break :blk bytes;
+                } else |_| {}
+                break :blk 0;
             }
-        } else |_| {}
+        };
+        if (autoscale and loaded > 0) {
+            var scaler = agent_mod.Autoscaler.init(level, .{});
+            const recommended = scaler.simulateCorpus(agent.getCorpusSentenceCount() * 15, loaded);
+            if (recommended != level) {
+                level = recommended;
+                agent.setLevel(level);
+                std.debug.print("[Autoscaler] Scaled lattice to s={d} ({s})\n", .{ level, scaler.currentVocab().name });
+            }
+        }
 
+        const t2 = std.time.milliTimestamp();
         if (loadConfiguredTokenizer(allocator, vocab_spec, level)) |tok| {
             agent.attachTokenizer(tok);
-            agent.buildBigramModelFromCombined() catch {};
+            // Skip bigram model build when neural LM is attached — the neural LM
+            // provides the language model, bigram is redundant and takes 20+ seconds.
+            if (nlm == null) {
+                agent.buildBigramModelFromCombined() catch {};
+            }
         }
+        const t3 = std.time.milliTimestamp();
+        std.debug.print("Tokenizer: {d}ms\n", .{t3 - t2});
 
         _ = agent.loadKnowledgeGraph("qstar_kg.bin") catch 0;
         _ = agent.extractKnowledgeFromText(prompt) catch 0;
@@ -498,6 +525,8 @@ pub fn main() !void {
         try runTrainCorpus(allocator, args);
     } else if (std.mem.eql(u8, cmd, "train-all")) {
         try runTrainAll(allocator, args);
+    } else if (std.mem.eql(u8, cmd, "convert-corpus")) {
+        try runConvertCorpus(allocator, args);
     } else if (std.mem.eql(u8, cmd, "train-metacog")) {
         try runTrainMetacog(allocator, args);
     } else if (std.mem.eql(u8, cmd, "corpus")) {
@@ -1448,6 +1477,7 @@ fn printHelp() void {
         \\  qstar enrich-corpus <dir>       Ollama-enriched corpus from documents
         \\  qstar train-corpus [options]    Full pipeline: ingest + Ollama enrich + OpenAI reinforce
         \\  qstar train-all [options]        Ingest from datasets/ + entire hardware dir (skips build artifacts)
+        \\  qstar convert-corpus [in] [out]  Convert raw .txt corpus to compressed .qsc (streaming, bounded memory)
         \\  qstar kg query <entity>         Query knowledge graph for entity neighbors
         \\  qstar kg dump                   Dump all knowledge graph triplets
         \\  qstar start-heartbeat [options] Start background continual learning heartbeat
@@ -2166,6 +2196,41 @@ fn runTrainCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
 }
 
 /// Ingests from datasets/ then the entire hardware directory tree (../).
+/// Converts a raw corpus .txt file to a compressed .qsc container.
+/// Usage: qstar convert-corpus [input.txt] [output.qsc]
+/// Defaults: input=qstar_corpus.txt, output=qstar_corpus.qsc
+/// The .qsc container uses gzip-compressed pages with an LRU cache,
+/// enabling streaming ingestion with bounded memory (holo VFS pattern).
+fn runConvertCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
+    const input = if (args.len > 2) args[2] else "qstar_corpus.txt";
+    const output = if (args.len > 3) args[3] else "qstar_corpus.qsc";
+
+    std.debug.print("Converting {s} → {s} (compressed .qsc container)...\n", .{ input, output });
+
+    // Check input exists
+    std.fs.cwd().access(input, .{}) catch {
+        std.debug.print("Error: input file {s} not found\n", .{input});
+        return error.FileNotFound;
+    };
+
+    const pages = training.convertCorpusToQsc(allocator, input, output) catch |err| {
+        std.debug.print("Error: conversion failed: {s}\n", .{@errorName(err)});
+        return err;
+    };
+
+    // Report stats
+    const out_file = try std.fs.cwd().openFile(output, .{});
+    defer out_file.close();
+    const out_size = try out_file.getEndPos();
+    const in_file = try std.fs.cwd().openFile(input, .{});
+    defer in_file.close();
+    const in_size = try in_file.getEndPos();
+
+    const ratio = if (in_size > 0) @as(f64, @floatFromInt(out_size)) / @as(f64, @floatFromInt(in_size)) else 0.0;
+    std.debug.print("Done: {d} pages, {d} → {d} bytes ({d:.1}% compression ratio)\n", .{ pages, in_size, out_size, ratio * 100.0 });
+    std.debug.print("Use 'qstar run' to stream from .qsc (fast, bounded memory)\n", .{});
+}
+
 /// The walker skips excluded dirs (bin, obj, .zig-cache, zig-out, vendor, data,
 /// deps, models, .devin, .foundations, .codeium, .venv, __pycache__, etc.)
 /// so only source/text files are ingested. Archives are included per policy.
@@ -2967,15 +3032,15 @@ fn runFrameworkAuditCmd(allocator: std.mem.Allocator, args: [][:0]u8) !void {
 /// Used by tests to verify command dispatch coverage.
 pub fn isKnownCommand(cmd: []const u8) bool {
     const known = [_][]const u8{
-        "serve",           "master-serve",    "master",        "dns-update",
-        "run",             "chat",            "call",          "train",
-        "train-internet",  "ingest-corpus",   "enrich-corpus", "train-corpus",
-        "train-all",       "train-metacog",   "corpus",        "kg",
-        "start-heartbeat", "turing-test",     "experiment",    "diagnose",
-        "geoview",         "list",            "models",        "pull",
-        "push",            "mesh",            "transport",     "quine",
-        "collapse",        "framework-audit", "version",       "-v",
-        "--version",
+        "serve",          "master-serve",    "master",          "dns-update",
+        "run",            "chat",            "call",            "train",
+        "train-internet", "ingest-corpus",   "enrich-corpus",   "train-corpus",
+        "train-all",      "train-metacog",   "corpus",          "kg",
+        "convert-corpus", "start-heartbeat", "turing-test",     "experiment",
+        "diagnose",       "geoview",         "list",            "models",
+        "pull",           "push",            "mesh",            "transport",
+        "quine",          "collapse",        "framework-audit", "version",
+        "-v",             "--version",
     };
     for (known) |k| {
         if (std.mem.eql(u8, cmd, k)) return true;
@@ -3026,6 +3091,10 @@ test "main: isKnownCommand recognizes version" {
 
 test "main: isKnownCommand recognizes framework-audit" {
     try std.testing.expect(isKnownCommand("framework-audit"));
+}
+
+test "main: isKnownCommand recognizes convert-corpus" {
+    try std.testing.expect(isKnownCommand("convert-corpus"));
 }
 
 test "main: isKnownCommand recognizes geoview" {
