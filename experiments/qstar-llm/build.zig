@@ -975,8 +975,8 @@ pub fn build(b: *std.Build) void {
         .{ .file = "src/seed_compressor.zig", .imports = &.{ .{ .name = "fixed_point", .mod = fixed_point_mod }, .{ .name = "holographic", .mod = holographic_mod }, .{ .name = "compress", .mod = compress_mod }, .{ .name = "qr_nest", .mod = qr_nest_mod }, .{ .name = "fp_bridge", .mod = fp_bridge_mod } } },
         .{ .file = "src/lattice.zig", .imports = &.{} },
         .{ .file = "src/bpe_tokenizer.zig", .imports = &.{} },
-        .{ .file = "src/sampling.zig", .imports = &.{} },
-        .{ .file = "src/memory.zig", .imports = &.{} },
+        .{ .file = "src/sampling.zig", .imports = &.{.{ .name = "q128", .mod = q128_mod }} },
+        .{ .file = "src/memory.zig", .imports = &.{.{ .name = "q128", .mod = q128_mod }} },
         .{ .file = "src/c_ffi.zig", .imports = &.{}, .link_libc = true },
         .{ .file = "src/vision/onnx_runtime.zig", .imports = &.{.{ .name = "c_ffi", .mod = c_ffi_mod }}, .link_libc = true },
         .{ .file = "src/vision/image.zig", .imports = &.{.{ .name = "c_ffi", .mod = c_ffi_mod }}, .link_libc = true },
@@ -1153,10 +1153,16 @@ pub fn build(b: *std.Build) void {
         .{ .file = "src/metacognition_engine.zig", .imports = &.{
             .{ .name = "dynamic_routes", .mod = dynamic_routes_mod },
             .{ .name = "hw_bridge", .mod = hw_bridge_mod },
+            .{ .name = "q128", .mod = q128_mod },
+            .{ .name = "trivium", .mod = trivium_mod },
+            .{ .name = "quadrivium", .mod = quadrivium_mod },
         } },
-        .{ .file = "src/dynamic_routes.zig", .imports = &.{} },
-        .{ .file = "src/trivium.zig", .imports = &.{} },
-        .{ .file = "src/quadrivium.zig", .imports = &.{.{ .name = "fixed_point", .mod = fixed_point_mod }} },
+        .{ .file = "src/dynamic_routes.zig", .imports = &.{.{ .name = "q128", .mod = q128_mod }} },
+        .{ .file = "src/trivium.zig", .imports = &.{.{ .name = "q128", .mod = q128_mod }} },
+        .{ .file = "src/quadrivium.zig", .imports = &.{
+            .{ .name = "fixed_point", .mod = fixed_point_mod },
+            .{ .name = "q128", .mod = q128_mod },
+        } },
         .{ .file = "src/q128.zig", .imports = &.{} },
         .{ .file = "src/corpus_learner.zig", .imports = &.{
             .{ .name = "trivium", .mod = trivium_mod },
@@ -1366,6 +1372,70 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(lite_test_run);
     prev_test_step = lite_test_run;
 
+    // Main CLI tests (command dispatch, seed corpus, tokenizer loading)
+    const main_tests = b.addTest(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    main_tests.root_module.addImport("agent", agent_mod);
+    main_tests.root_module.addImport("fixed_point", fixed_point_mod);
+    main_tests.root_module.addImport("q128", q128_mod);
+    main_tests.root_module.addImport("server", server_mod);
+    main_tests.root_module.addImport("tools", tools_mod);
+    main_tests.root_module.addImport("bpe_tokenizer", bpe_mod);
+    main_tests.root_module.addImport("training", training_mod);
+    main_tests.root_module.addImport("ollama_client", ollama_mod);
+    main_tests.root_module.addImport("openai_client", openai_mod);
+    main_tests.root_module.addImport("llm_provider", llm_provider_mod);
+    main_tests.root_module.addImport("doc_loader", doc_loader_mod);
+    main_tests.root_module.addImport("knowledge_graph", kg_mod);
+    main_tests.root_module.addImport("external_db", external_db_mod);
+    main_tests.root_module.addImport("continual_learner", continual_learner_mod);
+    main_tests.root_module.addImport("turing_test", turing_test_mod);
+    main_tests.root_module.addImport("geo_math", geo_math_mod);
+    main_tests.root_module.addImport("dynamic_dns", dynamic_dns_mod);
+    main_tests.root_module.addImport("mesh", mesh_mod);
+    main_tests.root_module.addImport("virtual_transport", virtual_transport_mod);
+    main_tests.root_module.addImport("master_server", master_server_mod);
+    main_tests.root_module.addImport("env_loader", env_loader_mod);
+    main_tests.root_module.addImport("corpus_store", corpus_store_mod);
+    main_tests.root_module.addImport("compress", compress_mod);
+    main_tests.root_module.addImport("hw_bridge", hw_bridge_mod);
+    main_tests.root_module.addImport("lattice", lattice_mod);
+    main_tests.root_module.addImport("mesh_peer", mesh_peer_mod);
+    main_tests.root_module.addImport("p2p_types", p2p_types_mod);
+    main_tests.root_module.addImport("relay_router", relay_router_mod);
+    main_tests.root_module.addImport("nat", nat_mod);
+    main_tests.root_module.addImport("webrtc", webrtc_mod);
+    main_tests.root_module.addImport("collapse", collapse_mod);
+    main_tests.root_module.addImport("qr_nest", qr_nest_mod);
+    main_tests.root_module.addImport("seed_compressor", seed_compressor_mod);
+    main_tests.root_module.addImport("transport_p2p", transport_p2p_mod);
+    main_tests.root_module.addImport("transport_wifi", transport_wifi_mod);
+    main_tests.root_module.addImport("transport_quine", transport_quine_mod);
+    main_tests.root_module.addImport("transport_polyglot", transport_polyglot_mod);
+    main_tests.root_module.addImport("transport_stega", transport_stega_mod);
+    main_tests.root_module.addImport("transport_qr", transport_qr_mod);
+    main_tests.root_module.addImport("transport_audio", transport_audio_mod);
+    main_tests.root_module.addImport("transport_cassette", transport_cassette_mod);
+    main_tests.root_module.addImport("transport_convert", transport_convert_mod);
+    main_tests.root_module.addImport("transport_lora", transport_lora_mod);
+    main_tests.root_module.addImport("transport_optar", transport_optar_mod);
+    main_tests.root_module.addImport("transport_paperback", transport_paperback_mod);
+    main_tests.root_module.addImport("transport_video", transport_video_mod);
+    const main_test_options = b.addOptions();
+    main_test_options.addOption(bool, "p2p_enabled", p2p_enabled);
+    main_tests.root_module.addOptions("build_options", main_test_options);
+    if (p2p_enabled) {
+        main_tests.root_module.addImport("p2p_update", p2p_update_mod);
+    }
+    const main_test_run = &b.addRunArtifact(main_tests).step;
+    // Note: test-main runs independently without the full test chain dependency
+    test_step.dependOn(main_test_run);
+    prev_test_step = main_test_run;
+
     // === Individual test steps (workaround for Zig 0.13.0 listen protocol deadlock) ===
 
     const test_turing_step = b.step("test-turing", "Run only turing_test tests");
@@ -1383,6 +1453,9 @@ pub fn build(b: *std.Build) void {
 
     const test_agent_step = b.step("test-agent", "Run only agent tests");
     test_agent_step.dependOn(agent_test_run);
+
+    const test_main_step = b.step("test-main", "Run only main CLI tests");
+    test_main_step.dependOn(main_test_run);
 
     // === Example Executable ===
 

@@ -332,12 +332,12 @@ test "memory: EpisodicMemory init and add episode" {
     var mem = EpisodicMemory.init(allocator, "test_memory.json");
     defer mem.deinit();
 
-    try mem.addEpisode("Quantum computing uses qubits", "quantum", "factual", 0.85, "Qubits enable superposition");
+    try mem.addEpisode("Quantum computing uses qubits", "quantum", "factual", q128.fromF64(0.85), "Qubits enable superposition");
     try std.testing.expectEqual(@as(usize, 1), mem.episodeCount());
 
     const ep = &mem.episodes.items[0];
     try std.testing.expectEqualStrings("quantum", ep.topic);
-    try std.testing.expectApproxEqAbs(@as(f64, 0.85), ep.success_score, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.85), q128.toF64(ep.success_score), 0.001);
 }
 
 test "memory: EpisodicMemory topic-based retrieval" {
@@ -345,9 +345,9 @@ test "memory: EpisodicMemory topic-based retrieval" {
     var mem = EpisodicMemory.init(allocator, "test_memory.json");
     defer mem.deinit();
 
-    try mem.addEpisode("Quantum computing uses qubits", "quantum", "factual", 0.9, "Qubits enable superposition");
-    try mem.addEpisode("Photosynthesis converts sunlight", "photosynthesis", "factual", 0.8, "Plants use chlorophyll");
-    try mem.addEpisode("Quantum entanglement is non-local", "quantum", "factual", 0.88, "Entanglement defies classical physics");
+    try mem.addEpisode("Quantum computing uses qubits", "quantum", "factual", q128.fromF64(0.9), "Qubits enable superposition");
+    try mem.addEpisode("Photosynthesis converts sunlight", "photosynthesis", "factual", q128.fromF64(0.8), "Plants use chlorophyll");
+    try mem.addEpisode("Quantum entanglement is non-local", "quantum", "factual", q128.fromF64(0.88), "Entanglement defies classical physics");
 
     const results = try mem.retrieveRelevant("Tell me about quantum physics", 3);
     defer allocator.free(results);
@@ -366,8 +366,8 @@ test "memory: EpisodicMemory save and load round-trip" {
     {
         var mem = EpisodicMemory.init(allocator, test_file);
         defer mem.deinit();
-        try mem.addEpisode("Light travels at 299,792,458 m/s", "light", "factual", 0.92, "Speed of light is constant in vacuum");
-        try mem.addEpisode("Ice floats because of hydrogen bonds", "water", "reasoning", 0.83, "Hydrogen bonds create lattice structure");
+        try mem.addEpisode("Light travels at 299,792,458 m/s", "light", "factual", q128.fromF64(0.92), "Speed of light is constant in vacuum");
+        try mem.addEpisode("Ice floats because of hydrogen bonds", "water", "reasoning", q128.fromF64(0.83), "Hydrogen bonds create lattice structure");
         try mem.saveToDisk();
     }
 
@@ -380,7 +380,7 @@ test "memory: EpisodicMemory save and load round-trip" {
         // Verify first episode
         const ep = &mem.episodes.items[0];
         try std.testing.expect(std.mem.indexOf(u8, ep.summary, "Light") != null);
-        try std.testing.expectApproxEqAbs(@as(f64, 0.92), ep.success_score, 0.01);
+        try std.testing.expectApproxEqAbs(@as(f64, 0.92), q128.toF64(ep.success_score), 0.01);
     }
 }
 

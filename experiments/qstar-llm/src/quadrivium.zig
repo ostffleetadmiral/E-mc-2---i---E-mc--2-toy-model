@@ -48,7 +48,7 @@ pub const ArithmeticLayer = struct {
     pub fn averageError(self: ArithmeticLayer) q128.Fp {
         if (self.total_operations == 0) return 0;
         const avg = q128.div(q128.fromI256(@intCast(self.precision_error)), q128.fromI256(@intCast(self.total_operations)));
-        return q128.div(avg, q128.fromInt(1 << 64));
+        return q128.div(avg, q128.fromI256(@as(i256, 1) << 64));
     }
 
     pub fn quantize(value: i128, bins: usize) usize {

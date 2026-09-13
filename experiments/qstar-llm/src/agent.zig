@@ -8229,7 +8229,7 @@ test "resolvePronouns: no memory returns original" {
 test "resolvePronouns: replaces leading pronoun with topic" {
     var mem = WorkingMemory.init(std.testing.allocator);
     defer mem.deinit();
-    try mem.addExchange("Tell me about photosynthesis", "Plants use sunlight to make food.", "factual", .{ .scores = .{ 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1 }, .overall = 0.6, .passed = true });
+    try mem.addExchange("Tell me about photosynthesis", "Plants use sunlight to make food.", "factual", .{ .scores = .{ q128.fromF64(0.8), q128.fromF64(0.7), q128.fromF64(0.6), q128.fromF64(0.5), q128.fromF64(0.4), q128.fromF64(0.3), q128.fromF64(0.2), q128.fromF64(0.1) }, .overall = q128.fromF64(0.6), .passed = true });
     const result = try resolvePronouns(std.testing.allocator, "It is interesting", &mem);
     defer std.testing.allocator.free(result);
     // "It" should be replaced with the topic "photosynthesis"
@@ -8239,7 +8239,7 @@ test "resolvePronouns: replaces leading pronoun with topic" {
 test "resolvePronouns: about it pattern" {
     var mem = WorkingMemory.init(std.testing.allocator);
     defer mem.deinit();
-    try mem.addExchange("Explain quantum mechanics", "Quantum mechanics describes subatomic particles.", "factual", .{ .scores = .{ 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1 }, .overall = 0.6, .passed = true });
+    try mem.addExchange("Explain quantum mechanics", "Quantum mechanics describes subatomic particles.", "factual", .{ .scores = .{ q128.fromF64(0.8), q128.fromF64(0.7), q128.fromF64(0.6), q128.fromF64(0.5), q128.fromF64(0.4), q128.fromF64(0.3), q128.fromF64(0.2), q128.fromF64(0.1) }, .overall = q128.fromF64(0.6), .passed = true });
     const result = try resolvePronouns(std.testing.allocator, "Tell me more about it", &mem);
     defer std.testing.allocator.free(result);
     // Topic extracted from prompt is "mechanics" (longest non-stopword)
@@ -8250,7 +8250,7 @@ test "resolvePronouns: about it pattern" {
 test "resolvePronouns: no pronoun returns original" {
     var mem = WorkingMemory.init(std.testing.allocator);
     defer mem.deinit();
-    try mem.addExchange("Tell me about photosynthesis", "Plants use sunlight.", "factual", .{ .scores = .{ 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1 }, .overall = 0.6, .passed = true });
+    try mem.addExchange("Tell me about photosynthesis", "Plants use sunlight.", "factual", .{ .scores = .{ q128.fromF64(0.8), q128.fromF64(0.7), q128.fromF64(0.6), q128.fromF64(0.5), q128.fromF64(0.4), q128.fromF64(0.3), q128.fromF64(0.2), q128.fromF64(0.1) }, .overall = q128.fromF64(0.6), .passed = true });
     const result = try resolvePronouns(std.testing.allocator, "What is gravity?", &mem);
     defer std.testing.allocator.free(result);
     try std.testing.expectEqualStrings("What is gravity?", result);
@@ -8267,7 +8267,7 @@ test "buildContinuityContext: empty memory returns empty" {
 test "buildContinuityContext: includes session topics" {
     var mem = WorkingMemory.init(std.testing.allocator);
     defer mem.deinit();
-    try mem.addExchange("Tell me about photosynthesis", "Plants use sunlight to make food.", "factual", .{ .scores = .{ 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1 }, .overall = 0.6, .passed = true });
+    try mem.addExchange("Tell me about photosynthesis", "Plants use sunlight to make food.", "factual", .{ .scores = .{ q128.fromF64(0.8), q128.fromF64(0.7), q128.fromF64(0.6), q128.fromF64(0.5), q128.fromF64(0.4), q128.fromF64(0.3), q128.fromF64(0.2), q128.fromF64(0.1) }, .overall = q128.fromF64(0.6), .passed = true });
     const ctx = try buildContinuityContext(std.testing.allocator, &mem);
     defer std.testing.allocator.free(ctx);
     try std.testing.expect(std.mem.indexOf(u8, ctx, "Topics discussed:") != null);
@@ -8385,18 +8385,18 @@ test "scoreRandomThought: positive for divergent responses" {
 
 test "EvaluationResult: 8 dimensions accessible" {
     const er = EvaluationResult{
-        .scores = .{ 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 },
-        .overall = 0.5,
+        .scores = .{ q128.fromF64(0.1), q128.fromF64(0.2), q128.fromF64(0.3), q128.fromF64(0.4), q128.fromF64(0.5), q128.fromF64(0.6), q128.fromF64(0.7), q128.fromF64(0.8) },
+        .overall = q128.fromF64(0.5),
         .passed = true,
     };
-    try std.testing.expectEqual(@as(f64, 0.1), er.relevance());
-    try std.testing.expectEqual(@as(f64, 0.2), er.coherence());
-    try std.testing.expectEqual(@as(f64, 0.3), er.specificity());
-    try std.testing.expectEqual(@as(f64, 0.4), er.naturalness());
-    try std.testing.expectEqual(@as(f64, 0.5), er.selfAwareness());
-    try std.testing.expectEqual(@as(f64, 0.6), er.directExperience());
-    try std.testing.expectEqual(@as(f64, 0.7), er.metacognitionScore());
-    try std.testing.expectEqual(@as(f64, 0.8), er.situationalAwareness());
+    try std.testing.expectEqual(q128.fromF64(0.1), er.relevance());
+    try std.testing.expectEqual(q128.fromF64(0.2), er.coherence());
+    try std.testing.expectEqual(q128.fromF64(0.3), er.specificity());
+    try std.testing.expectEqual(q128.fromF64(0.4), er.naturalness());
+    try std.testing.expectEqual(q128.fromF64(0.5), er.selfAwareness());
+    try std.testing.expectEqual(q128.fromF64(0.6), er.directExperience());
+    try std.testing.expectEqual(q128.fromF64(0.7), er.metacognitionScore());
+    try std.testing.expectEqual(q128.fromF64(0.8), er.situationalAwareness());
 }
 
 test "Matrix15: encodeTextToMatrix produces non-zero norm from text" {
@@ -9438,7 +9438,7 @@ test "agent: metacognition introspect reads lattice state" {
 
     // Before ingestion, entropy should be 0 (no activations)
     const model0 = agent.introspect();
-    try std.testing.expectEqual(@as(f64, 0.0), model0.activation_entropy);
+    try std.testing.expectEqual(@as(q128.Fp, 0), model0.activation_entropy);
     try std.testing.expectEqual(@as(usize, 0), model0.output_token_count);
 
     // Ingest some text to create activations
@@ -9462,9 +9462,9 @@ test "agent: metacognition evaluateResponse scores good vs bad" {
     const good_prompt = "What is quantum computing?";
     const good_response = "Quantum computing uses qubits that exist in superposition. The lattice inference engine processes quantum states through E0 node activations. Quantum algorithms like Grover search provide quadratic speedup over classical approaches.";
     const good_eval = agent.evaluateResponse(good_prompt, good_response);
-    try std.testing.expect(good_eval.relevance() > 0.3);
-    try std.testing.expect(good_eval.selfAwareness() > 0.3);
-    try std.testing.expect(good_eval.overall > 0.3);
+    try std.testing.expect(good_eval.relevance() > q128.fromF64(0.3));
+    try std.testing.expect(good_eval.selfAwareness() > q128.fromF64(0.3));
+    try std.testing.expect(good_eval.overall > q128.fromF64(0.3));
 
     // Bad response: irrelevant, no coherence
     const bad_prompt = "What is quantum computing?";
@@ -9534,12 +9534,12 @@ test "agent: metacognition passRate computes correctly" {
     defer mc.deinit();
 
     // Add some evaluations
-    try mc.recordEvaluation(.{ .scores = [_]f64{0.6} ** 8, .overall = 0.7, .passed = true });
-    try mc.recordEvaluation(.{ .scores = [_]f64{0.3} ** 8, .overall = 0.4, .passed = false });
-    try mc.recordEvaluation(.{ .scores = [_]f64{0.8} ** 8, .overall = 0.9, .passed = true });
+    try mc.recordEvaluation(.{ .scores = [_]q128.Fp{q128.fromF64(0.6)} ** 8, .overall = q128.fromF64(0.7), .passed = true });
+    try mc.recordEvaluation(.{ .scores = [_]q128.Fp{q128.fromF64(0.3)} ** 8, .overall = q128.fromF64(0.4), .passed = false });
+    try mc.recordEvaluation(.{ .scores = [_]q128.Fp{q128.fromF64(0.8)} ** 8, .overall = q128.fromF64(0.9), .passed = true });
 
-    try std.testing.expectApproxEqAbs(@as(f64, 2.0 / 3.0), mc.passRate(), 0.001);
-    try std.testing.expectApproxEqAbs(@as(f64, (0.7 + 0.4 + 0.9) / 3.0), mc.averageScore(), 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 2.0 / 3.0), q128.toF64(mc.passRate()), 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, (0.7 + 0.4 + 0.9) / 3.0), q128.toF64(mc.averageScore()), 0.001);
 }
 
 test "agent: trigram model builds transitions from text" {
@@ -9882,15 +9882,15 @@ test "agent: WorkingMemory — addToHistoryWithMeta stores category" {
     defer agent.deinit();
 
     const eval_result = EvaluationResult{
-        .scores = .{ 0.9, 0.8, 0.7, 0.85, 0.6, 0.5, 0.4, 0.3 },
-        .overall = 0.78,
+        .scores = .{ q128.fromF64(0.9), q128.fromF64(0.8), q128.fromF64(0.7), q128.fromF64(0.85), q128.fromF64(0.6), q128.fromF64(0.5), q128.fromF64(0.4), q128.fromF64(0.3) },
+        .overall = q128.fromF64(0.78),
         .passed = true,
     };
     try agent.addToHistoryWithMeta("What is the speed of light?", "The speed of light is 299,792,458 m/s.", "factual", eval_result);
 
     const entry = &agent.working_memory.entries.items[0];
     try std.testing.expectEqualStrings("factual", entry.category);
-    try std.testing.expectApproxEqAbs(@as(f64, 0.78), entry.evaluation.overall, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.78), q128.toF64(entry.evaluation.overall), 0.001);
     try std.testing.expectEqual(@as(u32, 1), agent.working_memory.prompt_count);
 }
 
@@ -9984,8 +9984,8 @@ test "agent: MemoryCallback — episodic memory consolidation and retrieval" {
 
     // Add exchanges with metadata
     const eval1 = EvaluationResult{
-        .scores = .{ 0.9, 0.85, 0.8, 0.88, 0.75, 0.6, 0.5, 0.4 },
-        .overall = 0.84,
+        .scores = .{ q128.fromF64(0.9), q128.fromF64(0.85), q128.fromF64(0.8), q128.fromF64(0.88), q128.fromF64(0.75), q128.fromF64(0.6), q128.fromF64(0.5), q128.fromF64(0.4) },
+        .overall = q128.fromF64(0.84),
         .passed = true,
     };
     try agent.addToHistoryWithMeta("What is the speed of light?", "The speed of light is 299,792,458 m/s in vacuum.", "factual", eval1);
@@ -10590,7 +10590,7 @@ test "EU v11.1: agent self-model consciousness bandwidth ratio" {
 
     const self_model = agent.introspect();
     // 20 / 10 = 2.0 (exact C = c(6)/c(5))
-    try std.testing.expectApproxEqAbs(@as(f64, 2.0), self_model.consciousness_bandwidth_ratio, 0.01);
+    try std.testing.expectApproxEqAbs(@as(f64, 2.0), q128.toF64(self_model.consciousness_bandwidth_ratio), 0.01);
 }
 
 test "agent: tool registry attach and detach" {
