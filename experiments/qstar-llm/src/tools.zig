@@ -27,6 +27,44 @@ pub const ParameterType = enum {
     boolean,
 };
 
+/// Dimensional assignment for tools, parallel to the QSTAR 11D lattice channels.
+/// Each tool is mapped to exactly one dimension based on its semantic role.
+pub const ToolDimension = enum(u4) {
+    /// e0 = origin: seed/identity generation (uuid, time_now)
+    e0_origin = 0,
+    /// e1 = time: temporal tracking/sequence (track_*, earthquake_query)
+    e1_time = 1,
+    /// e2 = quantum: superposition/search (search, lookup, kg_query, db_query)
+    e2_quantum = 2,
+    /// e3 = space: spatial/topology (geo_*, globe_query, cctv, annotation)
+    e3_space = 3,
+    /// e4 = energy: dynamics/execution (shell_exec, file_write, http_fetch, scene_play)
+    e4_energy = 4,
+    /// e5 = structure: form/representation (calculate, base64, hash, json, data, text)
+    e5_structure = 5,
+    /// e6 = self-recognition: metacognition/analysis (sentiment, ner, classify, face, gaze)
+    e6_metacognition = 6,
+    /// e7 = shadow/gravity: quantum/physics observation (quantum_simulate, lattice_node)
+    e7_physics = 7,
+
+    pub fn label(self: ToolDimension) []const u8 {
+        return switch (self) {
+            .e0_origin => "e0=origin",
+            .e1_time => "e1=time",
+            .e2_quantum => "e2=quantum",
+            .e3_space => "e3=space",
+            .e4_energy => "e4=energy",
+            .e5_structure => "e5=structure",
+            .e6_metacognition => "e6=metacognition",
+            .e7_physics => "e7=physics",
+        };
+    }
+
+    pub fn channel(self: ToolDimension) u4 {
+        return @intFromEnum(self);
+    }
+};
+
 pub const ToolParameter = struct {
     name: []const u8,
     param_type: ParameterType,
@@ -38,6 +76,8 @@ pub const ToolDefinition = struct {
     name: []const u8,
     description: []const u8,
     parameters: []const ToolParameter,
+    /// Dimensional assignment in the QSTAR 11D framework (e0-e7).
+    dimension: ToolDimension = .e5_structure,
 };
 
 pub const ToolCall = struct {
@@ -148,6 +188,59 @@ pub const ToolRegistry = struct {
         return self.tools.get(name);
     }
 
+    /// Returns the dimension assigned to a tool by name, or null if not found.
+    pub fn getDimension(self: *const ToolRegistry, name: []const u8) ?ToolDimension {
+        const tool = self.tools.get(name) orelse return null;
+        return tool.dimension;
+    }
+
+    /// Counts tools registered under a given dimension.
+    pub fn countByDimension(self: *const ToolRegistry, dim: ToolDimension) usize {
+        var count: usize = 0;
+        var it = self.tools.iterator();
+        while (it.next()) |entry| {
+            if (entry.value_ptr.dimension == dim) count += 1;
+        }
+        return count;
+    }
+
+    /// Returns the total count of registered tools.
+    pub fn toolCount(self: *const ToolRegistry) usize {
+        return self.tools.count();
+    }
+
+    /// Returns a JSON array of all tool names grouped by dimension.
+    /// Caller owns the returned slice.
+    pub fn listByDimension(self: *const ToolRegistry, allocator: std.mem.Allocator) ![]const u8 {
+        var result = std.ArrayList(u8).init(allocator);
+        defer result.deinit();
+
+        try result.appendSlice("{");
+
+        const dims = [_]ToolDimension{
+            .e0_origin, .e1_time,      .e2_quantum,       .e3_space,
+            .e4_energy, .e5_structure, .e6_metacognition, .e7_physics,
+        };
+
+        var first = true;
+        for (dims) |dim| {
+            if (!first) try result.appendSlice(",");
+            first = false;
+            try result.writer().print("\"{s}\":[", .{dim.label()});
+            var it = self.tools.iterator();
+            var first_tool = true;
+            while (it.next()) |entry| {
+                if (entry.value_ptr.dimension != dim) continue;
+                if (!first_tool) try result.appendSlice(",");
+                first_tool = false;
+                try result.writer().print("\"{s}\"", .{entry.key_ptr.*});
+            }
+            try result.appendSlice("]");
+        }
+        try result.appendSlice("}");
+        return result.toOwnedSlice();
+    }
+
     pub fn registerBuiltins(self: *ToolRegistry) !void {
         // 1. calculate tool
         const calc_params = [_]ToolParameter{
@@ -157,6 +250,7 @@ pub const ToolRegistry = struct {
         };
         try self.register(.{
             .name = "calculate",
+            .dimension = .e5_structure,
             .description = "Executes high-precision fixed-point mathematical operations.",
             .parameters = &calc_params,
         });
@@ -169,6 +263,7 @@ pub const ToolRegistry = struct {
         };
         try self.register(.{
             .name = "lattice_node",
+            .dimension = .e7_physics,
             .description = "Queries discrete E0 lattice properties, e-values, and octonionic routing for given coordinates.",
             .parameters = &node_params,
         });
@@ -180,6 +275,7 @@ pub const ToolRegistry = struct {
         };
         try self.register(.{
             .name = "quantum_simulate",
+            .dimension = .e7_physics,
             .description = "Simulates quantum state evolution, superposition, and Grover search.",
             .parameters = &quantum_params,
         });
@@ -191,6 +287,7 @@ pub const ToolRegistry = struct {
         };
         try self.register(.{
             .name = "kg_query",
+            .dimension = .e2_quantum,
             .description = "Queries the discrete E0 lattice-grounded Knowledge Graph for relational triplets and neighbors.",
             .parameters = &kg_params,
         });
@@ -202,6 +299,7 @@ pub const ToolRegistry = struct {
         };
         try self.register(.{
             .name = "db_query",
+            .dimension = .e2_quantum,
             .description = "Queries structured key-value databases, local schemas, and reference datasets.",
             .parameters = &db_params,
         });
@@ -212,6 +310,7 @@ pub const ToolRegistry = struct {
         };
         try self.register(.{
             .name = "external_search",
+            .dimension = .e2_quantum,
             .description = "Searches external encyclopedic knowledge, dictionaries, and legal archives.",
             .parameters = &search_params,
         });
@@ -223,70 +322,70 @@ pub const ToolRegistry = struct {
             .{ .name = "path", .param_type = .string, .description = "File path to read" },
             .{ .name = "max_bytes", .param_type = .integer, .description = "Max bytes to read (default 1MB)", .required = false },
         };
-        try self.register(.{ .name = "file_read", .description = "Reads file contents from the filesystem.", .parameters = &fr_params });
+        try self.register(.{ .name = "file_read", .dimension = .e5_structure, .description = "Reads file contents from the filesystem.", .parameters = &fr_params });
 
         // 8. file_write
         const fw_params = [_]ToolParameter{
             .{ .name = "path", .param_type = .string, .description = "File path to write" },
             .{ .name = "content", .param_type = .string, .description = "Content to write" },
         };
-        try self.register(.{ .name = "file_write", .description = "Writes content to a file on the filesystem.", .parameters = &fw_params });
+        try self.register(.{ .name = "file_write", .dimension = .e4_energy, .description = "Writes content to a file on the filesystem.", .parameters = &fw_params });
 
         // 9. file_list
         const fl_params = [_]ToolParameter{
             .{ .name = "path", .param_type = .string, .description = "Directory path to list" },
         };
-        try self.register(.{ .name = "file_list", .description = "Lists files and directories at the given path.", .parameters = &fl_params });
+        try self.register(.{ .name = "file_list", .dimension = .e5_structure, .description = "Lists files and directories at the given path.", .parameters = &fl_params });
 
         // 10. http_fetch
         const hf_params = [_]ToolParameter{
             .{ .name = "url", .param_type = .string, .description = "URL to fetch" },
         };
-        try self.register(.{ .name = "http_fetch", .description = "Fetches content from an HTTP/HTTPS URL.", .parameters = &hf_params });
+        try self.register(.{ .name = "http_fetch", .dimension = .e4_energy, .description = "Fetches content from an HTTP/HTTPS URL.", .parameters = &hf_params });
 
         // 11. shell_exec
         const se_params = [_]ToolParameter{
             .{ .name = "command", .param_type = .string, .description = "Shell command to execute" },
         };
-        try self.register(.{ .name = "shell_exec", .description = "Executes a shell command and returns stdout.", .parameters = &se_params });
+        try self.register(.{ .name = "shell_exec", .dimension = .e4_energy, .description = "Executes a shell command and returns stdout.", .parameters = &se_params });
 
         // 12. time_now
-        try self.register(.{ .name = "time_now", .description = "Returns current timestamp in ISO 8601 and epoch seconds.", .parameters = &.{} });
+        try self.register(.{ .name = "time_now", .dimension = .e0_origin, .description = "Returns current timestamp in ISO 8601 and epoch seconds.", .parameters = &.{} });
 
         // 13. uuid_generate
-        try self.register(.{ .name = "uuid_generate", .description = "Generates a UUID v4 string.", .parameters = &.{} });
+        try self.register(.{ .name = "uuid_generate", .dimension = .e0_origin, .description = "Generates a UUID v4 string.", .parameters = &.{} });
 
         // 14. base64_encode
         const b64e_params = [_]ToolParameter{
             .{ .name = "data", .param_type = .string, .description = "String to encode" },
         };
-        try self.register(.{ .name = "base64_encode", .description = "Encodes a string to base64.", .parameters = &b64e_params });
+        try self.register(.{ .name = "base64_encode", .dimension = .e5_structure, .description = "Encodes a string to base64.", .parameters = &b64e_params });
 
         // 15. base64_decode
         const b64d_params = [_]ToolParameter{
             .{ .name = "data", .param_type = .string, .description = "Base64 string to decode" },
         };
-        try self.register(.{ .name = "base64_decode", .description = "Decodes a base64 string.", .parameters = &b64d_params });
+        try self.register(.{ .name = "base64_decode", .dimension = .e5_structure, .description = "Decodes a base64 string.", .parameters = &b64d_params });
 
         // 16. hash_compute
         const hash_params = [_]ToolParameter{
             .{ .name = "data", .param_type = .string, .description = "Data to hash" },
             .{ .name = "algorithm", .param_type = .string, .description = "Hash algorithm: sha256 or crc32", .required = false },
         };
-        try self.register(.{ .name = "hash_compute", .description = "Computes hash (SHA-256 or CRC32) of input data.", .parameters = &hash_params });
+        try self.register(.{ .name = "hash_compute", .dimension = .e5_structure, .description = "Computes hash (SHA-256 or CRC32) of input data.", .parameters = &hash_params });
 
         // 17. json_validate
         const jv_params = [_]ToolParameter{
             .{ .name = "data", .param_type = .string, .description = "JSON string to validate" },
         };
-        try self.register(.{ .name = "json_validate", .description = "Validates whether a string is well-formed JSON.", .parameters = &jv_params });
+        try self.register(.{ .name = "json_validate", .dimension = .e5_structure, .description = "Validates whether a string is well-formed JSON.", .parameters = &jv_params });
 
         // 18. json_format
         const jf_params = [_]ToolParameter{
             .{ .name = "data", .param_type = .string, .description = "JSON string to format" },
             .{ .name = "indent", .param_type = .integer, .description = "Indentation spaces (0=minify)", .required = false },
         };
-        try self.register(.{ .name = "json_format", .description = "Pretty-prints or minifies a JSON string.", .parameters = &jf_params });
+        try self.register(.{ .name = "json_format", .dimension = .e5_structure, .description = "Pretty-prints or minifies a JSON string.", .parameters = &jf_params });
 
         // 19. string_replace
         const sr_params = [_]ToolParameter{
@@ -294,7 +393,7 @@ pub const ToolRegistry = struct {
             .{ .name = "find", .param_type = .string, .description = "String to find" },
             .{ .name = "replace", .param_type = .string, .description = "Replacement string" },
         };
-        try self.register(.{ .name = "string_replace", .description = "Find and replace all occurrences in text.", .parameters = &sr_params });
+        try self.register(.{ .name = "string_replace", .dimension = .e5_structure, .description = "Find and replace all occurrences in text.", .parameters = &sr_params });
 
         // === Text Processing Tools ===
 
@@ -303,44 +402,44 @@ pub const ToolRegistry = struct {
             .{ .name = "text", .param_type = .string, .description = "Text to summarize" },
             .{ .name = "sentences", .param_type = .integer, .description = "Max sentences in summary (default 3)", .required = false },
         };
-        try self.register(.{ .name = "text_summarize", .description = "Extractive summarization by sentence scoring.", .parameters = &ts_params });
+        try self.register(.{ .name = "text_summarize", .dimension = .e5_structure, .description = "Extractive summarization by sentence scoring.", .parameters = &ts_params });
 
         // 21. word_count
         const wc_params = [_]ToolParameter{
             .{ .name = "text", .param_type = .string, .description = "Text to count" },
         };
-        try self.register(.{ .name = "word_count", .description = "Counts words, characters, sentences, and paragraphs.", .parameters = &wc_params });
+        try self.register(.{ .name = "word_count", .dimension = .e5_structure, .description = "Counts words, characters, sentences, and paragraphs.", .parameters = &wc_params });
 
         // 22. sentiment_analyze
         const sent_params = [_]ToolParameter{
             .{ .name = "text", .param_type = .string, .description = "Text to analyze" },
         };
-        try self.register(.{ .name = "sentiment_analyze", .description = "Lexicon-based sentiment analysis (positive/negative/neutral).", .parameters = &sent_params });
+        try self.register(.{ .name = "sentiment_analyze", .dimension = .e6_metacognition, .description = "Lexicon-based sentiment analysis (positive/negative/neutral).", .parameters = &sent_params });
 
         // 23. ner_extract
         const ner_params = [_]ToolParameter{
             .{ .name = "text", .param_type = .string, .description = "Text to extract entities from" },
         };
-        try self.register(.{ .name = "ner_extract", .description = "Named entity recognition: extracts persons, organizations, locations.", .parameters = &ner_params });
+        try self.register(.{ .name = "ner_extract", .dimension = .e6_metacognition, .description = "Named entity recognition: extracts persons, organizations, locations.", .parameters = &ner_params });
 
         // 24. text_classify
         const tc_params = [_]ToolParameter{
             .{ .name = "text", .param_type = .string, .description = "Text to classify" },
         };
-        try self.register(.{ .name = "text_classify", .description = "Topic classification by keyword categorization.", .parameters = &tc_params });
+        try self.register(.{ .name = "text_classify", .dimension = .e6_metacognition, .description = "Topic classification by keyword categorization.", .parameters = &tc_params });
 
         // 25. text_diff
         const td_params = [_]ToolParameter{
             .{ .name = "text_a", .param_type = .string, .description = "First text" },
             .{ .name = "text_b", .param_type = .string, .description = "Second text" },
         };
-        try self.register(.{ .name = "text_diff", .description = "Line-by-line diff between two texts.", .parameters = &td_params });
+        try self.register(.{ .name = "text_diff", .dimension = .e5_structure, .description = "Line-by-line diff between two texts.", .parameters = &td_params });
 
         // 26. language_detect
         const ld_params = [_]ToolParameter{
             .{ .name = "text", .param_type = .string, .description = "Text to detect language" },
         };
-        try self.register(.{ .name = "language_detect", .description = "Detects language by stopword frequency analysis.", .parameters = &ld_params });
+        try self.register(.{ .name = "language_detect", .dimension = .e5_structure, .description = "Detects language by stopword frequency analysis.", .parameters = &ld_params });
 
         // === Knowledge & Retrieval Tools ===
 
@@ -348,26 +447,26 @@ pub const ToolRegistry = struct {
         const wiki_params = [_]ToolParameter{
             .{ .name = "query", .param_type = .string, .description = "Search query" },
         };
-        try self.register(.{ .name = "wikipedia_lookup", .description = "Searches local Wikipedia dataset files for query terms.", .parameters = &wiki_params });
+        try self.register(.{ .name = "wikipedia_lookup", .dimension = .e2_quantum, .description = "Searches local Wikipedia dataset files for query terms.", .parameters = &wiki_params });
 
         // 28. dictionary_lookup
         const dict_params = [_]ToolParameter{
             .{ .name = "word", .param_type = .string, .description = "Word to look up" },
         };
-        try self.register(.{ .name = "dictionary_lookup", .description = "Searches Webster's Dictionary dataset for definitions.", .parameters = &dict_params });
+        try self.register(.{ .name = "dictionary_lookup", .dimension = .e2_quantum, .description = "Searches Webster's Dictionary dataset for definitions.", .parameters = &dict_params });
 
         // 29. law_lookup
         const law_params = [_]ToolParameter{
             .{ .name = "term", .param_type = .string, .description = "Legal term to look up" },
         };
-        try self.register(.{ .name = "law_lookup", .description = "Searches Black's Law Dictionary dataset for legal definitions.", .parameters = &law_params });
+        try self.register(.{ .name = "law_lookup", .dimension = .e2_quantum, .description = "Searches Black's Law Dictionary dataset for legal definitions.", .parameters = &law_params });
 
         // 30. rag_search
         const rag_params = [_]ToolParameter{
             .{ .name = "query", .param_type = .string, .description = "Search query" },
             .{ .name = "max_results", .param_type = .integer, .description = "Max results (default 5)", .required = false },
         };
-        try self.register(.{ .name = "rag_search", .description = "Retrieval-augmented generation search across all datasets using TF-IDF.", .parameters = &rag_params });
+        try self.register(.{ .name = "rag_search", .dimension = .e2_quantum, .description = "Retrieval-augmented generation search across all datasets using TF-IDF.", .parameters = &rag_params });
 
         // 31. kg_add_triplet
         const kat_params = [_]ToolParameter{
@@ -375,10 +474,10 @@ pub const ToolRegistry = struct {
             .{ .name = "predicate", .param_type = .string, .description = "Relation/predicate" },
             .{ .name = "object", .param_type = .string, .description = "Object entity" },
         };
-        try self.register(.{ .name = "kg_add_triplet", .description = "Adds a new triplet to the knowledge graph at runtime.", .parameters = &kat_params });
+        try self.register(.{ .name = "kg_add_triplet", .dimension = .e4_energy, .description = "Adds a new triplet to the knowledge graph at runtime.", .parameters = &kat_params });
 
         // 32. kg_export
-        try self.register(.{ .name = "kg_export", .description = "Exports all knowledge graph triplets as JSON.", .parameters = &.{} });
+        try self.register(.{ .name = "kg_export", .dimension = .e5_structure, .description = "Exports all knowledge graph triplets as JSON.", .parameters = &.{} });
 
         // === Data Analysis Tools ===
 
@@ -386,20 +485,20 @@ pub const ToolRegistry = struct {
         const stats_params = [_]ToolParameter{
             .{ .name = "data", .param_type = .string, .description = "Comma-separated numeric values" },
         };
-        try self.register(.{ .name = "stats_compute", .description = "Computes mean, median, min, max, stddev, range from numeric data.", .parameters = &stats_params });
+        try self.register(.{ .name = "stats_compute", .dimension = .e5_structure, .description = "Computes mean, median, min, max, stddev, range from numeric data.", .parameters = &stats_params });
 
         // 34. csv_parse
         const csv_params = [_]ToolParameter{
             .{ .name = "data", .param_type = .string, .description = "CSV text to parse" },
         };
-        try self.register(.{ .name = "csv_parse", .description = "Parses CSV text into JSON records.", .parameters = &csv_params });
+        try self.register(.{ .name = "csv_parse", .dimension = .e5_structure, .description = "Parses CSV text into JSON records.", .parameters = &csv_params });
 
         // 35. data_sort
         const sort_params = [_]ToolParameter{
             .{ .name = "data", .param_type = .string, .description = "Comma-separated values to sort" },
             .{ .name = "order", .param_type = .string, .description = "Sort order: asc or desc", .required = false },
         };
-        try self.register(.{ .name = "data_sort", .description = "Sorts numeric or string data ascending/descending.", .parameters = &sort_params });
+        try self.register(.{ .name = "data_sort", .dimension = .e5_structure, .description = "Sorts numeric or string data ascending/descending.", .parameters = &sort_params });
 
         // 36. data_filter
         const filter_params = [_]ToolParameter{
@@ -407,21 +506,21 @@ pub const ToolRegistry = struct {
             .{ .name = "op", .param_type = .string, .description = "Filter operator: gt, lt, gte, lte, eq" },
             .{ .name = "value", .param_type = .number, .description = "Threshold value" },
         };
-        try self.register(.{ .name = "data_filter", .description = "Filters numeric data by threshold condition.", .parameters = &filter_params });
+        try self.register(.{ .name = "data_filter", .dimension = .e5_structure, .description = "Filters numeric data by threshold condition.", .parameters = &filter_params });
 
         // 37. histogram_generate
         const hist_params = [_]ToolParameter{
             .{ .name = "data", .param_type = .string, .description = "Comma-separated numeric values" },
             .{ .name = "bins", .param_type = .integer, .description = "Number of bins (default 10)", .required = false },
         };
-        try self.register(.{ .name = "histogram_generate", .description = "Generates histogram bins from numeric data.", .parameters = &hist_params });
+        try self.register(.{ .name = "histogram_generate", .dimension = .e5_structure, .description = "Generates histogram bins from numeric data.", .parameters = &hist_params });
 
         // 38. correlation_compute
         const corr_params = [_]ToolParameter{
             .{ .name = "data_a", .param_type = .string, .description = "First dataset (comma-separated)" },
             .{ .name = "data_b", .param_type = .string, .description = "Second dataset (comma-separated)" },
         };
-        try self.register(.{ .name = "correlation_compute", .description = "Computes Pearson correlation coefficient between two numeric arrays.", .parameters = &corr_params });
+        try self.register(.{ .name = "correlation_compute", .dimension = .e5_structure, .description = "Computes Pearson correlation coefficient between two numeric arrays.", .parameters = &corr_params });
 
         // === Vision Tools ===
 
@@ -432,14 +531,14 @@ pub const ToolRegistry = struct {
             .{ .name = "img_height", .param_type = .integer, .description = "Image height in pixels" },
             .{ .name = "threshold", .param_type = .number, .description = "Confidence threshold (default 0.5)", .required = false },
         };
-        try self.register(.{ .name = "face_detect", .description = "Detects and filters face bounding boxes by confidence threshold.", .parameters = &fd_params });
+        try self.register(.{ .name = "face_detect", .dimension = .e6_metacognition, .description = "Detects and filters face bounding boxes by confidence threshold.", .parameters = &fd_params });
 
         // 40. face_recognize
         const frec_params = [_]ToolParameter{
             .{ .name = "embedding_a", .param_type = .string, .description = "First face embedding (comma-separated floats)" },
             .{ .name = "embedding_b", .param_type = .string, .description = "Second face embedding (comma-separated floats)" },
         };
-        try self.register(.{ .name = "face_recognize", .description = "Computes cosine similarity between two face embeddings for recognition.", .parameters = &frec_params });
+        try self.register(.{ .name = "face_recognize", .dimension = .e6_metacognition, .description = "Computes cosine similarity between two face embeddings for recognition.", .parameters = &frec_params });
 
         // 41. face_analyze
         const fa_params = [_]ToolParameter{
@@ -450,7 +549,7 @@ pub const ToolRegistry = struct {
             .{ .name = "img_width", .param_type = .integer, .description = "Image width" },
             .{ .name = "img_height", .param_type = .integer, .description = "Image height" },
         };
-        try self.register(.{ .name = "face_analyze", .description = "Analyzes a face region: computes size ratio, aspect ratio, and quality heuristics.", .parameters = &fa_params });
+        try self.register(.{ .name = "face_analyze", .dimension = .e6_metacognition, .description = "Analyzes a face region: computes size ratio, aspect ratio, and quality heuristics.", .parameters = &fa_params });
 
         // 42. face_track
         const ft_params = [_]ToolParameter{
@@ -458,7 +557,7 @@ pub const ToolRegistry = struct {
             .{ .name = "curr_boxes", .param_type = .string, .description = "Current frame boxes: x1,y1,x2,y2;x1,y1,x2,y2;..." },
             .{ .name = "iou_threshold", .param_type = .number, .description = "IoU matching threshold (default 0.3)", .required = false },
         };
-        try self.register(.{ .name = "face_track", .description = "Tracks faces across frames using IoU matching.", .parameters = &ft_params });
+        try self.register(.{ .name = "face_track", .dimension = .e6_metacognition, .description = "Tracks faces across frames using IoU matching.", .parameters = &ft_params });
 
         // 43. gaze_estimate
         const ge_params = [_]ToolParameter{
@@ -469,13 +568,13 @@ pub const ToolRegistry = struct {
             .{ .name = "nose_x", .param_type = .number, .description = "Nose tip x coordinate" },
             .{ .name = "nose_y", .param_type = .number, .description = "Nose tip y coordinate" },
         };
-        try self.register(.{ .name = "gaze_estimate", .description = "Estimates gaze direction (pitch, yaw) from facial landmark coordinates.", .parameters = &ge_params });
+        try self.register(.{ .name = "gaze_estimate", .dimension = .e6_metacognition, .description = "Estimates gaze direction (pitch, yaw) from facial landmark coordinates.", .parameters = &ge_params });
 
         // 44. emotion_detect
         const ed_params = [_]ToolParameter{
             .{ .name = "scores", .param_type = .string, .description = "Emotion scores (comma-separated 8 floats: neutral,happy,sad,surprise,angry,fear,disgust,contempt)" },
         };
-        try self.register(.{ .name = "emotion_detect", .description = "Classifies emotion from 8-class softmax scores.", .parameters = &ed_params });
+        try self.register(.{ .name = "emotion_detect", .dimension = .e6_metacognition, .description = "Classifies emotion from 8-class softmax scores.", .parameters = &ed_params });
 
         // === Geoview Tools ===
 
@@ -486,7 +585,7 @@ pub const ToolRegistry = struct {
             .{ .name = "lat2", .param_type = .number, .description = "Latitude of point 2" },
             .{ .name = "lon2", .param_type = .number, .description = "Longitude of point 2" },
         };
-        try self.register(.{ .name = "geo_distance", .description = "Computes great-circle distance and bearing between two coordinates.", .parameters = &gd_params });
+        try self.register(.{ .name = "geo_distance", .dimension = .e3_space, .description = "Computes great-circle distance and bearing between two coordinates.", .parameters = &gd_params });
 
         // 46. geo_convert
         const gc_params = [_]ToolParameter{
@@ -494,14 +593,14 @@ pub const ToolRegistry = struct {
             .{ .name = "lon", .param_type = .number, .description = "Longitude" },
             .{ .name = "alt", .param_type = .number, .description = "Altitude in meters", .required = false },
         };
-        try self.register(.{ .name = "geo_convert", .description = "Converts LLA to ECEF, ENU, and MGRS representations.", .parameters = &gc_params });
+        try self.register(.{ .name = "geo_convert", .dimension = .e3_space, .description = "Converts LLA to ECEF, ENU, and MGRS representations.", .parameters = &gc_params });
 
         // 47. geo_mgrs
         const gm_params = [_]ToolParameter{
             .{ .name = "lat", .param_type = .number, .description = "Latitude" },
             .{ .name = "lon", .param_type = .number, .description = "Longitude" },
         };
-        try self.register(.{ .name = "geo_mgrs", .description = "Encodes a lat/lon pair to MGRS grid reference.", .parameters = &gm_params });
+        try self.register(.{ .name = "geo_mgrs", .dimension = .e3_space, .description = "Encodes a lat/lon pair to MGRS grid reference.", .parameters = &gm_params });
 
         // 48. geo_bearing
         const gb_params = [_]ToolParameter{
@@ -510,7 +609,7 @@ pub const ToolRegistry = struct {
             .{ .name = "lat2", .param_type = .number, .description = "Latitude of destination" },
             .{ .name = "lon2", .param_type = .number, .description = "Longitude of destination" },
         };
-        try self.register(.{ .name = "geo_bearing", .description = "Computes bearing and cardinal direction from origin to destination.", .parameters = &gb_params });
+        try self.register(.{ .name = "geo_bearing", .dimension = .e3_space, .description = "Computes bearing and cardinal direction from origin to destination.", .parameters = &gb_params });
 
         // 49. geo_destination
         const gdest_params = [_]ToolParameter{
@@ -519,7 +618,7 @@ pub const ToolRegistry = struct {
             .{ .name = "bearing", .param_type = .number, .description = "Bearing in degrees" },
             .{ .name = "distance", .param_type = .number, .description = "Distance in meters" },
         };
-        try self.register(.{ .name = "geo_destination", .description = "Computes destination point given origin, bearing, and distance.", .parameters = &gdest_params });
+        try self.register(.{ .name = "geo_destination", .dimension = .e3_space, .description = "Computes destination point given origin, bearing, and distance.", .parameters = &gdest_params });
 
         // === Advanced Geoview Tools ===
 
@@ -530,7 +629,7 @@ pub const ToolRegistry = struct {
             .{ .name = "radius_km", .param_type = .number, .description = "Search radius in kilometers" },
             .{ .name = "entity_type", .param_type = .string, .description = "Entity type filter: flights, vessels, satellites, earthquakes, cctv, all", .required = false },
         };
-        try self.register(.{ .name = "globe_query", .description = "Queries the globe for entities within a radius of a point. Returns coordinate transforms and distance info.", .parameters = &gq_params });
+        try self.register(.{ .name = "globe_query", .dimension = .e3_space, .description = "Queries the globe for entities within a radius of a point. Returns coordinate transforms and distance info.", .parameters = &gq_params });
 
         // 51. track_flight
         const tf_params = [_]ToolParameter{
@@ -542,7 +641,7 @@ pub const ToolRegistry = struct {
             .{ .name = "heading_deg", .param_type = .number, .description = "Heading in degrees", .required = false },
             .{ .name = "dt_seconds", .param_type = .number, .description = "Dead-reckon time delta in seconds (default 60)", .required = false },
         };
-        try self.register(.{ .name = "track_flight", .description = "Classifies an aircraft by callsign and computes dead-reckoned position.", .parameters = &tf_params });
+        try self.register(.{ .name = "track_flight", .dimension = .e1_time, .description = "Classifies an aircraft by callsign and computes dead-reckoned position.", .parameters = &tf_params });
 
         // 52. track_vessel
         const tv_params = [_]ToolParameter{
@@ -556,7 +655,7 @@ pub const ToolRegistry = struct {
             .{ .name = "nav_status_code", .param_type = .integer, .description = "AIS navigation status code (0-15)", .required = false },
             .{ .name = "dt_hours", .param_type = .number, .description = "Dead-reckon time delta in hours (default 1)", .required = false },
         };
-        try self.register(.{ .name = "track_vessel", .description = "Classifies a vessel by AIS type code and computes dead-reckoned position.", .parameters = &tv_params });
+        try self.register(.{ .name = "track_vessel", .dimension = .e1_time, .description = "Classifies a vessel by AIS type code and computes dead-reckoned position.", .parameters = &tv_params });
 
         // 53. track_satellite
         const tsat_params = [_]ToolParameter{
@@ -565,7 +664,7 @@ pub const ToolRegistry = struct {
             .{ .name = "tle_line1", .param_type = .string, .description = "TLE line 1 (69 chars)", .required = false },
             .{ .name = "tle_line2", .param_type = .string, .description = "TLE line 2 (69 chars)", .required = false },
         };
-        try self.register(.{ .name = "track_satellite", .description = "Parses TLE orbital elements for a satellite.", .parameters = &tsat_params });
+        try self.register(.{ .name = "track_satellite", .dimension = .e1_time, .description = "Parses TLE orbital elements for a satellite.", .parameters = &tsat_params });
 
         // 54. earthquake_query
         const eq_params = [_]ToolParameter{
@@ -573,7 +672,7 @@ pub const ToolRegistry = struct {
             .{ .name = "geojson", .param_type = .string, .description = "Raw GeoJSON to parse (alternative to fetching)", .required = false },
             .{ .name = "timeframe", .param_type = .string, .description = "Timeframe: hour, day, week, month (default day)", .required = false },
         };
-        try self.register(.{ .name = "earthquake_query", .description = "Queries earthquakes from USGS or parses provided GeoJSON. Filters by minimum magnitude.", .parameters = &eq_params });
+        try self.register(.{ .name = "earthquake_query", .dimension = .e1_time, .description = "Queries earthquakes from USGS or parses provided GeoJSON. Filters by minimum magnitude.", .parameters = &eq_params });
 
         // 55. cctv_query
         const cq_params = [_]ToolParameter{
@@ -585,7 +684,7 @@ pub const ToolRegistry = struct {
             .{ .name = "target_lat", .param_type = .number, .description = "Target latitude to check visibility", .required = false },
             .{ .name = "target_lon", .param_type = .number, .description = "Target longitude to check visibility", .required = false },
         };
-        try self.register(.{ .name = "cctv_query", .description = "Calculates CCTV camera viewshed and checks if a target point is visible.", .parameters = &cq_params });
+        try self.register(.{ .name = "cctv_query", .dimension = .e3_space, .description = "Calculates CCTV camera viewshed and checks if a target point is visible.", .parameters = &cq_params });
 
         // 56. hud_control
         const hc_params = [_]ToolParameter{
@@ -599,7 +698,7 @@ pub const ToolRegistry = struct {
             .{ .name = "entity_count", .param_type = .integer, .description = "Entity count for status panel", .required = false },
             .{ .name = "message", .param_type = .string, .description = "Alert message text", .required = false },
         };
-        try self.register(.{ .name = "hud_control", .description = "Generates HUD overlay elements (compass, scale bar, coordinates, status, alerts).", .parameters = &hc_params });
+        try self.register(.{ .name = "hud_control", .dimension = .e4_energy, .description = "Generates HUD overlay elements (compass, scale bar, coordinates, status, alerts).", .parameters = &hc_params });
 
         // 57. scene_play
         const sp_params = [_]ToolParameter{
@@ -610,7 +709,7 @@ pub const ToolRegistry = struct {
             .{ .name = "duration_s", .param_type = .number, .description = "Focus duration in seconds (default 10)", .required = false },
             .{ .name = "label", .param_type = .string, .description = "Focus label", .required = false },
         };
-        try self.register(.{ .name = "scene_play", .description = "Controls the scene director: queue focus targets, start/stop/pause storyboard playback.", .parameters = &sp_params });
+        try self.register(.{ .name = "scene_play", .dimension = .e4_energy, .description = "Controls the scene director: queue focus targets, start/stop/pause storyboard playback.", .parameters = &sp_params });
 
         // 58. annotation_add
         const aa_params = [_]ToolParameter{
@@ -622,7 +721,7 @@ pub const ToolRegistry = struct {
             .{ .name = "to_lat", .param_type = .number, .description = "To-latitude for measurement", .required = false },
             .{ .name = "to_lon", .param_type = .number, .description = "To-longitude for measurement", .required = false },
         };
-        try self.register(.{ .name = "annotation_add", .description = "Adds an annotation (pin or measurement) to the globe and returns its ID.", .parameters = &aa_params });
+        try self.register(.{ .name = "annotation_add", .dimension = .e3_space, .description = "Adds an annotation (pin or measurement) to the globe and returns its ID.", .parameters = &aa_params });
     }
 
     /// Executes a tool call and returns a JSON formatted string result.
@@ -3407,18 +3506,18 @@ test "tools: emotion_detect classifies neutral" {
 /// Framework audit tool: verifies the E=mc²-i-E=mc⁻² toy-model's mathematical
 /// identities and returns a JSON report of the verification results.
 pub fn frameworkAuditReport() []const u8 {
-    return
-        \\{"framework":"E=mc²-i-E=mc⁻²","audit":{
-        \\  "421_identity":"421 = (15³ - 7) / 8",
-        \\  "shell_transition":"16³ - 15³ = 721 = 3(240) + 1",
-        \\  "surface_computation":"2 + 7 = 9",
-        \\  "e8_roots":"15 × 16 = 240",
-        \\  "consciousness_aperture":"1/8",
-        \\  "c_value":"C = 2",
-        \\  "7_defect":"2³ - 1 = 7",
-        \\  "scaling_chain":"15 → 16 → 32 → 62 → 128 → 256",
-        \\  "generative_chain":"0^0=i → C → H → O → SM → E8 → Higgs"
-        \\}}
+    return 
+    \\{"framework":"E=mc²-i-E=mc⁻²","audit":{
+    \\  "421_identity":"421 = (15³ - 7) / 8",
+    \\  "shell_transition":"16³ - 15³ = 721 = 3(240) + 1",
+    \\  "surface_computation":"2 + 7 = 9",
+    \\  "e8_roots":"15 × 16 = 240",
+    \\  "consciousness_aperture":"1/8",
+    \\  "c_value":"C = 2",
+    \\  "7_defect":"2³ - 1 = 7",
+    \\  "scaling_chain":"15 → 16 → 32 → 62 → 128 → 256",
+    \\  "generative_chain":"0^0=i → C → H → O → SM → E8 → Higgs"
+    \\}}
     ;
 }
 
@@ -3452,4 +3551,131 @@ test "framework: audit report is valid JSON" {
 test "framework: query tool answers 421 question" {
     const answer = frameworkQueryTool("What is the 421 identity?");
     try std.testing.expect(std.mem.indexOf(u8, answer, "421") != null);
+}
+
+test "tools: all 58 tools have dimensional assignment" {
+    const allocator = std.testing.allocator;
+    var reg = ToolRegistry.init(allocator);
+    defer reg.deinit();
+    try reg.registerBuiltins();
+    try std.testing.expectEqual(@as(usize, 58), reg.toolCount());
+}
+
+test "tools: e0_origin has uuid_generate and time_now" {
+    const allocator = std.testing.allocator;
+    var reg = ToolRegistry.init(allocator);
+    defer reg.deinit();
+    try reg.registerBuiltins();
+    try std.testing.expectEqual(@as(usize, 2), reg.countByDimension(.e0_origin));
+    try std.testing.expectEqual(ToolDimension.e0_origin, reg.getDimension("uuid_generate").?);
+    try std.testing.expectEqual(ToolDimension.e0_origin, reg.getDimension("time_now").?);
+}
+
+test "tools: e1_time has tracking tools" {
+    const allocator = std.testing.allocator;
+    var reg = ToolRegistry.init(allocator);
+    defer reg.deinit();
+    try reg.registerBuiltins();
+    try std.testing.expectEqual(@as(usize, 4), reg.countByDimension(.e1_time));
+    try std.testing.expectEqual(ToolDimension.e1_time, reg.getDimension("track_flight").?);
+    try std.testing.expectEqual(ToolDimension.e1_time, reg.getDimension("track_vessel").?);
+    try std.testing.expectEqual(ToolDimension.e1_time, reg.getDimension("track_satellite").?);
+    try std.testing.expectEqual(ToolDimension.e1_time, reg.getDimension("earthquake_query").?);
+}
+
+test "tools: e2_quantum has search tools" {
+    const allocator = std.testing.allocator;
+    var reg = ToolRegistry.init(allocator);
+    defer reg.deinit();
+    try reg.registerBuiltins();
+    try std.testing.expectEqual(@as(usize, 7), reg.countByDimension(.e2_quantum));
+    try std.testing.expectEqual(ToolDimension.e2_quantum, reg.getDimension("external_search").?);
+    try std.testing.expectEqual(ToolDimension.e2_quantum, reg.getDimension("rag_search").?);
+    try std.testing.expectEqual(ToolDimension.e2_quantum, reg.getDimension("wikipedia_lookup").?);
+    try std.testing.expectEqual(ToolDimension.e2_quantum, reg.getDimension("dictionary_lookup").?);
+    try std.testing.expectEqual(ToolDimension.e2_quantum, reg.getDimension("law_lookup").?);
+    try std.testing.expectEqual(ToolDimension.e2_quantum, reg.getDimension("kg_query").?);
+    try std.testing.expectEqual(ToolDimension.e2_quantum, reg.getDimension("db_query").?);
+}
+
+test "tools: e3_space has geo tools" {
+    const allocator = std.testing.allocator;
+    var reg = ToolRegistry.init(allocator);
+    defer reg.deinit();
+    try reg.registerBuiltins();
+    try std.testing.expectEqual(@as(usize, 8), reg.countByDimension(.e3_space));
+    try std.testing.expectEqual(ToolDimension.e3_space, reg.getDimension("geo_distance").?);
+    try std.testing.expectEqual(ToolDimension.e3_space, reg.getDimension("geo_convert").?);
+    try std.testing.expectEqual(ToolDimension.e3_space, reg.getDimension("globe_query").?);
+    try std.testing.expectEqual(ToolDimension.e3_space, reg.getDimension("cctv_query").?);
+    try std.testing.expectEqual(ToolDimension.e3_space, reg.getDimension("annotation_add").?);
+}
+
+test "tools: e4_energy has execution tools" {
+    const allocator = std.testing.allocator;
+    var reg = ToolRegistry.init(allocator);
+    defer reg.deinit();
+    try reg.registerBuiltins();
+    try std.testing.expectEqual(@as(usize, 6), reg.countByDimension(.e4_energy));
+    try std.testing.expectEqual(ToolDimension.e4_energy, reg.getDimension("shell_exec").?);
+    try std.testing.expectEqual(ToolDimension.e4_energy, reg.getDimension("file_write").?);
+    try std.testing.expectEqual(ToolDimension.e4_energy, reg.getDimension("http_fetch").?);
+    try std.testing.expectEqual(ToolDimension.e4_energy, reg.getDimension("scene_play").?);
+    try std.testing.expectEqual(ToolDimension.e4_energy, reg.getDimension("hud_control").?);
+    try std.testing.expectEqual(ToolDimension.e4_energy, reg.getDimension("kg_add_triplet").?);
+}
+
+test "tools: e5_structure has data tools" {
+    const allocator = std.testing.allocator;
+    var reg = ToolRegistry.init(allocator);
+    defer reg.deinit();
+    try reg.registerBuiltins();
+    try std.testing.expectEqual(@as(usize, 20), reg.countByDimension(.e5_structure));
+    try std.testing.expectEqual(ToolDimension.e5_structure, reg.getDimension("calculate").?);
+    try std.testing.expectEqual(ToolDimension.e5_structure, reg.getDimension("base64_encode").?);
+    try std.testing.expectEqual(ToolDimension.e5_structure, reg.getDimension("json_validate").?);
+    try std.testing.expectEqual(ToolDimension.e5_structure, reg.getDimension("file_read").?);
+    try std.testing.expectEqual(ToolDimension.e5_structure, reg.getDimension("text_summarize").?);
+}
+
+test "tools: e6_metacognition has analysis tools" {
+    const allocator = std.testing.allocator;
+    var reg = ToolRegistry.init(allocator);
+    defer reg.deinit();
+    try reg.registerBuiltins();
+    try std.testing.expectEqual(@as(usize, 9), reg.countByDimension(.e6_metacognition));
+    try std.testing.expectEqual(ToolDimension.e6_metacognition, reg.getDimension("sentiment_analyze").?);
+    try std.testing.expectEqual(ToolDimension.e6_metacognition, reg.getDimension("ner_extract").?);
+    try std.testing.expectEqual(ToolDimension.e6_metacognition, reg.getDimension("text_classify").?);
+    try std.testing.expectEqual(ToolDimension.e6_metacognition, reg.getDimension("face_detect").?);
+    try std.testing.expectEqual(ToolDimension.e6_metacognition, reg.getDimension("face_recognize").?);
+    try std.testing.expectEqual(ToolDimension.e6_metacognition, reg.getDimension("emotion_detect").?);
+}
+
+test "tools: e7_physics has quantum and lattice tools" {
+    const allocator = std.testing.allocator;
+    var reg = ToolRegistry.init(allocator);
+    defer reg.deinit();
+    try reg.registerBuiltins();
+    try std.testing.expectEqual(@as(usize, 2), reg.countByDimension(.e7_physics));
+    try std.testing.expectEqual(ToolDimension.e7_physics, reg.getDimension("quantum_simulate").?);
+    try std.testing.expectEqual(ToolDimension.e7_physics, reg.getDimension("lattice_node").?);
+}
+
+test "tools: listByDimension returns valid JSON with all 8 dimensions" {
+    const allocator = std.testing.allocator;
+    var reg = ToolRegistry.init(allocator);
+    defer reg.deinit();
+    try reg.registerBuiltins();
+    const json = try reg.listByDimension(allocator);
+    defer allocator.free(json);
+    // Check all 8 dimension labels are present
+    try std.testing.expect(std.mem.indexOf(u8, json, "e0=origin") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "e1=time") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "e2=quantum") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "e3=space") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "e4=energy") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "e5=structure") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "e6=metacognition") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "e7=physics") != null);
 }

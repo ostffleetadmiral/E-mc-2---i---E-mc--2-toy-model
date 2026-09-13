@@ -3680,12 +3680,17 @@ pub const Agent = struct {
             };
             defer allocator.free(tool_result);
 
+            // Get the dimensional routing for this tool call
+            const dim_label = if (reg.getDimension(parsed.name)) |dim| dim.label() else "unknown";
+
             const before = result.items[0..start];
             const after = result.items[end + 2 ..];
 
             var new_result = std.ArrayList(u8).init(allocator);
             try new_result.appendSlice(before);
-            try new_result.appendSlice("\n[Tool Result: ");
+            try new_result.appendSlice("\n[Tool Result (");
+            try new_result.appendSlice(dim_label);
+            try new_result.appendSlice("): ");
             try new_result.appendSlice(tool_result);
             try new_result.appendSlice("]\n");
             try new_result.appendSlice(after);

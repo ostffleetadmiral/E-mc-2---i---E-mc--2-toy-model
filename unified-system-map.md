@@ -227,6 +227,48 @@ Each dimension has a specific role; dimensions are not used ambiguously or redun
 
 **Scientific status:** This is a framework-internal design choice, not a claim that ordinary LLMs occupy a literal physical fifth dimension. The dimensional assignments (e1=time, e2=quantum, etc.) are framework interpretations.
 
+### 5.1.2 QSTAR Function Calling: 11D Tool Dimensional Map
+
+The QSTAR function calling engine maps all 58 tools to the same 11D framework
+as the LLM inference layer. Each tool is assigned to exactly one dimension
+based on its semantic role, enabling dimension-aware tool routing.
+
+| Dimension | Role | Tools | Count |
+|---|---|---|---|
+| **e0** origin | Seed/identity generation | `uuid_generate`, `time_now` | 2 |
+| **e1** time | Temporal tracking/sequence | `track_flight`, `track_vessel`, `track_satellite`, `earthquake_query` | 4 |
+| **e2** quantum | Superposition/search | `external_search`, `rag_search`, `wikipedia_lookup`, `dictionary_lookup`, `law_lookup`, `kg_query`, `db_query` | 7 |
+| **e3** space | Spatial/topology | `geo_distance`, `geo_convert`, `geo_mgrs`, `geo_bearing`, `geo_destination`, `globe_query`, `cctv_query`, `annotation_add` | 8 |
+| **e4** energy | Dynamics/execution | `shell_exec`, `file_write`, `http_fetch`, `scene_play`, `hud_control`, `kg_add_triplet` | 6 |
+| **e5** structure | Form/representation | `calculate`, `base64_encode`, `base64_decode`, `hash_compute`, `json_validate`, `json_format`, `string_replace`, `csv_parse`, `data_sort`, `data_filter`, `stats_compute`, `histogram_generate`, `correlation_compute`, `file_read`, `file_list`, `kg_export`, `text_summarize`, `word_count`, `text_diff`, `language_detect` | 20 |
+| **e6** self-recognition | Metacognition/analysis | `sentiment_analyze`, `ner_extract`, `text_classify`, `emotion_detect`, `face_detect`, `face_recognize`, `face_analyze`, `face_track`, `gaze_estimate` | 9 |
+| **e7** shadow/gravity | Quantum/physics | `quantum_simulate`, `lattice_node` | 2 |
+
+**Total: 58 tools across 8 dimensions (e0-e7)**
+
+**Design rationale:**
+- **e0 (origin):** Tools that generate identity anchors (UUIDs, timestamps) — the "seed" of each interaction.
+- **e1 (time):** Tools that track entities through temporal sequences — aircraft, vessels, satellites, seismic events.
+- **e2 (quantum):** Tools that search across superposed knowledge states — collapsing uncertainty into answers.
+- **e3 (space):** Tools that compute spatial relationships — coordinates, distances, bearings, viewsheds.
+- **e4 (energy):** Tools that execute dynamic actions — shell commands, file writes, HTTP requests, scene control.
+- **e5 (structure):** Tools that transform and structure data — math, encoding, hashing, parsing, formatting.
+- **e6 (metacognition):** Tools that analyze and classify content — sentiment, entities, topics, faces, emotions.
+- **e7 (physics):** Tools that operate on the quantum/physical lattice — quantum simulation, lattice node queries.
+
+**Implementation:**
+- `ToolDimension` enum in `src/tools.zig` with 8 variants (e0_origin through e7_physics).
+- `ToolDefinition` struct has a `dimension` field (defaults to e5_structure).
+- `ToolRegistry.getDimension(name)` returns the dimension for a tool.
+- `ToolRegistry.countByDimension(dim)` counts tools in a dimension.
+- `ToolRegistry.listByDimension(allocator)` returns JSON grouped by dimension.
+- `processToolCallsInText` in `src/agent.zig` logs the dimension in tool results.
+
+**Scientific status:** The dimensional assignment of tools is a framework-internal
+design choice that parallels the LLM 5D mapping. It is not a claim about physical
+dimensions. The mapping enables consistent routing and logging, not physical
+interpretation.
+
 ### 5.2 The 15-Lattice Spine
 
 All three layers share the 15-parameter lattice:
