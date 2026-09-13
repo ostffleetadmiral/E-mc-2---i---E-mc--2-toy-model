@@ -329,7 +329,7 @@ fn initAgent(allocator: std.mem.Allocator, config: MetaBenchConfig) !*agent_mod.
             }
         }
     }
-    if (bpe.Tokenizer.loadQwenTokenizer(allocator, "models/qwen1.5-0.5b-chat")) |tok| {
+    if (bpe.Tokenizer.loadQwenTokenizer(allocator, "models/qwen3-0.6b")) |tok| {
         agent.attachTokenizer(tok);
         // Skip bigram model when neural LM is attached (redundant, saves 20s)
         if (agent.neural_lm == null) {

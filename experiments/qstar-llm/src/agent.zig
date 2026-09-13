@@ -4487,13 +4487,22 @@ pub const Agent = struct {
                     if (max_lattice == -std.math.inf(f64)) max_lattice = 0.0;
 
                     // Combine: neural_logits (base) + lattice_bias (topical)
-                    // Lattice weight controls how much domain knowledge influences output
-                    const lattice_weight: f64 = 2.0;
+                    // Lattice weight 0: pure neural LM generation (lattice logits are on
+                    // a different scale and overwhelm neural LM even at low weights).
+                    const lattice_weight: f64 = 0.0;
                     for (logits, 0..) |*l, i| {
                         if (i < nl.len) {
                             const neural_f64: f64 = @floatCast(nl[i]);
                             const lattice_bias = (l.* - max_lattice) * lattice_weight;
                             l.* = neural_f64 + lattice_bias;
+                        }
+                    }
+                    // Suppress special tokens in combined logits — the neural LM
+                    // shouldn't generate <|im_start|>, <|im_end|>, etc. during response.
+                    // Qwen3 special tokens: 151643-151655.
+                    for (151643..151656) |st| {
+                        if (st < logits.len) {
+                            logits[st] = -1e9;
                         }
                     }
                 }
@@ -4580,12 +4589,18 @@ pub const Agent = struct {
                         if (l > max_lattice) max_lattice = l;
                     }
                     if (max_lattice == -std.math.inf(f64)) max_lattice = 0.0;
-                    const lattice_weight: f64 = 2.0;
+                    const lattice_weight: f64 = 0.0;
                     for (logits, 0..) |*l, i| {
                         if (i < nl.len) {
                             const neural_f64: f64 = @floatCast(nl[i]);
                             const lattice_bias = (l.* - max_lattice) * lattice_weight;
                             l.* = neural_f64 + lattice_bias;
+                        }
+                    }
+                    // Suppress special tokens in combined logits
+                    for (151643..151656) |st| {
+                        if (st < logits.len) {
+                            logits[st] = -1e9;
                         }
                     }
                 }
@@ -4762,7 +4777,8 @@ pub const Agent = struct {
             }
             if (self.state.output_tokens.items.len > 0) {
                 const last = self.state.output_tokens.items[self.state.output_tokens.items.len - 1];
-                if (last == EOS_TOKEN_ID or last == 181) break;
+                // Break on EOS, <|im_end|>, or end token
+                if (last == EOS_TOKEN_ID or last == IM_END_TOKEN_ID or last == 181) break;
             }
         }
     }
@@ -5972,7 +5988,9 @@ pub const Agent = struct {
         // Return best response (or generate a final fallback if all cycles failed)
         if (best_response) |r| {
             // Garbled output detection: check for filler phrases and irrelevant content
-            if (isGarbledOutput(r, original_prompt orelse prompt)) {
+            // Skip this check when neural LM is attached — neural LM produces coherent
+            // paraphrased output that may not contain exact prompt keywords.
+            if (self.neural_lm == null and isGarbledOutput(r, original_prompt orelse prompt)) {
                 allocator.free(r);
                 return self.generateRetrievalResponseFallback(prompt, allocator, original_prompt);
             }
@@ -7145,14 +7163,27 @@ pub const Agent = struct {
 
         // Step 2: Run inference cycles
         // With BPE tokenizer: use response length profile for cycle count
+        // With neural LM: generate up to 512 tokens (until EOS/<|im_end|>)
         // Without BPE: cycles = input length (char-level, minimal diffusion)
         const length_profile = classifyResponseLength(prompt);
-        const cycles: u64 = if (self.tokenizer != null) length_profile.cycleCount() else @max(@as(u64, prompt.len), 4);
+        const cycles: u64 = if (self.neural_lm != null)
+            32
+        else if (self.tokenizer != null)
+            length_profile.cycleCount()
+        else
+            @max(@as(u64, prompt.len), 4);
         self.run(cycles) catch {};
 
         // Step 3: Decode the lattice output
         const decoded = self.decode(allocator) catch "";
         defer if (decoded.len > 0) allocator.free(decoded);
+
+        // When neural LM is attached, return the decoded output directly.
+        // The neural LM produces coherent text — skip hardcoded routes and fallbacks.
+        if (self.neural_lm != null and decoded.len > 0) {
+            try full_text.appendSlice(decoded);
+            return full_text.toOwnedSlice();
+        }
 
         // Step 4: Word-boundary keyword matching
         // Science topic guard — prevents science prompts from matching self-referential routes
@@ -8145,6 +8176,9 @@ pub const Agent = struct {
             defer filtered.deinit();
             for (self.state.output_tokens.items) |tid| {
                 if (tid == EOS_TOKEN_ID) break;
+                if (tid == IM_START_TOKEN_ID or tid == IM_END_TOKEN_ID) continue;
+                // Skip other Qwen3 special tokens (151646-151655 range)
+                if (tid >= 151646 and tid <= 151655) continue;
                 try filtered.append(tid);
             }
             return tok.decode(filtered.items);

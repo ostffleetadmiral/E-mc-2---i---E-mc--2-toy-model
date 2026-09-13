@@ -31,7 +31,7 @@ const mesh_mod = @import("mesh");
 const virtual_transport = @import("virtual_transport");
 
 /// Path to the Qwen1.5-0.5B-Chat tokenizer files (vocab.json + merges.txt).
-const QWEN_MODEL_DIR = "models/qwen1.5-0.5b-chat";
+const QWEN_MODEL_DIR = "models/qwen3-0.6b";
 const QWEN3_MODEL_DIR = "models/qwen3-0.6b";
 const QWEN3_ONNX_PATH = "models/qwen3-0.6b/onnx/model_q4f16.onnx";
 
@@ -1003,7 +1003,7 @@ fn runExperimentCmd(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     defer baseline_agent.deinit();
     if (baseline_agent.tokenizer == null) {
         const bpe_mod = @import("bpe_tokenizer");
-        var tok = bpe_mod.Tokenizer.loadQwenTokenizer(allocator, "models/qwen1.5-0.5b-chat") catch null;
+        var tok = bpe_mod.Tokenizer.loadQwenTokenizer(allocator, "models/qwen3-0.6b") catch null;
         if (tok) |*t| {
             baseline_agent.attachTokenizer(t.*);
             baseline_agent.buildBigramModelFromCombined() catch {};
@@ -1032,7 +1032,7 @@ fn runExperimentCmd(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     defer constrained_agent.deinit();
     if (constrained_agent.tokenizer == null) {
         const bpe_mod2 = @import("bpe_tokenizer");
-        var tok2 = bpe_mod2.Tokenizer.loadQwenTokenizer(allocator, "models/qwen1.5-0.5b-chat") catch null;
+        var tok2 = bpe_mod2.Tokenizer.loadQwenTokenizer(allocator, "models/qwen3-0.6b") catch null;
         if (tok2) |*t| {
             constrained_agent.attachTokenizer(t.*);
             constrained_agent.buildBigramModelFromCombined() catch {};
@@ -1143,7 +1143,7 @@ fn runDiagnoseCmd(allocator: std.mem.Allocator, args: [][:0]u8) !void {
 
     // Attach tokenizer
     const bpe_mod = @import("bpe_tokenizer");
-    var tok = bpe_mod.Tokenizer.loadQwenTokenizer(allocator, "models/qwen1.5-0.5b-chat") catch null;
+    var tok = bpe_mod.Tokenizer.loadQwenTokenizer(allocator, "models/qwen3-0.6b") catch null;
     if (tok) |*t| {
         agent_inst.attachTokenizer(t.*);
         std.debug.print("Tokenizer: loaded\n", .{});
@@ -3059,7 +3059,7 @@ test "main: SEED_CORPUS contains expected seed phrases" {
 }
 
 test "main: QWEN_MODEL_DIR is expected path" {
-    try std.testing.expectEqualStrings("models/qwen1.5-0.5b-chat", QWEN_MODEL_DIR);
+    try std.testing.expectEqualStrings("models/qwen3-0.6b", QWEN_MODEL_DIR);
 }
 
 test "main: loadTokenizer returns null or valid tokenizer" {
