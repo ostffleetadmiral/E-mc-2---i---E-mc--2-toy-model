@@ -1143,6 +1143,7 @@ pub fn build(b: *std.Build) void {
         .{ .file = "src/dynamic_routes.zig", .imports = &.{} },
         .{ .file = "src/trivium.zig", .imports = &.{} },
         .{ .file = "src/quadrivium.zig", .imports = &.{.{ .name = "fixed_point", .mod = fixed_point_mod }} },
+        .{ .file = "src/q128.zig", .imports = &.{} },
         .{ .file = "src/corpus_learner.zig", .imports = &.{
             .{ .name = "trivium", .mod = trivium_mod },
             .{ .name = "quadrivium", .mod = quadrivium_mod },
