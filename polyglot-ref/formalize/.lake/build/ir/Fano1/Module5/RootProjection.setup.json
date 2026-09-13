@@ -1,9 +1,0 @@
-{"plugins": [],
- "package": "fano1",
- "options": {"pp.unicode.fun": true, "linter.unusedVariables": false},
- "name": "Fano1.Module5.RootProjection",
- "isModule": false,
- "importArts":
- {"Fano1.Module1.FixedPoint":
-  [["/home/projects/Q128.128/formalize/.lake/build/lib/lean/Fano1/Module1/FixedPoint.olean"]]},
- "dynlibs": []}

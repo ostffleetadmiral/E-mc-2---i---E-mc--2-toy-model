@@ -1,7 +1,0 @@
-{"plugins": [],
- "package": "fano1",
- "options": {"pp.unicode.fun": true, "linter.unusedVariables": false},
- "name": "Fano1.Module1.FixedPoint",
- "isModule": false,
- "importArts": {},
- "dynlibs": []}
