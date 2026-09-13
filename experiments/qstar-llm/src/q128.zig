@@ -356,8 +356,14 @@ pub inline fn q128ToQ64(v: Fp) i128 {
 }
 
 /// Convert an f64 to Q128.128 (sidecar bridge only — not for state paths).
+/// Clamps to i256 range and handles NaN/Inf gracefully.
 pub inline fn fromF64(v: f64) Fp {
-    return @intFromFloat(v * @as(f64, @floatFromInt(ONE)));
+    if (std.math.isNan(v) or std.math.isInf(v)) return 0;
+    const scaled = v * @as(f64, @floatFromInt(ONE));
+    const max_f = @as(f64, @floatFromInt(std.math.maxInt(Fp)));
+    const min_f = @as(f64, @floatFromInt(std.math.minInt(Fp)));
+    const clamped = if (scaled >= max_f) max_f else if (scaled <= min_f) min_f else scaled;
+    return @intFromFloat(clamped);
 }
 
 /// Convert Q128.128 to f64 (sidecar bridge only — not for state paths).

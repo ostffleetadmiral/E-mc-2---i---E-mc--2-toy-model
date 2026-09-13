@@ -4654,6 +4654,7 @@ pub const Agent = struct {
             var it = tok.id_to_token.iterator();
             while (it.next()) |entry| {
                 const tid: usize = @intCast(entry.key_ptr.*);
+                if (tid >= logits.len) continue; // skip out-of-vocab token IDs
                 const node = @as(usize, @intCast(@as(u32, @intCast(tid)) % E0_NODE_COUNT));
                 const channel: u3 = @intCast((@as(u32, @intCast(tid)) / E0_NODE_COUNT) % CHANNEL_COUNT);
                 logits[tid] = pair_logits[node][channel];
