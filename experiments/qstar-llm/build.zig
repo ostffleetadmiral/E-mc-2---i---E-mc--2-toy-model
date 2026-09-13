@@ -139,6 +139,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    memory_mod.addImport("q128", q128_mod);
 
     const perception_mod = b.addModule("perception", .{
         .root_source_file = b.path("src/perception.zig"),
@@ -1216,6 +1217,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    agent_mem_mod.addImport("q128", q128_mod);
     agent_tests.root_module.addImport("memory", agent_mem_mod);
     const agent_perception_mod = b.addModule("perception", .{
         .root_source_file = b.path("src/perception.zig"),
@@ -1440,6 +1442,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    cli_mem_mod.addImport("q128", q128_mod);
     cli_mod.addImport("memory", cli_mem_mod);
     const cli_perc_mod = b.addModule("perception", .{
         .root_source_file = b.path("src/perception.zig"),
@@ -1714,6 +1717,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        ob_mem_mod.addImport("q128", q128_mod);
         ob_agent_mod.addImport("memory", ob_mem_mod);
         const ob_perc_mod = b.addModule("perception", .{
             .root_source_file = b.path("src/perception.zig"),
@@ -1848,6 +1852,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        au_mem_mod.addImport("q128", q128_mod);
         au_agent_mod.addImport("memory", au_mem_mod);
         const au_perc_mod = b.addModule("perception", .{
             .root_source_file = b.path("src/perception.zig"),
@@ -1956,6 +1961,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        ma_mem_mod.addImport("q128", q128_mod);
         ma_agent_mod.addImport("memory", ma_mem_mod);
         const ma_perc_mod = b.addModule("perception", .{
             .root_source_file = b.path("src/perception.zig"),
@@ -2578,6 +2584,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        cb_mem_mod.addImport("q128", q128_mod);
         cb_agent_mod.addImport("memory", cb_mem_mod);
         const cb_perc_mod = b.addModule("perception", .{
             .root_source_file = b.path("src/perception.zig"),
@@ -2784,6 +2791,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        mb_mem_mod.addImport("q128", q128_mod);
         mb_agent_mod.addImport("memory", mb_mem_mod);
 
         const mb_perc_mod = b.addModule("perception", .{
@@ -2967,6 +2975,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        st_mem_mod.addImport("q128", q128_mod);
         st_agent_mod.addImport("memory", st_mem_mod);
 
         const st_perc_mod = b.addModule("perception", .{
@@ -3140,6 +3149,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        ct_mem_mod.addImport("q128", q128_mod);
         ct_agent_mod.addImport("memory", ct_mem_mod);
 
         const ct_perc_mod = b.addModule("perception", .{
@@ -3310,6 +3320,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        hb_mem_mod.addImport("q128", q128_mod);
         hb_agent_mod.addImport("memory", hb_mem_mod);
         const hb_perc_mod = b.addModule("perception", .{
             .root_source_file = b.path("src/perception.zig"),
@@ -3568,6 +3579,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        mb_mem_mod.addImport("q128", q128_mod);
         mb_agent_mod.addImport("memory", mb_mem_mod);
         const mb_perc_mod = b.addModule("perception", .{
             .root_source_file = b.path("src/perception.zig"),

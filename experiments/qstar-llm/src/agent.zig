@@ -3811,7 +3811,7 @@ pub const Agent = struct {
                 }
             }
 
-            try em.addEpisode(summary, topic, entry.category, q128.toF64(entry.evaluation.overall), insight);
+            try em.addEpisode(summary, topic, entry.category, entry.evaluation.overall, insight);
         }
     }
 

@@ -10,13 +10,14 @@
 //! Bounded to 500 episodes. FIFO eviction with score-based priority (lowest score evicted first).
 
 const std = @import("std");
+const q128 = @import("q128");
 
 /// A single conversation episode stored in long-term memory.
 pub const Episode = struct {
     summary: []const u8,
     topic: []const u8,
     category: []const u8,
-    success_score: f64,
+    success_score: q128.Fp,
     key_insight: []const u8,
     timestamp: i64,
 
@@ -60,7 +61,7 @@ pub const EpisodicMemory = struct {
     }
 
     /// Adds an episode to long-term memory and updates the topic index.
-    pub fn addEpisode(self: *EpisodicMemory, summary: []const u8, topic: []const u8, category: []const u8, success_score: f64, key_insight: []const u8) !void {
+    pub fn addEpisode(self: *EpisodicMemory, summary: []const u8, topic: []const u8, category: []const u8, success_score: q128.Fp, key_insight: []const u8) !void {
         const summary_copy = try self.allocator.dupe(u8, summary);
         errdefer self.allocator.free(summary_copy);
         const topic_copy = try self.allocator.dupe(u8, topic);
@@ -103,7 +104,7 @@ pub const EpisodicMemory = struct {
         if (self.episodes.items.len == 0) return;
 
         var min_idx: usize = 0;
-        var min_score: f64 = self.episodes.items[0].success_score;
+        var min_score: q128.Fp = self.episodes.items[0].success_score;
         for (1..self.episodes.items.len) |i| {
             if (self.episodes.items[i].success_score < min_score) {
                 min_score = self.episodes.items[i].success_score;
@@ -238,7 +239,7 @@ pub const EpisodicMemory = struct {
             defer self.allocator.free(esc_cat);
             try writer.print("    \"category\": \"{s}\",\n", .{esc_cat});
 
-            try writer.print("    \"success_score\": {d},\n", .{ep.success_score});
+            try writer.print("    \"success_score\": {d},\n", .{q128.toF64(ep.success_score)});
 
             const esc_insight = try escapeJson(self.allocator, ep.key_insight);
             defer self.allocator.free(esc_insight);
@@ -289,6 +290,7 @@ pub const EpisodicMemory = struct {
             const score_comma = std.mem.indexOfScalarPos(u8, content, score_colon + 1, ',') orelse content.len;
             const score_str = std.mem.trim(u8, content[score_colon + 1 .. score_comma], " \t\n\r");
             const score = std.fmt.parseFloat(f64, score_str) catch 0.5;
+            const score_q128 = q128.fromF64(score);
 
             // Find key_insight
             const insight_key = std.mem.indexOfPos(u8, content, score_comma, "\"key_insight\"") orelse break;
@@ -297,7 +299,7 @@ pub const EpisodicMemory = struct {
             const insight_end = std.mem.indexOfScalarPos(u8, content, insight_start + 1, '"') orelse break;
             const insight = content[insight_start + 1 .. insight_end];
 
-            try self.addEpisode(summary, topic, category, score, insight);
+            try self.addEpisode(summary, topic, category, score_q128, insight);
 
             pos = insight_end + 1;
         }
@@ -388,17 +390,17 @@ test "memory: EpisodicMemory eviction removes lowest score" {
     defer mem.deinit();
 
     // Add episodes with varying scores
-    try mem.addEpisode("Low score episode", "test", "factual", 0.3, "Low insight");
-    try mem.addEpisode("High score episode", "test", "factual", 0.95, "High insight");
-    try mem.addEpisode("Medium score episode", "test", "factual", 0.7, "Medium insight");
+    try mem.addEpisode("Low score episode", "test", "factual", q128.fromRatio(3, 10), "Low insight");
+    try mem.addEpisode("High score episode", "test", "factual", q128.fromRatio(95, 100), "High insight");
+    try mem.addEpisode("Medium score episode", "test", "factual", q128.fromRatio(7, 10), "Medium insight");
 
     // Verify all 3 present
     try std.testing.expectEqual(@as(usize, 3), mem.episodeCount());
 
     // The lowest score (0.3) should be evictable — but we only evict when > MAX_EPISODES
     // For now just verify the data is correct
-    try std.testing.expectApproxEqAbs(@as(f64, 0.3), mem.episodes.items[0].success_score, 0.001);
-    try std.testing.expectApproxEqAbs(@as(f64, 0.95), mem.episodes.items[1].success_score, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.3), q128.toF64(mem.episodes.items[0].success_score), 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.95), q128.toF64(mem.episodes.items[1].success_score), 0.001);
 }
 
 // =============================================================================
