@@ -300,6 +300,11 @@ pub inline fn negate(v: Fp) Fp {
     return -v;
 }
 
+/// Alias for negate (matches Q128 struct method name).
+pub inline fn neg(v: Fp) Fp {
+    return -v;
+}
+
 /// Maximum of two values.
 pub inline fn maxVal(a: Fp, b: Fp) Fp {
     return if (a > b) a else b;
@@ -313,6 +318,25 @@ pub inline fn minVal(a: Fp, b: Fp) Fp {
 /// Clamp value to [lo, hi].
 pub inline fn clamp(v: Fp, lo: Fp, hi: Fp) Fp {
     return maxVal(lo, minVal(hi, v));
+}
+
+/// Power: raises base to an integer exponent. Returns ONE for exp=0.
+/// For negative exponents, returns the reciprocal (0 if base is 0).
+pub fn pow(base: Fp, exponent: i32) Fp {
+    if (exponent == 0) return ONE;
+    if (base == 0) return 0;
+    if (exponent < 0) {
+        const positive = pow(base, -exponent);
+        return div(ONE, positive);
+    }
+    var result: Fp = ONE;
+    var b: Fp = base;
+    var n: u32 = @intCast(exponent);
+    while (n > 0) : (n >>= 1) {
+        if ((n & 1) == 1) result = mul(result, b);
+        if (n > 1) b = mul(b, b);
+    }
+    return result;
 }
 
 // =============================================================================

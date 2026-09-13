@@ -3320,7 +3320,7 @@ pub const Agent = struct {
     bigram_model: ?BigramModel = null,
     dynamic_corpus: std.ArrayList(u8) = undefined,
     knowledge_graph: if (is_lite) void else ?kg_mod.KnowledgeGraph = if (is_lite) {} else null,
-    sample_config: sampling.SampleConfig = .{ .strategy = .top_k, .temperature = 1.0, .top_k = 20, .top_p = 0.9, .seed = 0, .repetition_penalty = 1.3 },
+    sample_config: sampling.SampleConfig = .{ .strategy = .top_k, .temperature = q128.ONE, .top_k = 20, .top_p = q128.fromRatio(9, 10), .seed = 0, .repetition_penalty = q128.fromRatio(13, 10) },
     rng: std.Random.DefaultPrng = undefined,
     deterministic: bool = false,
     metacognition: mc_engine.MetacognitionEngine = undefined,
@@ -4456,7 +4456,11 @@ pub const Agent = struct {
         var config = self.sample_config;
         config.seed = self.rng.random().int(u64);
         config.context_tokens = self.state.output_tokens.items;
-        const output = try sampling.sample(self.allocator, logits, config);
+        // Convert f64 logits to Q128 for sampling (boundary conversion)
+        const qlogits = try self.allocator.alloc(q128.Fp, logits.len);
+        defer self.allocator.free(qlogits);
+        for (logits, 0..) |l, i| qlogits[i] = q128.fromF64(l);
+        const output = try sampling.sample(self.allocator, qlogits, config);
         self.state.output_tokens.append(output) catch {};
 
         // Refractory inhibition: clear fired node activation to allow next token in sequence
@@ -4519,7 +4523,11 @@ pub const Agent = struct {
         var config = self.sample_config;
         config.seed = self.rng.random().int(u64);
         config.context_tokens = self.state.output_tokens.items;
-        const output = try sampling.sample(self.allocator, logits, config);
+        // Convert f64 logits to Q128 for sampling (boundary conversion)
+        const qlogits = try self.allocator.alloc(q128.Fp, logits.len);
+        defer self.allocator.free(qlogits);
+        for (logits, 0..) |l, i| qlogits[i] = q128.fromF64(l);
+        const output = try sampling.sample(self.allocator, qlogits, config);
         self.state.output_tokens.append(output) catch {};
 
         const fb_node = tokenToNode(output);
@@ -5066,7 +5074,7 @@ pub const Agent = struct {
                     self.sample_config.temperature = saved_temp;
                     self.sample_config.top_k = saved_top_k;
                 }
-                self.sample_config.temperature = 1.8;
+                self.sample_config.temperature = q128.fromRatio(18, 10);
                 self.sample_config.top_k = 100;
 
                 self.state.reset();
@@ -5759,11 +5767,11 @@ pub const Agent = struct {
 
             // Self-correction: use engine's suggestion for parameter adjustment
             if (cycle < max_cycles - 1) {
-                if (self.metacognition.suggestAdjustment(last_eval, self.sample_config.temperature, self.sample_config.top_k, @intCast(cycle))) |adj| {
+                if (self.metacognition.suggestAdjustment(last_eval, q128.toF64(self.sample_config.temperature), self.sample_config.top_k, @intCast(cycle))) |adj| {
                     if (std.mem.eql(u8, adj.dimension, "specificity")) {
                         self.sample_config.top_k = @intFromFloat(adj.new_value);
                     } else {
-                        self.sample_config.temperature = adj.new_value;
+                        self.sample_config.temperature = q128.fromF64(adj.new_value);
                     }
                 }
             }
@@ -5908,7 +5916,7 @@ pub const Agent = struct {
             self.sample_config.temperature = saved_temp;
             self.sample_config.top_k = saved_top_k;
         }
-        self.sample_config.temperature = 1.5;
+        self.sample_config.temperature = q128.fromRatio(15, 10);
         self.sample_config.top_k = 80;
 
         const fresh_cycles: u64 = @max(@as(u64, prompt.len * 2), 64);
@@ -7150,7 +7158,7 @@ pub const Agent = struct {
             if (prior_count > 0) {
                 self.rng = std.Random.DefaultPrng.init(creative_sig +% @as(u64, prior_count) *% 0x9E3779B97F4A7C15);
                 self.sample_config.seed = creative_sig +% prior_count;
-                self.sample_config.temperature = @min(3.0, 1.5 + @as(f64, @floatFromInt(prior_count)) * 0.3);
+                self.sample_config.temperature = q128.fromF64(@min(3.0, 1.5 + @as(f64, @floatFromInt(prior_count)) * 0.3));
             }
             if (prior_count == 0 and containsWordCI(prompt, "poem") and containsWordCI(prompt, "ocean")) {
                 try full_text.appendSlice("The ocean breathes in waves of green and blue,\nA vast and restless body, old and deep.\nIt holds the moon's pull in its heaving chest,\nAnd crashes on the shore like something waking.\n\n");
@@ -8780,7 +8788,7 @@ test "agent: sampled step produces valid token" {
 
     agent.setSampleConfig(.{
         .strategy = .temperature,
-        .temperature = 1.0,
+        .temperature = q128.ONE,
         .seed = 42,
     });
 
@@ -8869,7 +8877,7 @@ test "agent: sampling with top-k produces valid tokens" {
 
     agent.setSampleConfig(.{
         .strategy = .top_k,
-        .temperature = 0.8,
+        .temperature = q128.fromRatio(8, 10),
         .top_k = 10,
         .seed = 123,
     });

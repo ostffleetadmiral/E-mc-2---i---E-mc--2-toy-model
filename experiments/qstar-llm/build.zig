@@ -132,6 +132,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    sampling_mod.addImport("q128", q128_mod);
 
     const memory_mod = b.addModule("memory", .{
         .root_source_file = b.path("src/memory.zig"),
