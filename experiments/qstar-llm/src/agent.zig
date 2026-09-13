@@ -5666,8 +5666,8 @@ pub const Agent = struct {
     /// Uses the MetacognitionEngine for prompt classification, dynamic thresholding,
     /// mid-response corrections, and parameter adjustment.
     pub fn generateWithReflection(self: *Agent, prompt: []const u8, allocator: std.mem.Allocator, original_prompt: ?[]const u8) ![]const u8 {
-        // Trivium Stage 1: Grammar — parse and classify the input
-        self.trivium_pipeline.runGrammar(prompt);
+        // Trivium Stage 1: Grammar — parse and classify the input (via engine)
+        self.metacognition.runGrammar(prompt);
 
         // Classify prompt to set reflection depth and mood
         self.metacognition.classifyPrompt(prompt);
@@ -5697,11 +5697,10 @@ pub const Agent = struct {
                 response = corrected;
             }
 
-            // Trivium Stage 2: Logic — validate lattice state after inference
-            self.trivium_pipeline.runLogic(&self.state.activations);
-
-            // Quadrivium: process mathematical manifold state
-            self.quadrivium_pipeline.processState(&self.state.activations);
+            // Trivium Stage 2: Logic — validate lattice state (via engine)
+            // Quadrivium: process mathematical manifold state (via engine)
+            self.metacognition.runLogic(&self.state.activations);
+            self.metacognition.runQuadrivium(&self.state.activations);
 
             // Introspect: read own state
             const introspection = self.introspect();
@@ -5721,18 +5720,17 @@ pub const Agent = struct {
             // Evaluate own response
             last_eval = self.evaluateResponse(prompt, response);
 
-            // Quadrivium: use stability metric to modulate confidence
-            const stability = self.quadrivium_pipeline.stabilityScore(&self.state.activations);
-            if (stability < q128.fromRatio(3, 10)) {
-                last_eval.overall = q128.mul(last_eval.overall, q128.fromRatio(8, 10));
-                last_eval.passed = false;
-            }
+            // Integrate Quadrivium stability into evaluation (via engine)
+            self.metacognition.integrateQuadriviumIntoEval(&last_eval);
 
-            // Trivium Stage 3: Rhetoric — plan output formatting
-            self.trivium_pipeline.runRhetoric();
+            // Trivium Stage 3: Rhetoric — plan output formatting and evaluate (via engine)
+            self.metacognition.runRhetoric(response);
 
-            // Logic stage: check non-contradiction
-            if (!trivium.LogicStage.checkNonContradiction(prompt, response)) {
+            // Integrate Trivium Logic + Rhetoric into evaluation (via engine)
+            self.metacognition.integrateTriviumIntoEval(&last_eval);
+
+            // Non-contradiction check (via engine)
+            if (!self.metacognition.checkNonContradiction(prompt, response)) {
                 last_eval.overall = q128.mul(last_eval.overall, q128.fromRatio(7, 10));
                 last_eval.passed = false;
             }

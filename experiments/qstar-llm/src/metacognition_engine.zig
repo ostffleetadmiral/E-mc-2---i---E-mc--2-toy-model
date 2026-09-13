@@ -11,14 +11,20 @@
 //!   - Dynamic parameter adjustment: tunes temperature/top_k based on evaluation
 //!   - Mood tracking: focused, curious, relaxed, uncertain
 //!   - Small-talk detection: routes casual prompts to fast casual path
+//!   - Trivium integration: Grammar/Logic/Rhetoric stages feed SelfModel and EvaluationResult
+//!   - Quadrivium integration: Arithmetic/Geometry/Music/Astronomy feed stability and energy
 //!
-//! All core state remains i128 Q64.64. Floating-point only in evaluation sidecar.
-//! Zero external dependencies beyond std.
+//! The engine owns the TriviumPipeline and QuadriviumPipeline, orchestrating the
+//! full reflection cycle: Grammar → Logic → Quadrivium → Evaluate → Rhetoric → Adjust.
+//!
+//! All core state is Q128.128 fixed-point. Floating-point only at hw_bridge boundary.
 
 const std = @import("std");
 const dyn_routes = @import("dynamic_routes");
 const hw_bridge = @import("hw_bridge");
 const q128 = @import("q128");
+const trivium = @import("trivium");
+const quadrivium = @import("quadrivium");
 
 // =============================================================================
 // Constants
@@ -158,6 +164,23 @@ pub const SelfModel = struct {
     description: [256]u8 = std.mem.zeroes([256]u8),
     description_len: usize = 0,
 
+    // Trivium Logic stage outputs (from ValidatedState)
+    activation_coherence: q128.Fp = q128.fromRatio(1, 2),
+    channel_balance: q128.Fp = q128.fromRatio(1, 2),
+    logic_confidence: q128.Fp = q128.fromRatio(1, 2),
+    is_consistent: bool = true,
+    contradiction_detected: bool = false,
+    reasoning_steps: usize = 0,
+
+    // Quadrivium Astronomy outputs
+    trajectory_energy: i128 = 0,
+    stability: q128.Fp = q128.ONE,
+    astronomy_cycle: u64 = 0,
+
+    // Trivium Rhetoric outputs
+    rhetoric_clarity: q128.Fp = q128.fromRatio(1, 2),
+    rhetoric_persuasiveness: q128.Fp = q128.fromRatio(1, 2),
+
     pub fn descriptionSlice(self: SelfModel) []const u8 {
         return self.description[0..self.description_len];
     }
@@ -213,6 +236,12 @@ pub const MetacognitionEngine = struct {
     mood: Mood,
     allocator: std.mem.Allocator,
 
+    // Trivium pipeline: Grammar → Logic → Rhetoric
+    trivium_pipeline: trivium.TriviumPipeline = .{},
+
+    // Quadrivium pipeline: Arithmetic → Geometry → Music → Astronomy
+    quadrivium_pipeline: quadrivium.QuadriviumPipeline = undefined,
+
     // Dynamic correction state
     last_partial_response: ?[]u8 = null,
     last_partial_eval: EvaluationResult,
@@ -249,6 +278,7 @@ pub const MetacognitionEngine = struct {
             .allocator = allocator,
             .last_partial_response = null,
             .last_partial_eval = EvaluationResult.empty(),
+            .quadrivium_pipeline = quadrivium.QuadriviumPipeline.init(44100 << 64),
         };
     }
 
@@ -434,6 +464,19 @@ pub const MetacognitionEngine = struct {
         vocab_richness: q128.Fp,
         consciousness_ratio: q128.Fp,
     ) void {
+        // Preserve Trivium/Quadrivium fields from previous cycle
+        const prev_coherence = self.self_model.activation_coherence;
+        const prev_balance = self.self_model.channel_balance;
+        const prev_logic_conf = self.self_model.logic_confidence;
+        const prev_consistent = self.self_model.is_consistent;
+        const prev_contradiction = self.self_model.contradiction_detected;
+        const prev_reasoning = self.self_model.reasoning_steps;
+        const prev_energy = self.self_model.trajectory_energy;
+        const prev_stability = self.self_model.stability;
+        const prev_astronomy_cycle = self.self_model.astronomy_cycle;
+        const prev_rhetoric_clarity = self.self_model.rhetoric_clarity;
+        const prev_rhetoric_persuasion = self.self_model.rhetoric_persuasiveness;
+
         self.self_model = .{
             .activation_entropy = entropy,
             .peak_node = peak_node,
@@ -444,8 +487,174 @@ pub const MetacognitionEngine = struct {
             .vocabulary_richness = vocab_richness,
             .consciousness_bandwidth_ratio = consciousness_ratio,
             .mood = deriveMood(entropy, channel_imbalance, self.is_small_talk),
+            .activation_coherence = prev_coherence,
+            .channel_balance = prev_balance,
+            .logic_confidence = prev_logic_conf,
+            .is_consistent = prev_consistent,
+            .contradiction_detected = prev_contradiction,
+            .reasoning_steps = prev_reasoning,
+            .trajectory_energy = prev_energy,
+            .stability = prev_stability,
+            .astronomy_cycle = prev_astronomy_cycle,
+            .rhetoric_clarity = prev_rhetoric_clarity,
+            .rhetoric_persuasiveness = prev_rhetoric_persuasion,
         };
         self.mood = self.self_model.mood;
+    }
+
+    // =============================================================================
+    // Trivium/Quadrivium Integration — the engine owns the reflection pipeline
+    // =============================================================================
+
+    /// Trivium Stage 1: Grammar — parse and classify the input prompt.
+    /// Runs the TriviumPipeline's Grammar stage and stores the parsed input.
+    pub fn runGrammar(self: *MetacognitionEngine, prompt: []const u8) void {
+        self.trivium_pipeline.runGrammar(prompt);
+    }
+
+    /// Trivium Stage 2: Logic — validate lattice state after inference.
+    /// Wires ValidatedState fields (activation_coherence, channel_balance,
+    /// confidence, is_consistent, contradiction_detected) into SelfModel.
+    pub fn runLogic(self: *MetacognitionEngine, activations: []const [8]i128) void {
+        self.trivium_pipeline.runLogic(activations);
+        const v = self.trivium_pipeline.validated;
+        self.self_model.activation_coherence = v.activation_coherence;
+        self.self_model.channel_balance = v.channel_balance;
+        self.self_model.logic_confidence = v.confidence;
+        self.self_model.is_consistent = v.is_consistent;
+        self.self_model.contradiction_detected = v.contradiction_detected;
+        self.self_model.reasoning_steps = v.reasoning_steps;
+
+        // Channel imbalance is the complement of channel_balance
+        self.self_model.channel_imbalance = q128.sub(q128.ONE, v.channel_balance);
+
+        // Re-derive mood with the new trivium data
+        self.self_model.mood = deriveMoodWithTrivium(
+            self.self_model.activation_entropy,
+            self.self_model.channel_imbalance,
+            v.is_consistent,
+            v.contradiction_detected,
+            self.is_small_talk,
+        );
+        self.mood = self.self_model.mood;
+    }
+
+    /// Quadrivium: process mathematical manifold state.
+    /// Runs processState and computes stability, wiring results into SelfModel.
+    pub fn runQuadrivium(self: *MetacognitionEngine, activations: []const [8]i128) void {
+        self.quadrivium_pipeline.processState(activations);
+        self.self_model.trajectory_energy = self.quadrivium_pipeline.astronomy.trajectory_energy;
+        self.self_model.astronomy_cycle = self.quadrivium_pipeline.astronomy.cycle;
+        self.self_model.stability = self.quadrivium_pipeline.stabilityScore(activations);
+    }
+
+    /// Trivium Stage 3: Rhetoric — plan output formatting and evaluate response.
+    /// Runs the Rhetoric stage and evaluates clarity/persuasiveness if a response is provided.
+    pub fn runRhetoric(self: *MetacognitionEngine, response: ?[]const u8) void {
+        self.trivium_pipeline.runRhetoric();
+        if (response) |r| {
+            const evaluated = trivium.RhetoricStage.evaluate(r, self.trivium_pipeline.rhetoric);
+            self.self_model.rhetoric_clarity = evaluated.clarity_score;
+            self.self_model.rhetoric_persuasiveness = evaluated.persuasiveness_score;
+        }
+    }
+
+    /// Integrates Trivium Logic and Rhetoric outputs into an EvaluationResult.
+    /// This is the wiring that connects the Trivium's structured analysis to the
+    /// 8-dimensional evaluation score.
+    pub fn integrateTriviumIntoEval(self: *MetacognitionEngine, eval: *EvaluationResult) void {
+        // If contradiction detected, force fail
+        if (self.self_model.contradiction_detected) {
+            eval.passed = false;
+            eval.overall = q128.mul(eval.overall, q128.fromRatio(7, 10));
+        }
+
+        // If lattice state is inconsistent, penalize coherence
+        if (!self.self_model.is_consistent) {
+            eval.scores[EvaluationResult.DIM_COHERENCE] = q128.mul(
+                eval.scores[EvaluationResult.DIM_COHERENCE],
+                q128.fromRatio(8, 10),
+            );
+            eval.overall = q128.mul(eval.overall, q128.fromRatio(9, 10));
+            eval.passed = false;
+        }
+
+        // Blend logic confidence into coherence dimension (50% weight)
+        eval.scores[EvaluationResult.DIM_COHERENCE] = q128.div(
+            q128.add(eval.scores[EvaluationResult.DIM_COHERENCE], self.self_model.logic_confidence),
+            q128.fromInt(2),
+        );
+
+        // Blend rhetoric clarity into naturalness dimension (30% weight)
+        eval.scores[EvaluationResult.DIM_NATURALNESS] = q128.div(
+            q128.add(
+                q128.mul(eval.scores[EvaluationResult.DIM_NATURALNESS], q128.fromRatio(7, 10)),
+                q128.mul(self.self_model.rhetoric_clarity, q128.fromRatio(3, 10)),
+            ),
+            q128.ONE,
+        );
+
+        // Blend rhetoric persuasiveness into specificity dimension (20% weight)
+        eval.scores[EvaluationResult.DIM_SPECIFICITY] = q128.div(
+            q128.add(
+                q128.mul(eval.scores[EvaluationResult.DIM_SPECIFICITY], q128.fromRatio(8, 10)),
+                q128.mul(self.self_model.rhetoric_persuasiveness, q128.fromRatio(2, 10)),
+            ),
+            q128.ONE,
+        );
+
+        // Recompute overall from blended scores
+        recomputeOverall(eval);
+    }
+
+    /// Integrates Quadrivium stability and energy into an EvaluationResult.
+    /// Stability below 0.3 penalizes overall score; stability above 0.8 boosts it.
+    pub fn integrateQuadriviumIntoEval(self: *MetacognitionEngine, eval: *EvaluationResult) void {
+        const stability = self.self_model.stability;
+
+        if (stability < q128.fromRatio(3, 10)) {
+            // Low stability: penalize overall by 20%
+            eval.overall = q128.mul(eval.overall, q128.fromRatio(8, 10));
+            eval.passed = false;
+        } else if (stability > q128.fromRatio(8, 10)) {
+            // High stability: boost coherence by 10%
+            eval.scores[EvaluationResult.DIM_COHERENCE] = q128.minVal(
+                q128.ONE,
+                q128.add(
+                    eval.scores[EvaluationResult.DIM_COHERENCE],
+                    q128.fromRatio(1, 10),
+                ),
+            );
+        }
+
+        // Recompute overall after stability adjustment
+        recomputeOverall(eval);
+    }
+
+    /// Non-contradiction check via Trivium LogicStage.
+    pub fn checkNonContradiction(self: *MetacognitionEngine, prompt: []const u8, response: []const u8) bool {
+        _ = self;
+        return trivium.LogicStage.checkNonContradiction(prompt, response);
+    }
+
+    /// Returns the Trivium pipeline's parsed input (Grammar stage output).
+    pub fn parsedInput(self: MetacognitionEngine) trivium.ParsedInput {
+        return self.trivium_pipeline.parsed;
+    }
+
+    /// Returns the Trivium pipeline's validated state (Logic stage output).
+    pub fn validatedState(self: MetacognitionEngine) trivium.ValidatedState {
+        return self.trivium_pipeline.validated;
+    }
+
+    /// Returns the Trivium pipeline's rhetoric output (Rhetoric stage output).
+    pub fn rhetoricOutput(self: MetacognitionEngine) trivium.RhetoricOutput {
+        return self.trivium_pipeline.rhetoric;
+    }
+
+    /// Returns the Quadrivium pipeline's stability score.
+    pub fn stabilityScore(self: *MetacognitionEngine, activations: []const [8]i128) q128.Fp {
+        return self.quadrivium_pipeline.stabilityScore(activations);
     }
 
     /// Determines whether a correction should be injected between reflection cycles.
@@ -625,11 +834,14 @@ pub const MetacognitionEngine = struct {
     pub fn statusString(self: MetacognitionEngine, buf: []u8) []const u8 {
         return std.fmt.bufPrint(
             buf,
-            "Mood={s}, Entropy={d:.2}, Imbalance={d:.3}, Threshold={d:.2}, PassRate={d:.2}, Evals={d}, Corrections={d}",
+            "Mood={s}, Entropy={d:.2}, Imbalance={d:.3}, Coherence={d:.2}, Balance={d:.2}, Stability={d:.2}, Threshold={d:.2}, PassRate={d:.2}, Evals={d}, Corrections={d}",
             .{
                 self.mood.label(),
                 q128.toF64(self.self_model.activation_entropy),
                 q128.toF64(self.self_model.channel_imbalance),
+                q128.toF64(self.self_model.activation_coherence),
+                q128.toF64(self.self_model.channel_balance),
+                q128.toF64(self.self_model.stability),
                 q128.toF64(self.dynamicThreshold()),
                 q128.toF64(self.passRate()),
                 self.evaluation_history.items.len,
@@ -695,6 +907,44 @@ fn deriveMood(entropy: q128.Fp, channel_imbalance: q128.Fp, is_small_talk: bool)
     if (entropy > q128.fromInt(4)) return .focused;
     if (entropy > q128.fromInt(2)) return .curious;
     return .relaxed;
+}
+
+/// Derives mood from activation entropy, channel balance, and Trivium logic state.
+/// Contradiction detected → uncertain; inconsistent lattice → uncertain.
+fn deriveMoodWithTrivium(
+    entropy: q128.Fp,
+    channel_imbalance: q128.Fp,
+    is_consistent: bool,
+    contradiction_detected: bool,
+    is_small_talk: bool,
+) Mood {
+    if (is_small_talk) return .relaxed;
+    if (contradiction_detected) return .uncertain;
+    if (!is_consistent) return .uncertain;
+    if (channel_imbalance > q128.fromRatio(7, 10)) return .uncertain;
+    if (entropy > q128.fromInt(4)) return .focused;
+    if (entropy > q128.fromInt(2)) return .curious;
+    return .relaxed;
+}
+
+/// Recomputes the overall score from the 8 dimension scores using the same
+/// weighted average as agent.zig's evaluateResponse.
+fn recomputeOverall(eval: *EvaluationResult) void {
+    const weights = [_]q128.Fp{
+        q128.fromRatio(20, 100), // relevance
+        q128.fromRatio(18, 100), // coherence
+        q128.fromRatio(10, 100), // specificity
+        q128.fromRatio(10, 100), // naturalness
+        q128.fromRatio(12, 100), // self_awareness
+        q128.fromRatio(10, 100), // direct_experience
+        q128.fromRatio(10, 100), // metacognition
+        q128.fromRatio(10, 100), // situational_awareness
+    };
+    var overall: q128.Fp = 0;
+    for (eval.scores, weights) |s, w| {
+        overall = q128.add(overall, q128.mul(s, w));
+    }
+    eval.overall = overall;
 }
 
 /// Converts a string to lowercase in-place using a provided buffer.
