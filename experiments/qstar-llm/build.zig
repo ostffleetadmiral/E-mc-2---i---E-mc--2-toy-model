@@ -1237,6 +1237,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    agent_dyn_routes_mod.addImport("q128", q128_mod);
     agent_metacog_mod.addImport("dynamic_routes", agent_dyn_routes_mod);
     agent_metacog_mod.addImport("hw_bridge", hw_bridge_mod);
     agent_metacog_mod.addImport("q128", q128_mod);
@@ -1462,6 +1463,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    cli_dyn_routes_mod.addImport("q128", q128_mod);
     cli_metacog_mod.addImport("dynamic_routes", cli_dyn_routes_mod);
     cli_metacog_mod.addImport("hw_bridge", hw_bridge_mod);
     cli_metacog_mod.addImport("q128", q128_mod);
@@ -1737,6 +1739,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        ob_dyn_routes_mod.addImport("q128", q128_mod);
         ob_metacog_mod.addImport("dynamic_routes", ob_dyn_routes_mod);
         ob_metacog_mod.addImport("q128", q128_mod);
         ob_agent_mod.addImport("dynamic_routes", ob_dyn_routes_mod);
@@ -1872,6 +1875,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        au_dyn_routes_mod.addImport("q128", q128_mod);
         au_metacog_mod.addImport("dynamic_routes", au_dyn_routes_mod);
         au_metacog_mod.addImport("q128", q128_mod);
         au_agent_mod.addImport("dynamic_routes", au_dyn_routes_mod);
@@ -1981,6 +1985,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        ma_dyn_routes_mod.addImport("q128", q128_mod);
         ma_metacog_mod.addImport("dynamic_routes", ma_dyn_routes_mod);
         ma_metacog_mod.addImport("q128", q128_mod);
         ma_agent_mod.addImport("dynamic_routes", ma_dyn_routes_mod);
@@ -2604,6 +2609,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        cb_dyn_routes_mod.addImport("q128", q128_mod);
         cb_metacog_mod.addImport("dynamic_routes", cb_dyn_routes_mod);
         cb_metacog_mod.addImport("q128", q128_mod);
         cb_agent_mod.addImport("dynamic_routes", cb_dyn_routes_mod);
@@ -2814,6 +2820,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        mb_dyn_routes_mod.addImport("q128", q128_mod);
         mb_metacog_mod.addImport("dynamic_routes", mb_dyn_routes_mod);
         mb_metacog_mod.addImport("q128", q128_mod);
         mb_agent_mod.addImport("dynamic_routes", mb_dyn_routes_mod);
@@ -2998,6 +3005,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        st_dyn_routes_mod.addImport("q128", q128_mod);
         st_metacog_mod.addImport("dynamic_routes", st_dyn_routes_mod);
         st_metacog_mod.addImport("q128", q128_mod);
         st_agent_mod.addImport("dynamic_routes", st_dyn_routes_mod);
@@ -3172,6 +3180,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        ct_dyn_routes_mod.addImport("q128", q128_mod);
         ct_metacog_mod.addImport("dynamic_routes", ct_dyn_routes_mod);
         ct_metacog_mod.addImport("q128", q128_mod);
         ct_agent_mod.addImport("dynamic_routes", ct_dyn_routes_mod);
@@ -3340,6 +3349,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        hb_dyn_routes_mod.addImport("q128", q128_mod);
         hb_metacog_mod.addImport("dynamic_routes", hb_dyn_routes_mod);
         hb_metacog_mod.addImport("q128", q128_mod);
         hb_agent_mod.addImport("dynamic_routes", hb_dyn_routes_mod);
@@ -3599,6 +3609,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        mb_dyn_routes_mod2.addImport("q128", q128_mod);
         mb_metacog_mod.addImport("dynamic_routes", mb_dyn_routes_mod2);
         mb_metacog_mod.addImport("q128", q128_mod);
         mb_agent_mod.addImport("dynamic_routes", mb_dyn_routes_mod2);

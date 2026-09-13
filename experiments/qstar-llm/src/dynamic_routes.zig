@@ -1,6 +1,7 @@
 //! dynamic_routes.zig — Dynamic Route Registry & Adaptive Query Router
 //! Thread-safe registry for autonomously created response routes.
 const std = @import("std");
+const q128 = @import("q128");
 
 pub const MAX_ROUTES: usize = 32768;
 pub const MAX_KEYWORDS: usize = 8;
@@ -68,8 +69,8 @@ pub const DynamicRoute = struct {
     context_topic: [64]u8 = [_]u8{0} ** 64,
     context_len: u8 = 0,
 
-    pub fn confidenceF64(self: DynamicRoute) f64 {
-        return @as(f64, @floatFromInt(self.confidence_bp)) / @as(f64, @floatFromInt(BP_PER_UNIT));
+    pub fn confidenceF64(self: DynamicRoute) q128.Fp {
+        return q128.div(q128.fromI256(@intCast(self.confidence_bp)), q128.fromI256(@intCast(BP_PER_UNIT)));
     }
 
     pub fn decayedConfidence(self: DynamicRoute, now: i64) u16 {
@@ -627,8 +628,8 @@ pub const QueryRouter = struct {
         self.experience_log.deinit();
     }
 
-    pub fn shouldUseDynamicRoute(self: *QueryRouter, prompt: []const u8, kg_score_skewness: f64) bool {
-        if (kg_score_skewness > 0.6) {
+    pub fn shouldUseDynamicRoute(self: *QueryRouter, prompt: []const u8, kg_score_skewness: q128.Fp) bool {
+        if (kg_score_skewness > q128.fromRatio(6, 10)) {
             if (self.registry.match(prompt)) |route| {
                 if (route.confidence_bp >= self.min_confidence_bp) return true;
             }
@@ -651,34 +652,34 @@ pub const QueryRouter = struct {
         }
     }
 
-    pub fn dynamicRoutePerformance(self: QueryRouter) f64 {
-        if (self.experience_log.items.len == 0) return 0.0;
-        var dynamic_sum: f64 = 0.0;
-        var dynamic_count: f64 = 0.0;
-        var fallback_sum: f64 = 0.0;
-        var fallback_count: f64 = 0.0;
+    pub fn dynamicRoutePerformance(self: QueryRouter) q128.Fp {
+        if (self.experience_log.items.len == 0) return 0;
+        var dynamic_sum: q128.Fp = 0;
+        var dynamic_count: q128.Fp = 0;
+        var fallback_sum: q128.Fp = 0;
+        var fallback_count: q128.Fp = 0;
         for (self.experience_log.items) |exp| {
-            const score_f = @as(f64, @floatFromInt(exp.response_score_bp)) / @as(f64, @floatFromInt(BP_PER_UNIT));
+            const score_f = q128.div(q128.fromI256(@intCast(exp.response_score_bp)), q128.fromI256(@intCast(BP_PER_UNIT)));
             if (exp.used_dynamic_route) {
-                dynamic_sum += score_f;
-                dynamic_count += 1.0;
+                dynamic_sum = q128.add(dynamic_sum, score_f);
+                dynamic_count = q128.add(dynamic_count, q128.ONE);
             } else {
-                fallback_sum += score_f;
-                fallback_count += 1.0;
+                fallback_sum = q128.add(fallback_sum, score_f);
+                fallback_count = q128.add(fallback_count, q128.ONE);
             }
         }
-        if (dynamic_count == 0) return 0.0;
-        const dynamic_avg = dynamic_sum / dynamic_count;
-        if (fallback_count == 0) return dynamic_avg;
-        const fallback_avg = fallback_sum / fallback_count;
-        return dynamic_avg - fallback_avg;
+        if (q128.cmp(dynamic_count, 0) == 0) return 0;
+        const dynamic_avg = q128.div(dynamic_sum, dynamic_count);
+        if (q128.cmp(fallback_count, 0) == 0) return dynamic_avg;
+        const fallback_avg = q128.div(fallback_sum, fallback_count);
+        return q128.sub(dynamic_avg, fallback_avg);
     }
 
     pub fn adjustThreshold(self: *QueryRouter) void {
         const perf = self.dynamicRoutePerformance();
-        if (perf > 0.1) {
+        if (perf > q128.fromRatio(1, 10)) {
             self.min_confidence_bp = @max(MIN_MATCH_CONFIDENCE_BP, self.min_confidence_bp - 100);
-        } else if (perf < -0.1) {
+        } else if (perf < q128.neg(q128.fromRatio(1, 10))) {
             self.min_confidence_bp = @min(BP_PER_UNIT, self.min_confidence_bp + 100);
         }
     }
@@ -814,8 +815,8 @@ test "QueryRouter: shouldUseDynamicRoute with high skewness" {
     var router = QueryRouter.init(std.testing.allocator, &reg);
     defer router.deinit();
 
-    try std.testing.expect(router.shouldUseDynamicRoute("What is DNA?", 0.8));
-    try std.testing.expect(!router.shouldUseDynamicRoute("What is DNA?", 0.3));
+    try std.testing.expect(router.shouldUseDynamicRoute("What is DNA?", q128.fromRatio(8, 10)));
+    try std.testing.expect(!router.shouldUseDynamicRoute("What is DNA?", q128.fromRatio(3, 10)));
 }
 
 test "QueryRouter: recordExperience and performance" {
@@ -830,7 +831,7 @@ test "QueryRouter: recordExperience and performance" {
     try router.recordExperience(3, true, 7500);
 
     const perf = router.dynamicRoutePerformance();
-    try std.testing.expect(perf > 0.0);
+    try std.testing.expect(perf > 0);
 }
 
 test "QueryRouter: adjustThreshold lowers when dynamic performs well" {
