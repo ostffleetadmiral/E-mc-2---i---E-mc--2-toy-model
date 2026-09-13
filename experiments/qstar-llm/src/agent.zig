@@ -4487,14 +4487,19 @@ pub const Agent = struct {
                     if (max_lattice == -std.math.inf(f64)) max_lattice = 0.0;
 
                     // Combine: neural_logits (base) + lattice_bias (topical)
-                    // Lattice weight 0: pure neural LM generation (lattice logits are on
-                    // a different scale and overwhelm neural LM even at low weights).
+                    // Lattice weight 0: pure neural LM generation. The hash-based
+                    // token-to-node mapping (token_id % 421) doesn't preserve semantic
+                    // relationships, so lattice bias introduces noise rather than
+                    // useful topical domain knowledge. The 5D lattice still operates
+                    // (activations, consciousness, coherence) but doesn't bias the
+                    // neural LM logits. Future work: implement semantic token mapping.
                     const lattice_weight: f64 = 0.0;
                     for (logits, 0..) |*l, i| {
                         if (i < nl.len) {
                             const neural_f64: f64 = @floatCast(nl[i]);
-                            const lattice_bias = (l.* - max_lattice) * lattice_weight;
-                            l.* = neural_f64 + lattice_bias;
+                            // Normalize lattice logit to [0,1] relative to max
+                            const lattice_norm = (l.* - max_lattice) / 10.0; // lattice logits are ~0-10
+                            l.* = neural_f64 + lattice_norm * lattice_weight;
                         }
                     }
                     // Suppress special tokens in combined logits — the neural LM
@@ -4593,8 +4598,8 @@ pub const Agent = struct {
                     for (logits, 0..) |*l, i| {
                         if (i < nl.len) {
                             const neural_f64: f64 = @floatCast(nl[i]);
-                            const lattice_bias = (l.* - max_lattice) * lattice_weight;
-                            l.* = neural_f64 + lattice_bias;
+                            const lattice_norm = (l.* - max_lattice) / 10.0;
+                            l.* = neural_f64 + lattice_norm * lattice_weight;
                         }
                     }
                     // Suppress special tokens in combined logits
@@ -5828,7 +5833,10 @@ pub const Agent = struct {
 
         // Classify prompt to set reflection depth and mood
         self.metacognition.classifyPrompt(prompt);
-        const max_cycles = self.metacognition.reflection_depth;
+        // Neural LM doesn't benefit from re-generation with different seeds —
+        // it produces deterministic-ish output from the prompt. Re-initializing
+        // the KV cache 3 times wastes ~10s of ONNX inference. Use 1 cycle.
+        const max_cycles: u8 = if (self.neural_lm != null) 1 else self.metacognition.reflection_depth;
         const threshold = self.metacognition.dynamicThreshold();
 
         // Item 3: Wire working memory context into engine
@@ -5972,7 +5980,9 @@ pub const Agent = struct {
             if (last_eval.overall >= threshold) break;
 
             // Self-correction: use engine's suggestion for parameter adjustment
-            if (cycle < max_cycles - 1) {
+            // Skip when neural LM is attached — temperature/top_k only affect
+            // lattice sampling, not neural LM logits.
+            if (cycle < max_cycles - 1 and self.neural_lm == null) {
                 if (self.metacognition.suggestAdjustment(last_eval, self.sample_config.temperature, self.sample_config.top_k, @intCast(cycle))) |adj| {
                     if (std.mem.eql(u8, adj.dimension, "specificity")) {
                         self.sample_config.top_k = @intCast(q128.toInt(adj.new_value));
@@ -7113,21 +7123,28 @@ pub const Agent = struct {
 
         // Step 0a-2: Dynamic route registry — return high-confidence dynamically learned route
         // Context-aware: if we have session topics, use them to boost matching routes
-        const ctx_topic: ?[]const u8 = if (self.working_memory.session_topics.items.len > 0)
-            self.working_memory.session_topics.items[self.working_memory.session_topics.items.len - 1]
-        else
-            null;
-        if (self.dynamic_routes.matchWithContext(effective_prompt, ctx_topic)) |route| {
-            return try allocator.dupe(u8, route.response);
+        // Skip when neural LM is attached — the neural LM generates fresh responses
+        // and dynamic routes would return stale cached responses from previous training.
+        if (self.neural_lm == null) {
+            const ctx_topic: ?[]const u8 = if (self.working_memory.session_topics.items.len > 0)
+                self.working_memory.session_topics.items[self.working_memory.session_topics.items.len - 1]
+            else
+                null;
+            if (self.dynamic_routes.matchWithContext(effective_prompt, ctx_topic)) |route| {
+                return try allocator.dupe(u8, route.response);
+            }
         }
 
         // Step 0a-3: "What is X" query — extract X and match by single keyword.
         // This handles pre-existing routes with multiple keywords where only
         // the defined word is present in the prompt (e.g., "what is gravity"
         // should match a route with keywords [gravity, curvature, spacetime]).
-        if (extractDefinitionQuery(effective_prompt)) |keyword| {
-            if (self.dynamic_routes.matchByKeyword(keyword)) |route| {
-                return try allocator.dupe(u8, route.response);
+        // Skip when neural LM is attached — let the neural LM generate fresh responses.
+        if (self.neural_lm == null) {
+            if (extractDefinitionQuery(effective_prompt)) |keyword| {
+                if (self.dynamic_routes.matchByKeyword(keyword)) |route| {
+                    return try allocator.dupe(u8, route.response);
+                }
             }
         }
 
