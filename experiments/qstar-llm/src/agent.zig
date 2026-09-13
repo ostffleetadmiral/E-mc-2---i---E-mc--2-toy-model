@@ -5656,7 +5656,9 @@ pub const Agent = struct {
             .passed = passed,
         };
 
-        self.metacognition.recordEvaluation(result) catch {};
+        // Note: evaluation recording is now done by the caller after
+        // Trivium/Quadrivium integration, not here, so that the recorded
+        // evaluation reflects the integrated scores.
 
         return result;
     }
@@ -5673,6 +5675,45 @@ pub const Agent = struct {
         self.metacognition.classifyPrompt(prompt);
         const max_cycles = self.metacognition.reflection_depth;
         const threshold = self.metacognition.dynamicThreshold();
+
+        // Item 3: Wire working memory context into engine
+        const ctx_topic: ?[]const u8 = if (self.working_memory.session_topics.items.len > 0)
+            self.working_memory.session_topics.items[self.working_memory.session_topics.items.len - 1]
+        else
+            null;
+        self.metacognition.setSessionContext(
+            self.working_memory.session_topics.items.len,
+            self.working_memory.entries.items.len,
+            ctx_topic,
+        );
+
+        // Item 4: Wire episodic memory context into engine
+        if (!is_lite) {
+            if (self.episodic_memory) |*em| {
+                const ep_count = em.episodeCount();
+                if (ep_count > 0) {
+                    var avg: f64 = 0.0;
+                    for (em.episodes.items) |ep| {
+                        avg += q128.toF64(ep.success_score);
+                    }
+                    avg /= @as(f64, @floatFromInt(ep_count));
+                    self.metacognition.setEpisodicContext(ep_count, q128.fromF64(avg));
+                }
+            }
+        }
+
+        // Item 5: Wire voice codec context into engine
+        if (self.voice_codec_pipeline) |*vc| {
+            // Voice codec is active when clone_state is present
+            self.metacognition.setAudioContext(vc.clone_state != null, 44100 << 64);
+        }
+
+        // Item 6: Wire knowledge graph context into engine
+        if (!is_lite) {
+            if (self.knowledge_graph) |*kg| {
+                self.metacognition.setKnowledgeGraphContext(kg.tripletCount());
+            }
+        }
 
         var best_response: ?[]u8 = null;
         var best_score: f64 = -1.0;
@@ -5702,22 +5743,26 @@ pub const Agent = struct {
             self.metacognition.runLogic(&self.state.activations);
             self.metacognition.runQuadrivium(&self.state.activations);
 
-            // Introspect: read own state
-            const introspection = self.introspect();
+            // Item 1: Engine-owned introspection (replaces agent.introspect())
+            self.metacognition.introspect(
+                &self.state.activations,
+                self.state.output_tokens.items,
+                self.state.temperature,
+                self.allocator,
+            );
 
             // Update shared state for background thread on next cycle
-            // Include framework bridge coherence and self-recognition state
             const coherence_f64 = @as(f64, @floatFromInt(self.state.coherence)) / @as(f64, @floatFromInt(fp.ONE));
             self.metacognition.updateSharedState(
-                introspection.channel_imbalance,
-                introspection.activation_entropy,
+                self.metacognition.self_model.channel_imbalance,
+                self.metacognition.self_model.activation_entropy,
                 0, // relevance not yet computed
-                introspection.output_token_count,
+                self.metacognition.self_model.output_token_count,
                 q128.fromF64(coherence_f64),
                 self.state.consciousness.isConscious(),
             );
 
-            // Evaluate own response
+            // Evaluate own response (raw scores, no recording yet)
             last_eval = self.evaluateResponse(prompt, response);
 
             // Integrate Quadrivium stability into evaluation (via engine)
@@ -5734,6 +5779,10 @@ pub const Agent = struct {
                 last_eval.overall = q128.mul(last_eval.overall, q128.fromRatio(7, 10));
                 last_eval.passed = false;
             }
+
+            // Item 2: Record evaluation AFTER all integration (fixes bug where
+            // recordEvaluation was called in evaluateResponse before integration)
+            self.metacognition.recordEvaluation(last_eval) catch {};
 
             // Check if correction is warranted (comparing new eval to previous)
             if (prev_eval) |pe| {

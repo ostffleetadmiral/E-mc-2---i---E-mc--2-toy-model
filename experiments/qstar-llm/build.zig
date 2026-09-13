@@ -1261,6 +1261,8 @@ pub fn build(b: *std.Build) void {
     agent_tests.root_module.addImport("quadrivium", agent_quadrivium_mod);
     agent_metacog_mod.addImport("trivium", agent_trivium_mod);
     agent_metacog_mod.addImport("quadrivium", agent_quadrivium_mod);
+    agent_metacog_mod.addImport("trivium", agent_trivium_mod);
+    agent_metacog_mod.addImport("quadrivium", agent_quadrivium_mod);
     const agent_corpus_learner_mod = b.addModule("corpus_learner", .{
         .root_source_file = b.path("src/corpus_learner.zig"),
         .target = target,
@@ -1770,6 +1772,8 @@ pub fn build(b: *std.Build) void {
         ob_agent_mod.addImport("quadrivium", ob_quadrivium_mod);
         ob_metacog_mod.addImport("trivium", ob_trivium_mod);
         ob_metacog_mod.addImport("quadrivium", ob_quadrivium_mod);
+        ob_metacog_mod.addImport("trivium", ob_trivium_mod);
+        ob_metacog_mod.addImport("quadrivium", ob_quadrivium_mod);
         const ob_corpus_learner_mod = b.addModule("corpus_learner", .{
             .root_source_file = b.path("src/corpus_learner.zig"),
             .target = target,
@@ -1910,6 +1914,8 @@ pub fn build(b: *std.Build) void {
         au_agent_mod.addImport("quadrivium", au_quadrivium_mod);
         au_metacog_mod.addImport("trivium", au_trivium_mod);
         au_metacog_mod.addImport("quadrivium", au_quadrivium_mod);
+        au_metacog_mod.addImport("trivium", au_trivium_mod);
+        au_metacog_mod.addImport("quadrivium", au_quadrivium_mod);
         const au_corpus_learner_mod = b.addModule("corpus_learner", .{
             .root_source_file = b.path("src/corpus_learner.zig"),
             .target = target,
@@ -2022,6 +2028,8 @@ pub fn build(b: *std.Build) void {
         ma_quadrivium_mod.addImport("q128", q128_mod);
         ma_quadrivium_mod.addImport("fixed_point", fixed_point_mod);
         ma_agent_mod.addImport("quadrivium", ma_quadrivium_mod);
+        ma_metacog_mod.addImport("trivium", ma_trivium_mod);
+        ma_metacog_mod.addImport("quadrivium", ma_quadrivium_mod);
         ma_metacog_mod.addImport("trivium", ma_trivium_mod);
         ma_metacog_mod.addImport("quadrivium", ma_quadrivium_mod);
         const ma_corpus_learner_mod = b.addModule("corpus_learner", .{
@@ -2190,11 +2198,17 @@ pub fn build(b: *std.Build) void {
             .target = wasm_target,
             .optimize = wasm_optimize,
         });
+        const wasm_q128 = b.addModule("q128", .{
+            .root_source_file = b.path("src/q128.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
         const wasm_lat = b.addModule("lattice", .{
             .root_source_file = b.path("src/lattice.zig"),
             .target = wasm_target,
             .optimize = wasm_optimize,
         });
+        wasm_lat.addImport("q128", wasm_q128);
         const wasm_bpe = b.addModule("bpe_tokenizer", .{
             .root_source_file = b.path("src/bpe_tokenizer.zig"),
             .target = wasm_target,
@@ -2205,11 +2219,13 @@ pub fn build(b: *std.Build) void {
             .target = wasm_target,
             .optimize = wasm_optimize,
         });
+        wasm_samp.addImport("q128", wasm_q128);
         const wasm_kg = b.addModule("knowledge_graph", .{
             .root_source_file = b.path("src/knowledge_graph.zig"),
             .target = wasm_target,
             .optimize = wasm_optimize,
         });
+        wasm_kg.addImport("q128", wasm_q128);
         wasm_kg.addImport("fixed_point", wasm_fp);
         wasm_kg.addImport("lattice", wasm_lat);
         const wasm_tools = b.addModule("tools", .{
@@ -2217,6 +2233,7 @@ pub fn build(b: *std.Build) void {
             .target = wasm_target,
             .optimize = wasm_optimize,
         });
+        wasm_tools.addImport("q128", wasm_q128);
         wasm_tools.addImport("fixed_point", wasm_fp);
         wasm_tools.addImport("knowledge_graph", wasm_kg);
         const wasm_geo = b.addModule("geo_math", .{
@@ -2230,6 +2247,7 @@ pub fn build(b: *std.Build) void {
             .target = wasm_target,
             .optimize = wasm_optimize,
         });
+        wasm_db.addImport("q128", wasm_q128);
         wasm_db.addImport("knowledge_graph", wasm_kg);
         wasm_tools.addImport("external_db", wasm_db);
 
@@ -2249,6 +2267,7 @@ pub fn build(b: *std.Build) void {
             .target = wasm_target,
             .optimize = wasm_optimize,
         });
+        wasm_mem.addImport("q128", wasm_q128);
         const wasm_perc = b.addModule("perception", .{
             .root_source_file = b.path("src/perception.zig"),
             .target = wasm_target,
@@ -2261,6 +2280,7 @@ pub fn build(b: *std.Build) void {
             .target = wasm_target,
             .optimize = wasm_optimize,
         });
+        wasm_agent.addImport("q128", wasm_q128);
         wasm_agent.addImport("fixed_point", wasm_fp);
         wasm_agent.addImport("bpe_tokenizer", wasm_bpe);
         wasm_agent.addImport("sampling", wasm_samp);
@@ -2274,12 +2294,23 @@ pub fn build(b: *std.Build) void {
             .target = wasm_target,
             .optimize = wasm_optimize,
         });
+        const wasm_hw_bridge = b.addModule("hw_bridge", .{
+            .root_source_file = b.path("src/hw_bridge.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_hw_bridge.addImport("q128", wasm_q128);
+        wasm_hw_bridge.addImport("fixed_point", wasm_fp);
+        wasm_metacog.addImport("hw_bridge", wasm_hw_bridge);
+        wasm_metacog.addImport("q128", wasm_q128);
+        wasm_agent.addImport("hw_bridge", wasm_hw_bridge);
         wasm_agent.addImport("metacognition_engine", wasm_metacog);
         const wasm_dyn_routes = b.addModule("dynamic_routes", .{
             .root_source_file = b.path("src/dynamic_routes.zig"),
             .target = wasm_target,
             .optimize = wasm_optimize,
         });
+        wasm_dyn_routes.addImport("q128", wasm_q128);
         wasm_metacog.addImport("dynamic_routes", wasm_dyn_routes);
         wasm_agent.addImport("dynamic_routes", wasm_dyn_routes);
         const wasm_trivium = b.addModule("trivium", .{
@@ -2287,23 +2318,30 @@ pub fn build(b: *std.Build) void {
             .target = wasm_target,
             .optimize = wasm_optimize,
         });
+        wasm_trivium.addImport("q128", wasm_q128);
         wasm_agent.addImport("trivium", wasm_trivium);
         const wasm_quadrivium = b.addModule("quadrivium", .{
             .root_source_file = b.path("src/quadrivium.zig"),
             .target = wasm_target,
             .optimize = wasm_optimize,
         });
+        wasm_quadrivium.addImport("q128", wasm_q128);
         wasm_quadrivium.addImport("fixed_point", wasm_fp);
         wasm_agent.addImport("quadrivium", wasm_quadrivium);
+        // Item 7: Wire trivium/quadrivium into wasm metacognition engine
+        wasm_metacog.addImport("trivium", wasm_trivium);
+        wasm_metacog.addImport("quadrivium", wasm_quadrivium);
         const wasm_corpus_learner = b.addModule("corpus_learner", .{
             .root_source_file = b.path("src/corpus_learner.zig"),
             .target = wasm_target,
             .optimize = wasm_optimize,
         });
+        wasm_corpus_learner.addImport("q128", wasm_q128);
         wasm_corpus_learner.addImport("trivium", wasm_trivium);
         wasm_corpus_learner.addImport("quadrivium", wasm_quadrivium);
         wasm_corpus_learner.addImport("dynamic_routes", wasm_dyn_routes);
         wasm_agent.addImport("corpus_learner", wasm_corpus_learner);
+        wasm_agent.addImport("tools", wasm_tools);
         const wasm_voice_codec = b.addModule("voice_codec", .{
             .root_source_file = b.path("src/voice_codec.zig"),
             .target = wasm_target,
@@ -2652,6 +2690,8 @@ pub fn build(b: *std.Build) void {
         cb_agent_mod.addImport("quadrivium", cb_quadrivium_mod);
         cb_metacog_mod.addImport("trivium", cb_trivium_mod);
         cb_metacog_mod.addImport("quadrivium", cb_quadrivium_mod);
+        cb_metacog_mod.addImport("trivium", cb_trivium_mod);
+        cb_metacog_mod.addImport("quadrivium", cb_quadrivium_mod);
         const cb_corpus_learner_mod = b.addModule("corpus_learner", .{
             .root_source_file = b.path("src/corpus_learner.zig"),
             .target = target,
@@ -2869,6 +2909,8 @@ pub fn build(b: *std.Build) void {
         mb_agent_mod.addImport("quadrivium", mb_quadrivium_mod);
         mb_metacog_mod.addImport("trivium", mb_trivium_mod);
         mb_metacog_mod.addImport("quadrivium", mb_quadrivium_mod);
+        mb_metacog_mod.addImport("trivium", mb_trivium_mod);
+        mb_metacog_mod.addImport("quadrivium", mb_quadrivium_mod);
         const mb_corpus_learner_mod = b.addModule("corpus_learner", .{
             .root_source_file = b.path("src/corpus_learner.zig"),
             .target = target,
@@ -3058,6 +3100,8 @@ pub fn build(b: *std.Build) void {
         st_agent_mod.addImport("quadrivium", st_quadrivium_mod);
         st_metacog_mod.addImport("trivium", st_trivium_mod);
         st_metacog_mod.addImport("quadrivium", st_quadrivium_mod);
+        st_metacog_mod.addImport("trivium", st_trivium_mod);
+        st_metacog_mod.addImport("quadrivium", st_quadrivium_mod);
         const st_corpus_learner_mod = b.addModule("corpus_learner", .{
             .root_source_file = b.path("src/corpus_learner.zig"),
             .target = target,
@@ -3237,6 +3281,8 @@ pub fn build(b: *std.Build) void {
         ct_agent_mod.addImport("quadrivium", ct_quadrivium_mod);
         ct_metacog_mod.addImport("trivium", ct_trivium_mod);
         ct_metacog_mod.addImport("quadrivium", ct_quadrivium_mod);
+        ct_metacog_mod.addImport("trivium", ct_trivium_mod);
+        ct_metacog_mod.addImport("quadrivium", ct_quadrivium_mod);
         const ct_corpus_learner_mod = b.addModule("corpus_learner", .{
             .root_source_file = b.path("src/corpus_learner.zig"),
             .target = target,
@@ -3406,6 +3452,8 @@ pub fn build(b: *std.Build) void {
         hb_quadrivium_mod.addImport("q128", q128_mod);
         hb_quadrivium_mod.addImport("fixed_point", fixed_point_mod);
         hb_agent_mod.addImport("quadrivium", hb_quadrivium_mod);
+        hb_metacog_mod.addImport("trivium", hb_trivium_mod);
+        hb_metacog_mod.addImport("quadrivium", hb_quadrivium_mod);
         hb_metacog_mod.addImport("trivium", hb_trivium_mod);
         hb_metacog_mod.addImport("quadrivium", hb_quadrivium_mod);
         const hb_corpus_learner_mod = b.addModule("corpus_learner", .{
@@ -3670,6 +3718,8 @@ pub fn build(b: *std.Build) void {
         mb_quadrivium_mod.addImport("q128", q128_mod);
         mb_quadrivium_mod.addImport("fixed_point", fixed_point_mod);
         mb_agent_mod.addImport("quadrivium", mb_quadrivium_mod);
+        mb_metacog_mod.addImport("trivium", mb_trivium_mod);
+        mb_metacog_mod.addImport("quadrivium", mb_quadrivium_mod);
         mb_metacog_mod.addImport("trivium", mb_trivium_mod);
         mb_metacog_mod.addImport("quadrivium", mb_quadrivium_mod);
         const mb_corpus_learner_mod = b.addModule("corpus_learner", .{

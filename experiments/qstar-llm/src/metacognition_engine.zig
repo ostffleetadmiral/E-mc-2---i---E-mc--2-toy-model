@@ -266,6 +266,23 @@ pub const MetacognitionEngine = struct {
     shared_coherence: q128.Fp = 0,
     shared_self_recognition_active: bool = false,
 
+    // Item 3: Working memory context (session awareness)
+    session_topic_count: usize = 0,
+    session_exchange_count: usize = 0,
+    session_last_topic: [128]u8 = std.mem.zeroes([128]u8),
+    session_last_topic_len: usize = 0,
+
+    // Item 4: Episodic memory context (cross-session performance)
+    episode_count: usize = 0,
+    avg_episode_score: q128.Fp = 0,
+
+    // Item 5: Voice/audio modality context
+    audio_mode_active: bool = false,
+    audio_sample_rate: i128 = 0,
+
+    // Item 6: Knowledge graph context
+    kg_triplet_count: usize = 0,
+
     pub fn init(allocator: std.mem.Allocator) MetacognitionEngine {
         return .{
             .self_model = SelfModel.defaultModel(),
@@ -655,6 +672,215 @@ pub const MetacognitionEngine = struct {
     /// Returns the Quadrivium pipeline's stability score.
     pub fn stabilityScore(self: *MetacognitionEngine, activations: []const [8]i128) q128.Fp {
         return self.quadrivium_pipeline.stabilityScore(activations);
+    }
+
+    // =============================================================================
+    // Item 1: Engine-owned introspection — replaces agent.zig introspect()
+    // =============================================================================
+
+    /// Introspects the lattice state and output tokens, computing the full
+    /// SelfModel. This replaces the agent's introspect() method, using the
+    /// Trivium's channel_balance for channel_imbalance instead of recomputing.
+    ///
+    /// Shannon entropy is computed in f64 as an introspection boundary (q128
+    /// has no log function), then converted to Q128.
+    pub fn introspect(
+        self: *MetacognitionEngine,
+        activations: []const [8]i128,
+        output_tokens: []const u32,
+        temperature: i128,
+        allocator: std.mem.Allocator,
+    ) void {
+        const CHANNEL_COUNT = 8;
+        var total_activation: f64 = 0.0;
+        var channel_totals: [CHANNEL_COUNT]f64 = [_]f64{0.0} ** CHANNEL_COUNT;
+        var peak_node: usize = 0;
+        var peak_channel: u3 = 0;
+        var peak_value: i128 = std.math.minInt(i128);
+
+        for (activations) |node| {
+            for (0..CHANNEL_COUNT) |ch| {
+                const val = node[ch];
+                const fval = @as(f64, @floatFromInt(val));
+                total_activation += @abs(fval);
+                channel_totals[ch] += @abs(fval);
+                if (val > peak_value) {
+                    peak_value = val;
+                    peak_node = 0; // Will be set by index below
+                    peak_channel = @intCast(ch);
+                }
+            }
+        }
+
+        // Find peak node index
+        var max_node_energy: i128 = std.math.minInt(i128);
+        for (activations, 0..) |node, i| {
+            var node_energy: i128 = 0;
+            for (node) |ch| {
+                node_energy += if (ch < 0) -ch else ch;
+            }
+            if (node_energy > max_node_energy) {
+                max_node_energy = node_energy;
+                peak_node = i;
+            }
+        }
+
+        // Shannon entropy of activation distribution (f64 boundary)
+        var entropy: f64 = 0.0;
+        if (total_activation > 0.0) {
+            for (activations) |node| {
+                for (node) |ch_val| {
+                    const fval = @abs(@as(f64, @floatFromInt(ch_val)));
+                    if (fval > 0.0) {
+                        const p = fval / total_activation;
+                        entropy -= p * @log(p);
+                    }
+                }
+            }
+        }
+
+        // Channel imbalance: use Trivium's channel_balance if available,
+        // otherwise compute from raw activations
+        const channel_imbalance = if (q128.cmp(self.self_model.channel_balance, 0) > 0)
+            q128.sub(q128.ONE, self.self_model.channel_balance)
+        else blk: {
+            var max_channel: f64 = 0.0;
+            for (channel_totals) |ct| {
+                if (ct > max_channel) max_channel = ct;
+            }
+            break :blk q128.fromF64(if (total_activation > 0.0) max_channel / total_activation else 0.0);
+        };
+
+        // Vocabulary richness from output tokens
+        const token_count = output_tokens.len;
+        var vocab_richness: f64 = 0.0;
+        if (token_count > 1) {
+            var unique = std.AutoHashMap(u32, void).init(allocator);
+            defer unique.deinit();
+            for (output_tokens) |t| {
+                unique.put(t, {}) catch {};
+            }
+            vocab_richness = @as(f64, @floatFromInt(unique.count())) / @as(f64, @floatFromInt(token_count));
+        }
+
+        // Consciousness bandwidth ratio: C = c(6) / c(5) (Jordan vs Fold)
+        const fold_act = channel_totals[5];
+        const jordan_act = channel_totals[6];
+        const consciousness_ratio = if (fold_act > 0.0) jordan_act / fold_act else 2.0;
+
+        self.updateSelfModel(
+            q128.fromF64(entropy),
+            peak_node,
+            peak_channel,
+            channel_imbalance,
+            temperature,
+            token_count,
+            q128.fromF64(vocab_richness),
+            q128.fromF64(consciousness_ratio),
+        );
+    }
+
+    // =============================================================================
+    // Item 2: Engine-owned evaluation integration
+    // =============================================================================
+
+    /// Records an evaluation with full Trivium/Quadrivium integration.
+    /// Takes raw f64 scores from text analysis, converts to Q128, applies
+    /// Trivium Logic + Rhetoric integration and Quadrivium stability integration,
+    /// then records the result.
+    pub fn evaluateWithIntegration(
+        self: *MetacognitionEngine,
+        scores_f64: [8]f64,
+        overall_f64: f64,
+        passed: bool,
+    ) !EvaluationResult {
+        var scores_q128: [8]q128.Fp = undefined;
+        for (scores_f64, 0..) |s, i| scores_q128[i] = q128.fromF64(s);
+
+        var result = EvaluationResult{
+            .scores = scores_q128,
+            .overall = q128.fromF64(overall_f64),
+            .passed = passed,
+        };
+
+        // Apply Quadrivium stability integration
+        self.integrateQuadriviumIntoEval(&result);
+
+        // Apply Trivium Logic + Rhetoric integration
+        self.integrateTriviumIntoEval(&result);
+
+        // Record the integrated evaluation
+        try self.recordEvaluation(result);
+
+        return result;
+    }
+
+    // =============================================================================
+    // Items 3-6: Context wiring for working memory, episodic memory, voice, KG
+    // =============================================================================
+
+    /// Sets the working memory context for the engine. This gives the engine
+    /// awareness of the conversation history without owning the memory itself.
+    pub fn setSessionContext(
+        self: *MetacognitionEngine,
+        topic_count: usize,
+        exchange_count: usize,
+        last_topic: ?[]const u8,
+    ) void {
+        self.session_topic_count = topic_count;
+        self.session_exchange_count = exchange_count;
+        if (last_topic) |t| {
+            const len = @min(t.len, self.session_last_topic.len);
+            @memcpy(self.session_last_topic[0..len], t[0..len]);
+            self.session_last_topic_len = len;
+        } else {
+            self.session_last_topic_len = 0;
+        }
+    }
+
+    /// Returns the last session topic for context-aware evaluation.
+    pub fn lastSessionTopic(self: MetacognitionEngine) ?[]const u8 {
+        if (self.session_last_topic_len == 0) return null;
+        return self.session_last_topic[0..self.session_last_topic_len];
+    }
+
+    // Item 4: Episodic memory context
+    /// Sets the episodic memory context. Gives the engine awareness of past
+    /// performance across sessions for confidence calibration.
+    pub fn setEpisodicContext(
+        self: *MetacognitionEngine,
+        episode_count: usize,
+        avg_score: q128.Fp,
+    ) void {
+        self.episode_count = episode_count;
+        self.avg_episode_score = avg_score;
+    }
+
+    // Item 5: Voice/audio modality
+    /// Sets the audio modality context. When active, the engine adjusts
+    /// evaluation to account for audio-specific metrics (prosody, formant).
+    pub fn setAudioContext(
+        self: *MetacognitionEngine,
+        active: bool,
+        sample_rate: i128,
+    ) void {
+        self.audio_mode_active = active;
+        self.audio_sample_rate = sample_rate;
+    }
+
+    // Item 6: Knowledge graph context
+    /// Sets the knowledge graph context. Gives the engine's RouteGenerator
+    /// awareness of available KG data for route synthesis.
+    pub fn setKnowledgeGraphContext(
+        self: *MetacognitionEngine,
+        triplet_count: usize,
+    ) void {
+        self.kg_triplet_count = triplet_count;
+    }
+
+    /// Returns true if the engine has KG data available for route synthesis.
+    pub fn hasKnowledgeGraph(self: MetacognitionEngine) bool {
+        return self.kg_triplet_count > 0;
     }
 
     /// Determines whether a correction should be injected between reflection cycles.
