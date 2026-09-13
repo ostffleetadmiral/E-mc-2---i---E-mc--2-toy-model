@@ -13,6 +13,7 @@
 //!   A7 → lambda_h         (λ_H = c/f_H exact)
 
 const std = @import("std");
+const q128 = @import("q128");
 
 // =============================================================================
 // A1: Grid — 15³ base lattice, doubling per level (s=0..s=7)
@@ -363,13 +364,13 @@ pub fn unmapFromLattice(allocator: std.mem.Allocator, mapped: []const u8, origin
 // A5: φ-Cooling — golden ratio scaled temperature
 // =============================================================================
 
-/// Golden ratio φ = (1 + √5) / 2.
-pub const PHI: f64 = 1.6180339887498948482;
+/// Golden ratio φ = (1 + √5) / 2 (Q128.128 fixed-point).
+pub const PHI: q128.Fp = q128.PHI;
 
 /// Computes the φ-scaled cooling temperature at a given level.
 /// Temperature decreases by φ factor per level: T(s) = T₀ × φ^(-s).
-pub fn phiCooling(level: u8, base_temp: f64) f64 {
-    return base_temp * std.math.pow(f64, PHI, -@as(f64, @floatFromInt(level)));
+pub fn phiCooling(level: u8, base_temp: q128.Fp) q128.Fp {
+    return q128.mul(base_temp, q128.pow(q128.PHI, -@as(i32, @intCast(level))));
 }
 
 // =============================================================================
@@ -967,9 +968,10 @@ test "E0 node index returns valid slots" {
 }
 
 test "phi cooling decreases with level" {
-    const t0 = phiCooling(0, 100.0);
-    const t1 = phiCooling(1, 100.0);
-    const t7 = phiCooling(7, 100.0);
+    const base = q128.fromInt(100);
+    const t0 = phiCooling(0, base);
+    const t1 = phiCooling(1, base);
+    const t7 = phiCooling(7, base);
     try std.testing.expect(t0 > t1);
     try std.testing.expect(t1 > t7);
 }

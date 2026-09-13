@@ -67,6 +67,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    lattice_mod.addImport("q128", q128_mod);
 
     const octonion_math_mod = b.addModule("octonion_math", .{
         .root_source_file = b.path("src/octonion_math.zig"),
@@ -973,7 +974,7 @@ pub fn build(b: *std.Build) void {
         .{ .file = "src/fp_bridge.zig", .imports = &.{ .{ .name = "fixed_point", .mod = fixed_point_mod }, .{ .name = "fixed_point32", .mod = fixed_point32_mod } } },
         .{ .file = "src/precision_scaler.zig", .imports = &.{ .{ .name = "fixed_point", .mod = fixed_point_mod }, .{ .name = "fixed_point32", .mod = fixed_point32_mod }, .{ .name = "fp_bridge", .mod = fp_bridge_mod }, .{ .name = "hardware_detect", .mod = hardware_detect_mod } } },
         .{ .file = "src/seed_compressor.zig", .imports = &.{ .{ .name = "fixed_point", .mod = fixed_point_mod }, .{ .name = "holographic", .mod = holographic_mod }, .{ .name = "compress", .mod = compress_mod }, .{ .name = "qr_nest", .mod = qr_nest_mod }, .{ .name = "fp_bridge", .mod = fp_bridge_mod } } },
-        .{ .file = "src/lattice.zig", .imports = &.{} },
+        .{ .file = "src/lattice.zig", .imports = &.{.{ .name = "q128", .mod = q128_mod }} },
         .{ .file = "src/bpe_tokenizer.zig", .imports = &.{} },
         .{ .file = "src/sampling.zig", .imports = &.{.{ .name = "q128", .mod = q128_mod }} },
         .{ .file = "src/memory.zig", .imports = &.{.{ .name = "q128", .mod = q128_mod }} },
@@ -1515,6 +1516,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    cli_lattice_mod.addImport("q128", q128_mod);
     cli_kg_mod.addImport("lattice", cli_lattice_mod);
     cli_mod.addImport("lattice", cli_lattice_mod);
     cli_mod.addImport("knowledge_graph", cli_kg_mod);
