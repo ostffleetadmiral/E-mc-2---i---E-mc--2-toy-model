@@ -1417,25 +1417,25 @@ pub const EvaluationResult = mc_engine.EvaluationResult;
 pub const Metacognition = struct {
     self_model: SelfModel,
     evaluation_history: std.ArrayList(EvaluationResult),
-    confidence_threshold: f64,
+    confidence_threshold: q128.Fp,
     reflection_depth: u8,
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) Metacognition {
         return .{
             .self_model = .{
-                .activation_entropy = 0.0,
+                .activation_entropy = 0,
                 .peak_node = 0,
                 .peak_channel = 0,
-                .channel_imbalance = 0.0,
+                .channel_imbalance = 0,
                 .temperature = 0,
                 .output_token_count = 0,
-                .vocabulary_richness = 0.0,
+                .vocabulary_richness = 0,
                 .description = std.mem.zeroes([256]u8),
                 .description_len = 0,
             },
             .evaluation_history = std.ArrayList(EvaluationResult).init(allocator),
-            .confidence_threshold = 0.5,
+            .confidence_threshold = q128.fromRatio(1, 2),
             .reflection_depth = 3,
             .allocator = allocator,
         };
@@ -1460,23 +1460,23 @@ pub const Metacognition = struct {
     }
 
     /// Returns the average overall score from recent evaluations.
-    pub fn averageScore(self: Metacognition) f64 {
-        if (self.evaluation_history.items.len == 0) return 0.0;
-        var sum: f64 = 0.0;
+    pub fn averageScore(self: Metacognition) q128.Fp {
+        if (self.evaluation_history.items.len == 0) return 0;
+        var sum: q128.Fp = 0;
         for (self.evaluation_history.items) |ev| {
-            sum += ev.overall;
+            sum = q128.add(sum, ev.overall);
         }
-        return sum / @as(f64, @floatFromInt(self.evaluation_history.items.len));
+        return q128.div(sum, q128.fromI256(@as(i256, @intCast(self.evaluation_history.items.len))));
     }
 
     /// Returns the number of past evaluations that passed the confidence threshold.
-    pub fn passRate(self: Metacognition) f64 {
-        if (self.evaluation_history.items.len == 0) return 0.0;
+    pub fn passRate(self: Metacognition) q128.Fp {
+        if (self.evaluation_history.items.len == 0) return 0;
         var passed: usize = 0;
         for (self.evaluation_history.items) |ev| {
             if (ev.passed) passed += 1;
         }
-        return @as(f64, @floatFromInt(passed)) / @as(f64, @floatFromInt(self.evaluation_history.items.len));
+        return q128.fromRatio(@as(i256, @intCast(passed)), @as(i256, @intCast(self.evaluation_history.items.len)));
     }
 };
 
@@ -9485,7 +9485,7 @@ test "agent: metacognition evaluation history records results" {
 
     try std.testing.expect(agent.metacognition.evaluation_history.items.len >= 2);
     const avg = agent.metacognition.averageScore();
-    try std.testing.expect(avg >= 0.0 and avg <= 1.0);
+    try std.testing.expect(avg >= 0 and avg <= q128.ONE);
 }
 
 test "agent: metacognition generateWithReflection produces output" {
