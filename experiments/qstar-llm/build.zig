@@ -188,12 +188,14 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    trivium_mod.addImport("q128", q128_mod);
 
     const quadrivium_mod = b.addModule("quadrivium", .{
         .root_source_file = b.path("src/quadrivium.zig"),
         .target = target,
         .optimize = optimize,
     });
+    quadrivium_mod.addImport("q128", q128_mod);
     quadrivium_mod.addImport("fixed_point", fixed_point_mod);
 
     const corpus_learner_mod = b.addModule("corpus_learner", .{
@@ -1242,12 +1244,14 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    agent_trivium_mod.addImport("q128", q128_mod);
     agent_tests.root_module.addImport("trivium", agent_trivium_mod);
     const agent_quadrivium_mod = b.addModule("quadrivium", .{
         .root_source_file = b.path("src/quadrivium.zig"),
         .target = target,
         .optimize = optimize,
     });
+    agent_quadrivium_mod.addImport("q128", q128_mod);
     agent_quadrivium_mod.addImport("fixed_point", fixed_point_mod);
     agent_tests.root_module.addImport("quadrivium", agent_quadrivium_mod);
     const agent_corpus_learner_mod = b.addModule("corpus_learner", .{
@@ -1464,12 +1468,14 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    cli_trivium_mod.addImport("q128", q128_mod);
     cli_mod.addImport("trivium", cli_trivium_mod);
     const cli_quadrivium_mod = b.addModule("quadrivium", .{
         .root_source_file = b.path("src/quadrivium.zig"),
         .target = target,
         .optimize = optimize,
     });
+    cli_quadrivium_mod.addImport("q128", q128_mod);
     cli_quadrivium_mod.addImport("fixed_point", fixed_point_mod);
     cli_mod.addImport("quadrivium", cli_quadrivium_mod);
     const cli_corpus_learner_mod = b.addModule("corpus_learner", .{
@@ -1735,12 +1741,14 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        ob_trivium_mod.addImport("q128", q128_mod);
         ob_agent_mod.addImport("trivium", ob_trivium_mod);
         const ob_quadrivium_mod = b.addModule("quadrivium", .{
             .root_source_file = b.path("src/quadrivium.zig"),
             .target = target,
             .optimize = optimize,
         });
+        ob_quadrivium_mod.addImport("q128", q128_mod);
         ob_quadrivium_mod.addImport("fixed_point", fixed_point_mod);
         ob_agent_mod.addImport("quadrivium", ob_quadrivium_mod);
         const ob_corpus_learner_mod = b.addModule("corpus_learner", .{
@@ -1867,12 +1875,14 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        au_trivium_mod.addImport("q128", q128_mod);
         au_agent_mod.addImport("trivium", au_trivium_mod);
         const au_quadrivium_mod = b.addModule("quadrivium", .{
             .root_source_file = b.path("src/quadrivium.zig"),
             .target = target,
             .optimize = optimize,
         });
+        au_quadrivium_mod.addImport("q128", q128_mod);
         au_quadrivium_mod.addImport("fixed_point", fixed_point_mod);
         au_agent_mod.addImport("quadrivium", au_quadrivium_mod);
         const au_corpus_learner_mod = b.addModule("corpus_learner", .{
@@ -1973,12 +1983,14 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        ma_trivium_mod.addImport("q128", q128_mod);
         ma_agent_mod.addImport("trivium", ma_trivium_mod);
         const ma_quadrivium_mod = b.addModule("quadrivium", .{
             .root_source_file = b.path("src/quadrivium.zig"),
             .target = target,
             .optimize = optimize,
         });
+        ma_quadrivium_mod.addImport("q128", q128_mod);
         ma_quadrivium_mod.addImport("fixed_point", fixed_point_mod);
         ma_agent_mod.addImport("quadrivium", ma_quadrivium_mod);
         const ma_corpus_learner_mod = b.addModule("corpus_learner", .{
@@ -2593,12 +2605,14 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        cb_trivium_mod.addImport("q128", q128_mod);
         cb_agent_mod.addImport("trivium", cb_trivium_mod);
         const cb_quadrivium_mod = b.addModule("quadrivium", .{
             .root_source_file = b.path("src/quadrivium.zig"),
             .target = target,
             .optimize = optimize,
         });
+        cb_quadrivium_mod.addImport("q128", q128_mod);
         cb_quadrivium_mod.addImport("fixed_point", fixed_point_mod);
         cb_agent_mod.addImport("quadrivium", cb_quadrivium_mod);
         const cb_corpus_learner_mod = b.addModule("corpus_learner", .{
@@ -2801,6 +2815,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        mb_trivium_mod.addImport("q128", q128_mod);
         mb_agent_mod.addImport("trivium", mb_trivium_mod);
 
         const mb_quadrivium_mod = b.addModule("quadrivium", .{
@@ -2808,6 +2823,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        mb_quadrivium_mod.addImport("q128", q128_mod);
         mb_quadrivium_mod.addImport("fixed_point", fixed_point_mod);
         mb_agent_mod.addImport("quadrivium", mb_quadrivium_mod);
         const mb_corpus_learner_mod = b.addModule("corpus_learner", .{
@@ -2982,6 +2998,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        st_trivium_mod.addImport("q128", q128_mod);
         st_agent_mod.addImport("trivium", st_trivium_mod);
 
         const st_quadrivium_mod = b.addModule("quadrivium", .{
@@ -2989,6 +3006,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        st_quadrivium_mod.addImport("q128", q128_mod);
         st_quadrivium_mod.addImport("fixed_point", fixed_point_mod);
         st_agent_mod.addImport("quadrivium", st_quadrivium_mod);
         const st_corpus_learner_mod = b.addModule("corpus_learner", .{
@@ -3153,6 +3171,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        ct_trivium_mod.addImport("q128", q128_mod);
         ct_agent_mod.addImport("trivium", ct_trivium_mod);
 
         const ct_quadrivium_mod = b.addModule("quadrivium", .{
@@ -3160,6 +3179,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        ct_quadrivium_mod.addImport("q128", q128_mod);
         ct_quadrivium_mod.addImport("fixed_point", fixed_point_mod);
         ct_agent_mod.addImport("quadrivium", ct_quadrivium_mod);
         const ct_corpus_learner_mod = b.addModule("corpus_learner", .{
@@ -3317,12 +3337,14 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        hb_trivium_mod.addImport("q128", q128_mod);
         hb_agent_mod.addImport("trivium", hb_trivium_mod);
         const hb_quadrivium_mod = b.addModule("quadrivium", .{
             .root_source_file = b.path("src/quadrivium.zig"),
             .target = target,
             .optimize = optimize,
         });
+        hb_quadrivium_mod.addImport("q128", q128_mod);
         hb_quadrivium_mod.addImport("fixed_point", fixed_point_mod);
         hb_agent_mod.addImport("quadrivium", hb_quadrivium_mod);
         const hb_corpus_learner_mod = b.addModule("corpus_learner", .{
@@ -3573,12 +3595,14 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        mb_trivium_mod.addImport("q128", q128_mod);
         mb_agent_mod.addImport("trivium", mb_trivium_mod);
         const mb_quadrivium_mod = b.addModule("quadrivium", .{
             .root_source_file = b.path("src/quadrivium.zig"),
             .target = target,
             .optimize = optimize,
         });
+        mb_quadrivium_mod.addImport("q128", q128_mod);
         mb_quadrivium_mod.addImport("fixed_point", fixed_point_mod);
         mb_agent_mod.addImport("quadrivium", mb_quadrivium_mod);
         const mb_corpus_learner_mod = b.addModule("corpus_learner", .{

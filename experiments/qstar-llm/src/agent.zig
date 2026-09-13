@@ -5723,7 +5723,7 @@ pub const Agent = struct {
 
             // Quadrivium: use stability metric to modulate confidence
             const stability = self.quadrivium_pipeline.stabilityScore(&self.state.activations);
-            if (stability < 0.3) {
+            if (stability < q128.fromRatio(3, 10)) {
                 last_eval.overall = q128.mul(last_eval.overall, q128.fromRatio(8, 10));
                 last_eval.passed = false;
             }

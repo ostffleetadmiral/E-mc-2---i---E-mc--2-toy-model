@@ -9,6 +9,7 @@
 
 const std = @import("std");
 const fp = @import("fixed_point");
+const q128 = @import("q128");
 
 // =============================================================================
 // Constants
@@ -44,11 +45,10 @@ pub const ArithmeticLayer = struct {
         self.total_operations += 1;
     }
 
-    pub fn averageError(self: ArithmeticLayer) f64 {
-        if (self.total_operations == 0) return 0.0;
-        const avg = @as(f64, @floatFromInt(self.precision_error)) /
-            @as(f64, @floatFromInt(self.total_operations));
-        return avg / @as(f64, @floatFromInt(1 << 64));
+    pub fn averageError(self: ArithmeticLayer) q128.Fp {
+        if (self.total_operations == 0) return 0;
+        const avg = q128.div(q128.fromI256(@intCast(self.precision_error)), q128.fromI256(@intCast(self.total_operations)));
+        return q128.div(avg, q128.fromInt(1 << 64));
     }
 
     pub fn quantize(value: i128, bins: usize) usize {
@@ -88,7 +88,7 @@ pub const GeometryLayer = struct {
         return isqrt(sum_sq);
     }
 
-    pub fn cosineSimilarity(a: [8]i128, b: [8]i128) f64 {
+    pub fn cosineSimilarity(a: [8]i128, b: [8]i128) q128.Fp {
         var dot: i128 = 0;
         var norm_a: i128 = 0;
         var norm_b: i128 = 0;
@@ -97,11 +97,11 @@ pub const GeometryLayer = struct {
             norm_a += a[ch] * a[ch];
             norm_b += b[ch] * b[ch];
         }
-        if (norm_a == 0 or norm_b == 0) return 0.0;
-        const dot_f = @as(f64, @floatFromInt(dot));
-        const na_f = @as(f64, @floatFromInt(isqrt(norm_a)));
-        const nb_f = @as(f64, @floatFromInt(isqrt(norm_b)));
-        return dot_f / (na_f * nb_f);
+        if (norm_a == 0 or norm_b == 0) return 0;
+        const dot_q = q128.fromI256(@intCast(dot));
+        const na_q = q128.fromI256(@intCast(isqrt(norm_a)));
+        const nb_q = q128.fromI256(@intCast(isqrt(norm_b)));
+        return q128.div(dot_q, q128.mul(na_q, nb_q));
     }
 
     pub fn volumetricHash(x: u32, y: u32, z: u32) u32 {
@@ -286,10 +286,10 @@ pub const AstronomyLayer = struct {
         return energy;
     }
 
-    pub fn stabilityMetric(activations: []const [8]i128) f64 {
-        if (activations.len < 2) return 1.0;
-        var total_change: f64 = 0.0;
-        var comparisons: f64 = 0.0;
+    pub fn stabilityMetric(activations: []const [8]i128) q128.Fp {
+        if (activations.len < 2) return q128.ONE;
+        var total_change: q128.Fp = 0;
+        var comparisons: q128.Fp = 0;
         for (0..activations.len - 1) |i| {
             var change: i128 = 0;
             for (0..7) |ch| {
@@ -297,12 +297,12 @@ pub const AstronomyLayer = struct {
                 const abs_diff = if (diff < 0) -diff else diff;
                 change += @min(abs_diff, 1 << 48);
             }
-            total_change += @as(f64, @floatFromInt(@min(change, std.math.maxInt(i32))));
-            comparisons += 1.0;
+            total_change = q128.add(total_change, q128.fromI256(@intCast(@min(change, std.math.maxInt(i32)))));
+            comparisons = q128.add(comparisons, q128.ONE);
         }
-        if (comparisons == 0.0) return 1.0;
-        const avg_change = total_change / comparisons;
-        return @max(0.0, 1.0 - avg_change / @as(f64, @floatFromInt(std.math.maxInt(i32))));
+        if (q128.cmp(comparisons, 0) == 0) return q128.ONE;
+        const avg_change = q128.div(total_change, comparisons);
+        return q128.maxVal(0, q128.sub(q128.ONE, q128.div(avg_change, q128.fromInt(std.math.maxInt(i32)))));
     }
 };
 
@@ -334,7 +334,7 @@ pub const QuadriviumPipeline = struct {
         return AstronomyLayer.predictFuture(last, self.astronomy.prediction_horizon);
     }
 
-    pub fn stabilityScore(self: *QuadriviumPipeline, activations: []const [8]i128) f64 {
+    pub fn stabilityScore(self: *QuadriviumPipeline, activations: []const [8]i128) q128.Fp {
         _ = self;
         return AstronomyLayer.stabilityMetric(activations);
     }
@@ -365,7 +365,7 @@ test "quadrivium: arithmetic precision tracking" {
     layer.trackPrecision(1000, 998);
     layer.trackPrecision(2000, 1995);
     try std.testing.expect(layer.total_operations == 2);
-    try std.testing.expect(layer.averageError() > 0.0);
+    try std.testing.expect(layer.averageError() > 0);
 }
 
 test "quadrivium: arithmetic quantization round-trip" {
@@ -391,7 +391,7 @@ test "quadrivium: geometry cosine similarity" {
     const a: [8]i128 = .{ 100, 200, 300, 0, 0, 0, 0, 0 };
     const b: [8]i128 = .{ 100, 200, 300, 0, 0, 0, 0, 0 };
     const sim = GeometryLayer.cosineSimilarity(a, b);
-    try std.testing.expectApproxEqAbs(@as(f64, 1.0), sim, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 1.0), q128.toF64(sim), 0.001);
 }
 
 test "quadrivium: geometry volumetric hash distribution" {
@@ -489,7 +489,7 @@ test "quadrivium: astronomy stability metric" {
         .{ 100, 200, 300, 50, 30, 20, 10, 0 },
     };
     const stability = AstronomyLayer.stabilityMetric(&stable);
-    try std.testing.expectApproxEqAbs(@as(f64, 1.0), stability, 0.01);
+    try std.testing.expectApproxEqAbs(@as(f64, 1.0), q128.toF64(stability), 0.01);
 
     const unstable = [_][8]i128{
         .{ 1000, 2000, 3000, 500, 300, 200, 100, 0 },
@@ -497,7 +497,7 @@ test "quadrivium: astronomy stability metric" {
         .{ 500, 1000, 1500, 250, 150, 100, 50, 0 },
     };
     const instability = AstronomyLayer.stabilityMetric(&unstable);
-    try std.testing.expect(instability < 1.0);
+    try std.testing.expect(instability < q128.ONE);
 }
 
 test "quadrivium: pipeline process and predict" {
@@ -511,7 +511,7 @@ test "quadrivium: pipeline process and predict" {
     const predictions = pipeline.predictNext(&activations);
     _ = predictions;
     const stability = pipeline.stabilityScore(&activations);
-    try std.testing.expect(stability >= 0.0 and stability <= 1.0);
+    try std.testing.expect(stability >= 0 and stability <= q128.ONE);
 }
 
 // =============================================================================

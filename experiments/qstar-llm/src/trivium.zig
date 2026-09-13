@@ -10,6 +10,7 @@
 //! and hooks for the metacognition engine to inspect and adjust.
 
 const std = @import("std");
+const q128 = @import("q128");
 
 // =============================================================================
 // Constants
@@ -246,12 +247,12 @@ pub const Domain = enum {
 // =============================================================================
 
 pub const ValidatedState = struct {
-    confidence: f64 = 0.5,
+    confidence: q128.Fp = q128.fromRatio(1, 2),
     is_consistent: bool = true,
     contradiction_detected: bool = false,
     reasoning_steps: usize = 0,
-    activation_coherence: f64 = 0.5,
-    channel_balance: f64 = 0.5,
+    activation_coherence: q128.Fp = q128.fromRatio(1, 2),
+    channel_balance: q128.Fp = q128.fromRatio(1, 2),
     validation_notes: [256]u8 = std.mem.zeroes([256]u8),
     notes_len: usize = 0,
 
@@ -260,7 +261,7 @@ pub const ValidatedState = struct {
     }
 
     pub fn isAcceptable(self: ValidatedState) bool {
-        return self.is_consistent and !self.contradiction_detected and self.confidence >= 0.3;
+        return self.is_consistent and !self.contradiction_detected and self.confidence >= q128.fromRatio(3, 10);
     }
 };
 
@@ -271,8 +272,8 @@ pub const ValidatedState = struct {
 pub const RhetoricOutput = struct {
     format: OutputFormat = .plain_text,
     tone: Tone = .conversational,
-    persuasiveness_score: f64 = 0.5,
-    clarity_score: f64 = 0.5,
+    persuasiveness_score: q128.Fp = q128.fromRatio(1, 2),
+    clarity_score: q128.Fp = q128.fromRatio(1, 2),
     target_length: usize = 256,
     use_markdown: bool = false,
     should_add_context: bool = false,
@@ -361,9 +362,9 @@ pub const LogicStage = struct {
 
         state.activation_coherence = computeActivationCoherence(activations);
         state.channel_balance = computeChannelBalance(activations);
-        state.confidence = (state.activation_coherence + state.channel_balance) / 2.0;
-        state.is_consistent = state.activation_coherence >= 0.3;
-        state.contradiction_detected = state.channel_balance < 0.15;
+        state.confidence = q128.div(q128.add(state.activation_coherence, state.channel_balance), q128.fromInt(2));
+        state.is_consistent = state.activation_coherence >= q128.fromRatio(3, 10);
+        state.contradiction_detected = state.channel_balance < q128.fromRatio(15, 100);
         state.reasoning_steps = countReasoningSteps(activations);
 
         if (state.contradiction_detected) {
@@ -410,8 +411,8 @@ pub const LogicStage = struct {
         return true;
     }
 
-    fn computeActivationCoherence(activations: []const [8]i128) f64 {
-        if (activations.len == 0) return 0.0;
+    fn computeActivationCoherence(activations: []const [8]i128) q128.Fp {
+        if (activations.len == 0) return 0;
         var active_count: usize = 0;
         var total_energy: i128 = 0;
         for (activations) |node| {
@@ -423,13 +424,13 @@ pub const LogicStage = struct {
             if (node_energy > 0) active_count += 1;
             total_energy += node_energy;
         }
-        if (total_energy == 0) return 0.0;
-        const density = @as(f64, @floatFromInt(active_count)) / @as(f64, @floatFromInt(activations.len));
-        return @min(1.0, density * 1.5);
+        if (total_energy == 0) return 0;
+        const density = q128.div(q128.fromI256(@intCast(active_count)), q128.fromI256(@intCast(activations.len)));
+        return q128.minVal(q128.ONE, q128.mul(density, q128.fromRatio(15, 10)));
     }
 
-    fn computeChannelBalance(activations: []const [8]i128) f64 {
-        if (activations.len == 0) return 0.0;
+    fn computeChannelBalance(activations: []const [8]i128) q128.Fp {
+        if (activations.len == 0) return 0;
         var channel_sums: [8]i128 = .{ 0, 0, 0, 0, 0, 0, 0, 0 };
         for (activations) |node| {
             for (0..7) |ch| {
@@ -442,9 +443,9 @@ pub const LogicStage = struct {
             total += s;
             if (s > max_channel) max_channel = s;
         }
-        if (total == 0) return 0.0;
-        const max_ratio = @as(f64, @floatFromInt(max_channel)) / @as(f64, @floatFromInt(total));
-        return @max(0.0, 1.0 - max_ratio);
+        if (total == 0) return 0;
+        const max_ratio = q128.div(q128.fromI256(@intCast(max_channel)), q128.fromI256(@intCast(total)));
+        return q128.maxVal(0, q128.sub(q128.ONE, max_ratio));
     }
 
     fn countReasoningSteps(activations: []const [8]i128) usize {
@@ -498,36 +499,36 @@ pub const RhetoricStage = struct {
         }
     }
 
-    fn scoreClarity(response: []const u8) f64 {
-        if (response.len == 0) return 0.0;
+    fn scoreClarity(response: []const u8) q128.Fp {
+        if (response.len == 0) return 0;
         var sentences: usize = 0;
         var it = std.mem.splitScalar(u8, response, '.');
         while (it.next()) |s| {
             if (s.len > 10) sentences += 1;
         }
-        if (sentences == 0) return 0.0;
+        if (sentences == 0) return 0;
         var words: usize = 0;
         var wit = std.mem.tokenizeAny(u8, response, " \t\n\r");
         while (wit.next()) |_| words += 1;
-        if (words == 0) return 0.0;
-        const avg_sentence_len = @as(f64, @floatFromInt(words)) / @as(f64, @floatFromInt(sentences));
-        if (avg_sentence_len <= 0.0) return 0.0;
-        const ideal: f64 = 15.0;
-        if (avg_sentence_len >= ideal) {
-            return @max(0.0, ideal / avg_sentence_len);
+        if (words == 0) return 0;
+        const avg_sentence_len = q128.div(q128.fromI256(@intCast(words)), q128.fromI256(@intCast(sentences)));
+        if (q128.cmp(avg_sentence_len, 0) <= 0) return 0;
+        const ideal = q128.fromInt(15);
+        if (q128.cmp(avg_sentence_len, ideal) >= 0) {
+            return q128.maxVal(0, q128.div(ideal, avg_sentence_len));
         } else {
-            return @min(1.0, avg_sentence_len / ideal);
+            return q128.minVal(q128.ONE, q128.div(avg_sentence_len, ideal));
         }
     }
 
-    fn scorePersuasiveness(response: []const u8) f64 {
-        if (response.len == 0) return 0.0;
+    fn scorePersuasiveness(response: []const u8) q128.Fp {
+        if (response.len == 0) return 0;
         const persuasive_markers = [_][]const u8{ "because", "therefore", "thus", "consequently", "as a result", "this means", "this is why", "the key", "importantly", "essentially", "fundamentally", "in practice" };
         var count: usize = 0;
         for (persuasive_markers) |marker| {
             if (std.ascii.indexOfIgnoreCase(response, marker) != null) count += 1;
         }
-        return @min(1.0, @as(f64, @floatFromInt(count)) * 0.15);
+        return q128.minVal(q128.ONE, q128.mul(q128.fromI256(@intCast(count)), q128.fromRatio(15, 100)));
     }
 };
 
@@ -578,7 +579,7 @@ pub const TriviumPipeline = struct {
         return std.fmt.bufPrint(buf, "Grammar(domain={s}, complexity={s}) -> Logic(confidence={d:.2}, consistent={}) -> Rhetoric(tone={s}, format={s})", .{
             self.parsed.domain.label(),
             self.parsed.complexity.label(),
-            self.validated.confidence,
+            q128.toF64(self.validated.confidence),
             self.validated.is_consistent,
             self.rhetoric.tone.label(),
             @tagName(self.rhetoric.format),
@@ -658,9 +659,9 @@ test "trivium: logic stage validates activation coherence" {
     };
     const parsed = GrammarStage.parse("test prompt");
     const state = LogicStage.validate(&activations, parsed);
-    try std.testing.expect(state.activation_coherence > 0.0);
-    try std.testing.expect(state.channel_balance > 0.0);
-    try std.testing.expect(state.confidence > 0.0);
+    try std.testing.expect(state.activation_coherence > 0);
+    try std.testing.expect(state.channel_balance > 0);
+    try std.testing.expect(state.confidence > 0);
 }
 
 test "trivium: logic stage detects channel imbalance" {
@@ -671,7 +672,7 @@ test "trivium: logic stage detects channel imbalance" {
     };
     const parsed = GrammarStage.parse("test prompt");
     const state = LogicStage.validate(&activations, parsed);
-    try std.testing.expect(state.channel_balance < 0.3);
+    try std.testing.expect(state.channel_balance < q128.fromRatio(3, 10));
     try std.testing.expect(state.contradiction_detected);
 }
 
@@ -691,7 +692,7 @@ test "trivium: rhetoric stage evaluates clarity" {
     const response = "Quicksort is a divide and conquer algorithm. It picks a pivot element. It partitions the array around the pivot. It recursively sorts the sub-arrays.";
     const plan = RhetoricOutput{};
     const result = RhetoricStage.evaluate(response, plan);
-    try std.testing.expect(result.clarity_score > 0.3);
+    try std.testing.expect(result.clarity_score > q128.fromRatio(3, 10));
 }
 
 test "trivium: rhetoric stage detects structured format need" {
@@ -708,7 +709,7 @@ test "trivium: full pipeline runs all stages" {
     pipeline.runAll("Explain the algorithm for binary search", &activations);
     try std.testing.expect(pipeline.isComplete());
     try std.testing.expect(pipeline.parsed.domain == .computer_science);
-    try std.testing.expect(pipeline.validated.confidence > 0.0);
+    try std.testing.expect(pipeline.validated.confidence > 0);
     try std.testing.expect(pipeline.rhetoric.tone == .technical);
 }
 
