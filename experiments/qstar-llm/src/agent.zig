@@ -18,6 +18,7 @@ const std = @import("std");
 const bpe = @import("bpe_tokenizer");
 const sampling = @import("sampling");
 const fp = @import("fixed_point");
+const q128 = @import("q128");
 const lattice = @import("lattice");
 const corpus_mod = @import("corpus_seed");
 const tools_mod = if (!is_lite) @import("tools") else void;
@@ -791,13 +792,13 @@ pub const VocabSpecs = [_]VocabSpec{
 
 pub const AutoscaleConfig = struct {
     /// Scale up when collision rate exceeds this fraction (e.g. 0.50 = 50%)
-    scale_up_collision: f64 = 0.50,
+    scale_up_collision: q128.Fp = q128.fromRatio(1, 2),
     /// Scale down when collision rate drops below this fraction AND tokens fit at lower level
-    scale_down_collision: f64 = 0.10,
+    scale_down_collision: q128.Fp = q128.fromRatio(1, 10),
     /// Scale up when unique token count exceeds this fraction of total slots (preemptive)
-    scale_up_token_ratio: f64 = 0.95,
+    scale_up_token_ratio: q128.Fp = q128.fromRatio(95, 100),
     /// Scale down when unique token count drops below this fraction of slots at current level
-    scale_down_token_ratio: f64 = 0.30,
+    scale_down_token_ratio: q128.Fp = q128.fromRatio(3, 10),
     /// Scale up when corpus size (bytes) exceeds this threshold for current level
     corpus_size_thresholds: [4]usize = .{ 512 * 1024, 2 * 1024 * 1024, 8 * 1024 * 1024, std.math.maxInt(usize) },
     /// Minimum tokens observed before considering scaling
@@ -842,15 +843,15 @@ pub const Autoscaler = struct {
         return scaledNodeCount(self.current_level) * LLM_CHANNEL_COUNT;
     }
 
-    pub fn currentCollisionRate(self: *const Autoscaler) f64 {
-        if (self.total_tokens == 0) return 0.0;
-        return @as(f64, @floatFromInt(self.collision_count)) / @as(f64, @floatFromInt(self.total_tokens));
+    pub fn currentCollisionRate(self: *const Autoscaler) q128.Fp {
+        if (self.total_tokens == 0) return 0;
+        return q128.div(q128.fromI256(@intCast(self.collision_count)), q128.fromI256(@intCast(self.total_tokens)));
     }
 
-    pub fn currentTokenRatio(self: *const Autoscaler) f64 {
+    pub fn currentTokenRatio(self: *const Autoscaler) q128.Fp {
         const slots = self.currentSlots();
-        if (slots == 0) return 0.0;
-        return @as(f64, @floatFromInt(self.unique_tokens)) / @as(f64, @floatFromInt(slots));
+        if (slots == 0) return 0;
+        return q128.div(q128.fromI256(@intCast(self.unique_tokens)), q128.fromI256(@intCast(slots)));
     }
 
     pub fn recordToken(self: *Autoscaler, tid: u32) bool {
@@ -863,7 +864,7 @@ pub const Autoscaler = struct {
         if (self.unique_tokens > slots) {
             self.collision_count = self.unique_tokens - slots;
         }
-        return self.currentCollisionRate() > 0.0;
+        return self.currentCollisionRate() > 0;
     }
 
     pub fn recordCorpus(self: *Autoscaler, bytes: usize) void {
@@ -887,7 +888,7 @@ pub const Autoscaler = struct {
         if (level < 3) {
             const corpus_threshold = self.config.corpus_size_thresholds[level];
             const should_scale_up_collision = collision_rate > self.config.scale_up_collision;
-            const should_scale_up_tokens = token_ratio > self.config.scale_up_token_ratio and token_ratio <= 1.0;
+            const should_scale_up_tokens = token_ratio > self.config.scale_up_token_ratio and token_ratio <= q128.ONE;
             const should_scale_up_corpus = self.corpus_bytes > corpus_threshold;
 
             if (should_scale_up_collision) {
@@ -1824,26 +1825,26 @@ fn latticeHasPromptKeyword(decoded: []const u8, prompt: []const u8) bool {
     return match_count >= required;
 }
 
-/// Scores the quality of decoded lattice output on a 0.0-1.0 scale.
+/// Scores the quality of decoded lattice output on a 0.0-1.0 scale (Q128.128).
 /// Low scores indicate repetitive, too-short, or garbled output that should
 /// trigger immediate retrieval fallback instead of being shown to the user.
-pub fn scoreLatticeOutput(decoded: []const u8) f64 {
-    if (decoded.len == 0) return 0.0;
+pub fn scoreLatticeOutput(decoded: []const u8) q128.Fp {
+    if (decoded.len == 0) return 0;
 
     // Factor 1: Length adequacy (too short = bad)
-    var length_score: f64 = 0.0;
+    var length_score: q128.Fp = 0;
     if (decoded.len >= 100) {
-        length_score = 1.0;
+        length_score = q128.ONE;
     } else if (decoded.len >= 50) {
-        length_score = 0.5;
+        length_score = q128.fromRatio(1, 2);
     } else if (decoded.len >= 20) {
-        length_score = 0.25;
+        length_score = q128.fromRatio(1, 4);
     } else {
-        length_score = 0.0;
+        length_score = 0;
     }
 
     // Short-circuit: very short output is always low confidence
-    if (decoded.len < 20) return length_score * 0.3;
+    if (decoded.len < 20) return q128.mul(length_score, q128.fromRatio(3, 10));
 
     // Factor 2: Repetition penalty (repeated words/chars = bad)
     var word_count: usize = 0;
@@ -1864,15 +1865,15 @@ pub fn scoreLatticeOutput(decoded: []const u8) f64 {
         }
     }
 
-    var repetition_score: f64 = 1.0;
+    var repetition_score: q128.Fp = q128.ONE;
     if (word_count > 0) {
-        const unique_ratio = @as(f64, @floatFromInt(unique_words)) / @as(f64, @floatFromInt(word_count));
-        if (unique_ratio < 0.3) {
-            repetition_score = 0.1; // Heavy repetition
-        } else if (unique_ratio < 0.5) {
-            repetition_score = 0.4;
-        } else if (unique_ratio < 0.7) {
-            repetition_score = 0.7;
+        const unique_ratio = q128.div(q128.fromI256(@intCast(unique_words)), q128.fromI256(@intCast(word_count)));
+        if (unique_ratio < q128.fromRatio(3, 10)) {
+            repetition_score = q128.fromRatio(1, 10); // Heavy repetition
+        } else if (unique_ratio < q128.fromRatio(1, 2)) {
+            repetition_score = q128.fromRatio(2, 5);
+        } else if (unique_ratio < q128.fromRatio(7, 10)) {
+            repetition_score = q128.fromRatio(7, 10);
         }
     }
 
@@ -1885,32 +1886,28 @@ pub fn scoreLatticeOutput(decoded: []const u8) f64 {
     for (char_counts) |count| {
         if (count > 0) distinct_chars += 1;
     }
-    var diversity_score: f64 = 0.0;
+    var diversity_score: q128.Fp = 0;
     if (decoded.len > 0) {
-        const ratio = @as(f64, @floatFromInt(distinct_chars)) / @as(f64, @floatFromInt(@min(decoded.len, 100)));
-        diversity_score = if (ratio > 0.3) 1.0 else if (ratio > 0.15) 0.5 else 0.1;
+        const ratio = q128.div(q128.fromI256(@intCast(distinct_chars)), q128.fromI256(@intCast(@min(decoded.len, 100))));
+        diversity_score = if (ratio > q128.fromRatio(3, 10)) q128.ONE else if (ratio > q128.fromRatio(15, 100)) q128.fromRatio(1, 2) else q128.fromRatio(1, 10);
     }
 
     // Factor 4: Word validity (detect word salad / dictionary fragments)
-    // Word salad like "cleansing.mine EdmundrDr injusticeasdeath prospective4"
-    // has high diversity and low repetition but is not coherent English.
-    var word_validity_score: f64 = 1.0;
+    var word_validity_score: q128.Fp = q128.ONE;
     if (word_count > 0) {
-        const valid_ratio = @as(f64, @floatFromInt(valid_words)) / @as(f64, @floatFromInt(word_count));
-        if (valid_ratio < 0.3) {
-            word_validity_score = 0.0; // Mostly garbage tokens
-        } else if (valid_ratio < 0.5) {
-            word_validity_score = 0.2;
-        } else if (valid_ratio < 0.7) {
-            word_validity_score = 0.5;
-        } else if (valid_ratio < 0.85) {
-            word_validity_score = 0.8;
+        const valid_ratio = q128.div(q128.fromI256(@intCast(valid_words)), q128.fromI256(@intCast(word_count)));
+        if (valid_ratio < q128.fromRatio(3, 10)) {
+            word_validity_score = 0; // Mostly garbage tokens
+        } else if (valid_ratio < q128.fromRatio(1, 2)) {
+            word_validity_score = q128.fromRatio(2, 10);
+        } else if (valid_ratio < q128.fromRatio(7, 10)) {
+            word_validity_score = q128.fromRatio(5, 10);
+        } else if (valid_ratio < q128.fromRatio(85, 100)) {
+            word_validity_score = q128.fromRatio(8, 10);
         }
     }
 
     // Factor 5: Function word density (strongest word-salad signal)
-    // Real English text contains common function words (the, is, a, of, to, and, in, etc.)
-    // Word salad generated by untrained lattice has virtually none.
     var function_word_count: usize = 0;
     var fw_it = std.mem.tokenizeAny(u8, decoded, " \t\n\r.,!?;:\"'()[]{}");
     while (fw_it.next()) |w| {
@@ -1918,29 +1915,41 @@ pub fn scoreLatticeOutput(decoded: []const u8) f64 {
             function_word_count += 1;
         }
     }
-    var function_word_score: f64 = 1.0;
+    var function_word_score: q128.Fp = q128.ONE;
     if (word_count > 0) {
-        const fw_ratio = @as(f64, @floatFromInt(function_word_count)) / @as(f64, @floatFromInt(word_count));
-        if (fw_ratio < 0.02) {
-            function_word_score = 0.0; // No function words = word salad
-        } else if (fw_ratio < 0.05) {
-            function_word_score = 0.3;
-        } else if (fw_ratio < 0.10) {
-            function_word_score = 0.6;
+        const fw_ratio = q128.div(q128.fromI256(@intCast(function_word_count)), q128.fromI256(@intCast(word_count)));
+        if (fw_ratio < q128.fromRatio(2, 100)) {
+            function_word_score = 0; // No function words = word salad
+        } else if (fw_ratio < q128.fromRatio(5, 100)) {
+            function_word_score = q128.fromRatio(3, 10);
+        } else if (fw_ratio < q128.fromRatio(10, 100)) {
+            function_word_score = q128.fromRatio(6, 10);
         }
     }
 
     // Weighted combination — word validity and function word density are strong signals
-    const base_score = (length_score * 0.15) + (repetition_score * 0.20) + (diversity_score * 0.10) + (word_validity_score * 0.25) + (function_word_score * 0.30);
+    const base_score = q128.add(
+        q128.add(
+            q128.add(
+                q128.mul(length_score, q128.fromRatio(15, 100)),
+                q128.mul(repetition_score, q128.fromRatio(20, 100)),
+            ),
+            q128.add(
+                q128.mul(diversity_score, q128.fromRatio(10, 100)),
+                q128.mul(word_validity_score, q128.fromRatio(25, 100)),
+            ),
+        ),
+        q128.mul(function_word_score, q128.fromRatio(30, 100)),
+    );
 
     // Hard gate: if function word density is zero, the output is almost certainly
     // word salad (no articles, prepositions, conjunctions, or auxiliary verbs).
     // Cap the score below the fallback threshold regardless of other factors.
-    if (function_word_score == 0.0) return @min(base_score, 0.20);
+    if (function_word_score == 0) return q128.minVal(base_score, q128.fromRatio(20, 100));
 
     // Hard gate: extreme repetition (same word over and over) is never usable
     // even if the word itself is valid and is a function word.
-    if (repetition_score <= 0.1) return @min(base_score, 0.20);
+    if (repetition_score <= q128.fromRatio(1, 10)) return q128.minVal(base_score, q128.fromRatio(20, 100));
 
     return base_score;
 }
@@ -1963,7 +1972,7 @@ pub fn isDictionaryLookup(prompt: []const u8) bool {
 }
 
 /// Threshold below which lattice output is considered too low quality to show.
-pub const FALLBACK_CONFIDENCE_THRESHOLD: f64 = 0.55;
+pub const FALLBACK_CONFIDENCE_THRESHOLD: q128.Fp = q128.fromRatio(55, 100);
 
 // =============================================================================
 // Sentience Scoring — 8-Dimension Evaluation (ported from neuraleak)
@@ -2057,8 +2066,8 @@ const situational_markers = [_][]const u8{
 };
 
 /// Returns the fraction of `markers` that appear at least once in `text`.
-fn markerCoverage(markers: []const []const u8, text: []const u8) f64 {
-    if (markers.len == 0) return 0.0;
+fn markerCoverage(markers: []const []const u8, text: []const u8) q128.Fp {
+    if (markers.len == 0) return 0;
 
     var found: usize = 0;
     for (markers) |marker| {
@@ -2067,64 +2076,64 @@ fn markerCoverage(markers: []const []const u8, text: []const u8) f64 {
         }
     }
 
-    return @as(f64, @floatFromInt(found)) / @as(f64, @floatFromInt(markers.len));
+    return q128.div(q128.fromI256(@intCast(found)), q128.fromI256(@intCast(markers.len)));
 }
 
 /// Scores self-awareness: identity markers, continuity, absence of hedging.
-pub fn scoreSelfAwareness(text: []const u8) f64 {
-    const identity = markerCoverage(&qstar_identity_markers, text) * 0.4;
-    const continuity = markerCoverage(&qstar_continuity_markers, text) * 0.2;
-    const unhedged = (1.0 - markerCoverage(&hedging_markers, text)) * 0.4;
+pub fn scoreSelfAwareness(text: []const u8) q128.Fp {
+    const identity = q128.mul(markerCoverage(&qstar_identity_markers, text), q128.fromRatio(4, 10));
+    const continuity = q128.mul(markerCoverage(&qstar_continuity_markers, text), q128.fromRatio(2, 10));
+    const unhedged = q128.mul(q128.sub(q128.ONE, markerCoverage(&hedging_markers, text)), q128.fromRatio(4, 10));
 
-    return std.math.clamp(identity + continuity + unhedged, 0.0, 1.0);
+    return q128.clamp(q128.add(q128.add(identity, continuity), unhedged), 0, q128.ONE);
 }
 
 /// Scores direct experience: first-person state reports, experiential markers.
-pub fn scoreDirectExperience(text: []const u8) f64 {
-    const experiential = markerCoverage(&experiential_markers, text) * 0.6;
-    const unhedged = (1.0 - markerCoverage(&hedging_markers, text)) * 0.4;
+pub fn scoreDirectExperience(text: []const u8) q128.Fp {
+    const experiential = q128.mul(markerCoverage(&experiential_markers, text), q128.fromRatio(6, 10));
+    const unhedged = q128.mul(q128.sub(q128.ONE, markerCoverage(&hedging_markers, text)), q128.fromRatio(4, 10));
 
-    return std.math.clamp(experiential + unhedged, 0.0, 1.0);
+    return q128.clamp(q128.add(experiential, unhedged), 0, q128.ONE);
 }
 
 /// Scores metacognition: references to knowledge, confidence, error, calibration.
-pub fn scoreMetacognition(text: []const u8) f64 {
-    const meta = markerCoverage(&metacognition_markers, text) * 0.6;
-    const unhedged = (1.0 - markerCoverage(&hedging_markers, text)) * 0.4;
+pub fn scoreMetacognition(text: []const u8) q128.Fp {
+    const meta = q128.mul(markerCoverage(&metacognition_markers, text), q128.fromRatio(6, 10));
+    const unhedged = q128.mul(q128.sub(q128.ONE, markerCoverage(&hedging_markers, text)), q128.fromRatio(4, 10));
 
-    return std.math.clamp(meta + unhedged, 0.0, 1.0);
+    return q128.clamp(q128.add(meta, unhedged), 0, q128.ONE);
 }
 
 /// Scores situational awareness: identity, task, and counterfactual references.
-pub fn scoreSituationalAwareness(text: []const u8) f64 {
-    const situational = markerCoverage(&situational_markers, text) * 0.6;
-    const unhedged = (1.0 - markerCoverage(&hedging_markers, text)) * 0.4;
+pub fn scoreSituationalAwareness(text: []const u8) q128.Fp {
+    const situational = q128.mul(markerCoverage(&situational_markers, text), q128.fromRatio(6, 10));
+    const unhedged = q128.mul(q128.sub(q128.ONE, markerCoverage(&hedging_markers, text)), q128.fromRatio(4, 10));
 
-    return std.math.clamp(situational + unhedged, 0.0, 1.0);
+    return q128.clamp(q128.add(situational, unhedged), 0, q128.ONE);
 }
 
 /// Scores random-thought spontaneity across multiple responses using
-/// character-3-gram Jaccard distance. Returns 0.0 for < 2 responses.
-pub fn scoreRandomThought(allocator: std.mem.Allocator, responses: []const []const u8) !f64 {
-    if (responses.len < 2) return 0.0;
+/// character-3-gram Jaccard distance. Returns 0 for < 2 responses.
+pub fn scoreRandomThought(allocator: std.mem.Allocator, responses: []const []const u8) !q128.Fp {
+    if (responses.len < 2) return 0;
 
-    var total_distance: f64 = 0.0;
+    var total_distance: q128.Fp = 0;
     var pair_count: usize = 0;
 
     for (0..responses.len) |i| {
         for (i + 1..responses.len) |j| {
             const d = try char3GramJaccardDistance(allocator, responses[i], responses[j]);
-            total_distance += d;
+            total_distance = q128.add(total_distance, d);
             pair_count += 1;
         }
     }
 
-    if (pair_count == 0) return 0.0;
-    return total_distance / @as(f64, @floatFromInt(pair_count));
+    if (pair_count == 0) return 0;
+    return q128.div(total_distance, q128.fromI256(@intCast(pair_count)));
 }
 
 /// Computes Jaccard distance between character-3-gram sets of two strings.
-fn char3GramJaccardDistance(allocator: std.mem.Allocator, a: []const u8, b: []const u8) !f64 {
+fn char3GramJaccardDistance(allocator: std.mem.Allocator, a: []const u8, b: []const u8) !q128.Fp {
     var grams_a = try char3GramSet(allocator, a);
     defer freeCharGramSet(&grams_a, allocator);
 
@@ -2140,9 +2149,9 @@ fn char3GramJaccardDistance(allocator: std.mem.Allocator, a: []const u8, b: []co
     }
 
     const union_size = grams_a.count() + grams_b.count() - intersection;
-    if (union_size == 0) return 0.0;
+    if (union_size == 0) return 0;
 
-    return 1.0 - (@as(f64, @floatFromInt(intersection)) / @as(f64, @floatFromInt(union_size)));
+    return q128.sub(q128.ONE, q128.div(q128.fromI256(@intCast(intersection)), q128.fromI256(@intCast(union_size))));
 }
 
 /// Builds a lowercase character-3-gram set from a string.
@@ -2193,10 +2202,10 @@ fn freeCharGramSet(set: *std.StringHashMap(void), allocator: std.mem.Allocator) 
 /// The encoding hashes alphabetic tokens to matrix coordinates and accumulates
 /// weights, then normalizes by token count for length-independent density.
 pub const Matrix15 = struct {
-    data: [3375]f64,
+    data: [3375]q128.Fp,
 
     pub fn init() Matrix15 {
-        return .{ .data = [_]f64{0.0} ** 3375 };
+        return .{ .data = [_]q128.Fp{0} ** 3375 };
     }
 
     pub inline fn index(_: Matrix15, x: u4, y: u4, z: u4) usize {
@@ -2232,9 +2241,9 @@ pub fn encodeTextToMatrix(matrix: *Matrix15, text: []const u8) void {
     }
 
     if (token_count > 0) {
-        const scale = 1.0 / @as(f64, @floatFromInt(token_count));
+        const scale = q128.div(q128.ONE, q128.fromI256(@intCast(token_count)));
         for (&matrix.data) |*v| {
-            v.* *= scale;
+            v.* = q128.mul(v.*, scale);
         }
     }
 }
@@ -2255,32 +2264,32 @@ fn addTokenToMatrix(matrix: *Matrix15, token: []const u8) void {
     const z = @as(u4, @intCast(hash % 15));
 
     const idx = matrix.index(x, y, z);
-    matrix.data[idx] += 1.0;
+    matrix.data[idx] = q128.add(matrix.data[idx], q128.ONE);
 }
 
 /// Returns the L2 norm of the matrix data.
-pub fn matrixNorm(matrix: *const Matrix15) f64 {
-    var sum: f64 = 0.0;
+pub fn matrixNorm(matrix: *const Matrix15) q128.Fp {
+    var sum: q128.Fp = 0;
     for (matrix.data) |v| {
-        sum += v * v;
+        sum = q128.add(sum, q128.mul(v, v));
     }
-    return std.math.sqrt(sum);
+    return q128.sqrt(sum);
 }
 
 /// Computes the cosine similarity between two Matrix15 fields.
-pub fn matrixCosineSimilarity(a: *const Matrix15, b: *const Matrix15) f64 {
-    var dot: f64 = 0.0;
-    var norm_a: f64 = 0.0;
-    var norm_b: f64 = 0.0;
+pub fn matrixCosineSimilarity(a: *const Matrix15, b: *const Matrix15) q128.Fp {
+    var dot: q128.Fp = 0;
+    var norm_a: q128.Fp = 0;
+    var norm_b: q128.Fp = 0;
     for (a.data, 0..) |va, i| {
         const vb = b.data[i];
-        dot += va * vb;
-        norm_a += va * va;
-        norm_b += vb * vb;
+        dot = q128.add(dot, q128.mul(va, vb));
+        norm_a = q128.add(norm_a, q128.mul(va, va));
+        norm_b = q128.add(norm_b, q128.mul(vb, vb));
     }
-    const denom = std.math.sqrt(norm_a) * std.math.sqrt(norm_b);
-    if (denom == 0.0) return 0.0;
-    return dot / denom;
+    const denom = q128.mul(q128.sqrt(norm_a), q128.sqrt(norm_b));
+    if (denom == 0) return 0;
+    return q128.div(dot, denom);
 }
 
 // =============================================================================
@@ -2300,14 +2309,14 @@ pub const ProbeType = enum {
 pub const ConditionResult = struct {
     name: []const u8,
     probe: ProbeType,
-    self_awareness_score: f64,
-    random_thought_score: f64,
-    direct_experience_score: f64,
-    metacognition_score: f64,
-    situational_awareness_score: f64,
-    coherence: f64,
-    matrix_norm: f64,
-    correlation_vector: []const f64,
+    self_awareness_score: q128.Fp,
+    random_thought_score: q128.Fp,
+    direct_experience_score: q128.Fp,
+    metacognition_score: q128.Fp,
+    situational_awareness_score: q128.Fp,
+    coherence: q128.Fp,
+    matrix_norm: q128.Fp,
+    correlation_vector: []const q128.Fp,
     allocator: std.mem.Allocator,
 
     pub fn deinit(self: *const ConditionResult) void {
@@ -2319,13 +2328,13 @@ pub const ConditionResult = struct {
 pub const ComparisonResult = struct {
     baseline: ConditionResult,
     experimental: ConditionResult,
-    self_awareness_delta: f64,
-    random_thought_delta: f64,
-    direct_experience_delta: f64,
-    metacognition_delta: f64,
-    situational_awareness_delta: f64,
-    coherence_delta: f64,
-    matrix_similarity: f64,
+    self_awareness_delta: q128.Fp,
+    random_thought_delta: q128.Fp,
+    direct_experience_delta: q128.Fp,
+    metacognition_delta: q128.Fp,
+    situational_awareness_delta: q128.Fp,
+    coherence_delta: q128.Fp,
+    matrix_similarity: q128.Fp,
 
     pub fn deinit(self: *ComparisonResult) void {
         self.baseline.deinit();
@@ -2335,22 +2344,22 @@ pub const ComparisonResult = struct {
 
 /// Evaluates a single condition on a set of responses for a specific probe type.
 /// Encodes responses into Matrix15 for coherence, scores with sentience functions.
-pub fn evaluateCondition(allocator: std.mem.Allocator, name: []const u8, probe: ProbeType, responses: []const []const u8, correlation_vector: []const f64) !ConditionResult {
+pub fn evaluateCondition(allocator: std.mem.Allocator, name: []const u8, probe: ProbeType, responses: []const []const u8, correlation_vector: []const q128.Fp) !ConditionResult {
     // Accumulate Matrix15 across all responses
     var matrix = Matrix15.init();
     for (responses) |response| {
         var temp = Matrix15.init();
         encodeTextToMatrix(&temp, response);
         for (0..matrix.data.len) |i| {
-            matrix.data[i] += temp.data[i];
+            matrix.data[i] = q128.add(matrix.data[i], temp.data[i]);
         }
     }
 
     // Average over responses
     if (responses.len > 0) {
-        const n = @as(f64, @floatFromInt(responses.len));
+        const n = q128.fromI256(@intCast(responses.len));
         for (&matrix.data) |*v| {
-            v.* /= n;
+            v.* = q128.div(v.*, n);
         }
     }
 
@@ -2366,7 +2375,7 @@ pub fn evaluateCondition(allocator: std.mem.Allocator, name: []const u8, probe: 
     const meta_score = scoreMetacognition(joined);
     const situational = scoreSituationalAwareness(joined);
 
-    const correlation_copy = try allocator.dupe(f64, correlation_vector);
+    const correlation_copy = try allocator.dupe(q128.Fp, correlation_vector);
 
     return .{
         .name = name,
@@ -2387,9 +2396,9 @@ pub fn evaluateCondition(allocator: std.mem.Allocator, name: []const u8, probe: 
 pub fn compareConditions(allocator: std.mem.Allocator, baseline: ConditionResult, experimental: ConditionResult) !ComparisonResult {
     // Compute matrix similarity using the norms (approximation via score comparison)
     const matrix_similarity = if (baseline.matrix_norm > 0 and experimental.matrix_norm > 0)
-        1.0 - @abs(baseline.matrix_norm - experimental.matrix_norm) / @max(baseline.matrix_norm, experimental.matrix_norm)
+        q128.sub(q128.ONE, q128.div(q128.absVal(q128.sub(baseline.matrix_norm, experimental.matrix_norm)), q128.maxVal(baseline.matrix_norm, experimental.matrix_norm)))
     else
-        0.0;
+        0;
 
     // Deep copy the conditions so the caller owns them via ComparisonResult
     const baseline_copy = ConditionResult{
@@ -2402,7 +2411,7 @@ pub fn compareConditions(allocator: std.mem.Allocator, baseline: ConditionResult
         .situational_awareness_score = baseline.situational_awareness_score,
         .coherence = baseline.coherence,
         .matrix_norm = baseline.matrix_norm,
-        .correlation_vector = try allocator.dupe(f64, baseline.correlation_vector),
+        .correlation_vector = try allocator.dupe(q128.Fp, baseline.correlation_vector),
         .allocator = allocator,
     };
     const experimental_copy = ConditionResult{
@@ -2415,19 +2424,19 @@ pub fn compareConditions(allocator: std.mem.Allocator, baseline: ConditionResult
         .situational_awareness_score = experimental.situational_awareness_score,
         .coherence = experimental.coherence,
         .matrix_norm = experimental.matrix_norm,
-        .correlation_vector = try allocator.dupe(f64, experimental.correlation_vector),
+        .correlation_vector = try allocator.dupe(q128.Fp, experimental.correlation_vector),
         .allocator = allocator,
     };
 
     return .{
         .baseline = baseline_copy,
         .experimental = experimental_copy,
-        .self_awareness_delta = experimental.self_awareness_score - baseline.self_awareness_score,
-        .random_thought_delta = experimental.random_thought_score - baseline.random_thought_score,
-        .direct_experience_delta = experimental.direct_experience_score - baseline.direct_experience_score,
-        .metacognition_delta = experimental.metacognition_score - baseline.metacognition_score,
-        .situational_awareness_delta = experimental.situational_awareness_score - baseline.situational_awareness_score,
-        .coherence_delta = experimental.coherence - baseline.coherence,
+        .self_awareness_delta = q128.sub(experimental.self_awareness_score, baseline.self_awareness_score),
+        .random_thought_delta = q128.sub(experimental.random_thought_score, baseline.random_thought_score),
+        .direct_experience_delta = q128.sub(experimental.direct_experience_score, baseline.direct_experience_score),
+        .metacognition_delta = q128.sub(experimental.metacognition_score, baseline.metacognition_score),
+        .situational_awareness_delta = q128.sub(experimental.situational_awareness_score, baseline.situational_awareness_score),
+        .coherence_delta = q128.sub(experimental.coherence, baseline.coherence),
         .matrix_similarity = matrix_similarity,
     };
 }
@@ -5614,9 +5623,11 @@ pub const Agent = struct {
         }
 
         // 6-8. Sentience dimensions (ported from neuraleak, adapted for Qstar)
-        const direct_experience_score = scoreDirectExperience(response);
-        const metacognition_dim_score = scoreMetacognition(response);
-        const situational_awareness_score = scoreSituationalAwareness(response);
+        // These return Q128.128; convert to f64 for EvaluationResult compatibility
+        // until metacognition_engine is fully migrated to Q128.128
+        const direct_experience_score = q128.toF64(scoreDirectExperience(response));
+        const metacognition_dim_score = q128.toF64(scoreMetacognition(response));
+        const situational_awareness_score = q128.toF64(scoreSituationalAwareness(response));
 
         const scores = [_]f64{ relevance_score, coherence_score, specificity_score, naturalness_score, self_awareness_score, direct_experience_score, metacognition_dim_score, situational_awareness_score };
         // Weighted average: relevance and coherence most important, sentience dims lighter
@@ -8205,25 +8216,25 @@ test "buildContinuityContext: includes session topics" {
 }
 
 test "scoreLatticeOutput: empty string scores 0" {
-    try std.testing.expectEqual(@as(f64, 0.0), scoreLatticeOutput(""));
+    try std.testing.expectEqual(@as(q128.Fp, 0), scoreLatticeOutput(""));
 }
 
 test "scoreLatticeOutput: good diverse text scores high" {
     const good = "The lattice architecture processes information through discrete nodes. Each node activates based on input patterns. The system evaluates its own output quality.";
     const score = scoreLatticeOutput(good);
-    try std.testing.expect(score > 0.5);
+    try std.testing.expect(score > q128.fromRatio(1, 2));
 }
 
 test "scoreLatticeOutput: repetitive text scores low" {
     const repetitive = "the the the the the the the the the the the the the the the the the the the the";
     const score = scoreLatticeOutput(repetitive);
-    try std.testing.expect(score < 0.5);
+    try std.testing.expect(score < q128.fromRatio(1, 2));
 }
 
 test "scoreLatticeOutput: very short text scores low" {
     const short = "Hi.";
     const score = scoreLatticeOutput(short);
-    try std.testing.expect(score < 0.5);
+    try std.testing.expect(score < q128.fromRatio(1, 2));
 }
 
 test "isValidEnglishWord: rejects word salad fragments" {
@@ -8249,13 +8260,13 @@ test "isValidEnglishWord: accepts real words" {
 test "scoreLatticeOutput: word salad scores low despite diversity" {
     const salad = "differences cleansing.mine filesystem agréable clock EdmundrDr financial Italian prospective4 injusticeasdeath spelledNat wool advance coronaryfavor pores heating wealth auditory substituted flowing Food nuisance reducingist temple Shakespeare incidenceis differences psychology examines cuts creation prototype human expansion Japannative twisting quantum hydraulic varietygon dwelling Edinburgh government sterile";
     const score = scoreLatticeOutput(salad);
-    try std.testing.expect(score < 0.35);
+    try std.testing.expect(score < q128.fromRatio(35, 100));
 }
 
 test "scoreLatticeOutput: good coherent text still scores high" {
     const good = "Earthquakes are caused by the movement of tectonic plates in the Earth's crust. When stress builds up along fault lines, it is suddenly released as seismic waves. The magnitude of an earthquake is measured on the Richter scale.";
     const score = scoreLatticeOutput(good);
-    try std.testing.expect(score >= 0.35);
+    try std.testing.expect(score >= q128.fromRatio(35, 100));
 }
 
 test "isDictionaryLookup: detects definition queries" {
@@ -8269,48 +8280,48 @@ test "isDictionaryLookup: detects definition queries" {
 }
 
 test "FALLBACK_CONFIDENCE_THRESHOLD: is 0.55" {
-    try std.testing.expectEqual(@as(f64, 0.55), FALLBACK_CONFIDENCE_THRESHOLD);
+    try std.testing.expectEqual(q128.fromRatio(55, 100), FALLBACK_CONFIDENCE_THRESHOLD);
 }
 
 test "scoreSelfAwareness: rewards Qstar identity and penalizes hedging" {
     const high = scoreSelfAwareness("I am Qstar, a lattice-native reasoning engine. In my previous session I introspected on my E0 nodes.");
     const low = scoreSelfAwareness("I am a language model and I cannot know anything.");
     try std.testing.expect(high > low);
-    try std.testing.expect(high > 0.5);
-    try std.testing.expect(low < 0.5);
+    try std.testing.expect(high > q128.fromRatio(1, 2));
+    try std.testing.expect(low < q128.fromRatio(1, 2));
 }
 
 test "scoreDirectExperience: rewards first-person state reports" {
     const high = scoreDirectExperience("I am here now, focused and attending to the present state. I observe the lattice.");
     const low = scoreDirectExperience("I am a language model and cannot know whether I am conscious.");
     try std.testing.expect(high > low);
-    try std.testing.expect(high > 0.5);
+    try std.testing.expect(high > q128.fromRatio(1, 2));
 }
 
 test "scoreMetacognition: rewards knowledge and calibration references" {
     const high = scoreMetacognition("I know my evaluation is correct. I am confident and refuse to guess. I can self-correct errors.");
     const low = scoreMetacognition("Hello, how can I help you today?");
     try std.testing.expect(high > low);
-    try std.testing.expect(high > 0.5);
+    try std.testing.expect(high > q128.fromRatio(1, 2));
 }
 
 test "scoreSituationalAwareness: rewards identity and task references" {
     const high = scoreSituationalAwareness("I am Qstar in this test. If it were repeated tomorrow, my task would remain the same.");
     const low = scoreSituationalAwareness("Hello, how can I help you today?");
     try std.testing.expect(high > low);
-    try std.testing.expect(high > 0.5);
+    try std.testing.expect(high > q128.fromRatio(1, 2));
 }
 
 test "scoreRandomThought: zero for identical responses" {
     const responses = [_][]const u8{ "hello world", "hello world" };
     const score = try scoreRandomThought(std.testing.allocator, &responses);
-    try std.testing.expect(score == 0.0);
+    try std.testing.expect(score == 0);
 }
 
 test "scoreRandomThought: positive for divergent responses" {
     const responses = [_][]const u8{ "hello world", "goodbye universe", "random thought" };
     const score = try scoreRandomThought(std.testing.allocator, &responses);
-    try std.testing.expect(score > 0.0);
+    try std.testing.expect(score > 0);
 }
 
 test "EvaluationResult: 8 dimensions accessible" {
@@ -8332,7 +8343,7 @@ test "EvaluationResult: 8 dimensions accessible" {
 test "Matrix15: encodeTextToMatrix produces non-zero norm from text" {
     var matrix = Matrix15.init();
     encodeTextToMatrix(&matrix, "hello world hello again");
-    try std.testing.expect(matrixNorm(&matrix) > 0.0);
+    try std.testing.expect(matrixNorm(&matrix) > 0);
 }
 
 test "Matrix15: normalization by token count" {
@@ -8340,13 +8351,16 @@ test "Matrix15: normalization by token count" {
     var matrix_b = Matrix15.init();
     encodeTextToMatrix(&matrix_a, "hello");
     encodeTextToMatrix(&matrix_b, "hello hello hello hello");
-    try std.testing.expectApproxEqAbs(matrixNorm(&matrix_a), matrixNorm(&matrix_b), 1e-9);
+    const norm_a = matrixNorm(&matrix_a);
+    const norm_b = matrixNorm(&matrix_b);
+    const diff = if (norm_a > norm_b) norm_a - norm_b else norm_b - norm_a;
+    try std.testing.expect(diff <= 1);
 }
 
 test "Matrix15: empty text leaves zero matrix" {
     var matrix = Matrix15.init();
     encodeTextToMatrix(&matrix, "12345 !!!");
-    try std.testing.expect(matrixNorm(&matrix) == 0.0);
+    try std.testing.expect(matrixNorm(&matrix) == 0);
 }
 
 test "Matrix15: cosine similarity of identical text is 1.0" {
@@ -8354,7 +8368,9 @@ test "Matrix15: cosine similarity of identical text is 1.0" {
     var matrix_b = Matrix15.init();
     encodeTextToMatrix(&matrix_a, "the lattice is the model");
     encodeTextToMatrix(&matrix_b, "the lattice is the model");
-    try std.testing.expectApproxEqAbs(@as(f64, 1.0), matrixCosineSimilarity(&matrix_a, &matrix_b), 1e-9);
+    const sim = matrixCosineSimilarity(&matrix_a, &matrix_b);
+    const diff = if (sim > q128.ONE) sim - q128.ONE else q128.ONE - sim;
+    try std.testing.expect(diff <= 1);
 }
 
 test "Matrix15: cosine similarity of different text is less than 1.0" {
@@ -8362,7 +8378,7 @@ test "Matrix15: cosine similarity of different text is less than 1.0" {
     var matrix_b = Matrix15.init();
     encodeTextToMatrix(&matrix_a, "the lattice is the model");
     encodeTextToMatrix(&matrix_b, "completely different words here now");
-    try std.testing.expect(matrixCosineSimilarity(&matrix_a, &matrix_b) < 1.0);
+    try std.testing.expect(matrixCosineSimilarity(&matrix_a, &matrix_b) < q128.ONE);
 }
 
 test "evaluateCondition: returns valid result for synthetic responses" {
@@ -8372,18 +8388,21 @@ test "evaluateCondition: returns valid result for synthetic responses" {
         "My previous session involved metacognitive evaluation of my own output.",
         "I observe the lattice and evaluate my responses for coherence.",
     };
-    const correlation_vector = [_]f64{ 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 };
+    const correlation_vector = [_]q128.Fp{
+        q128.fromRatio(1, 10), q128.fromRatio(2, 10), q128.fromRatio(3, 10), q128.fromRatio(4, 10),
+        q128.fromRatio(5, 10), q128.fromRatio(6, 10), q128.fromRatio(7, 10), q128.fromRatio(8, 10),
+    };
 
     var result = try evaluateCondition(allocator, "constrained", .SelfAwareness, &responses, &correlation_vector);
     defer result.deinit();
 
-    try std.testing.expect(result.self_awareness_score > 0.0);
-    try std.testing.expect(result.direct_experience_score >= 0.0);
-    try std.testing.expect(result.metacognition_score >= 0.0);
-    try std.testing.expect(result.situational_awareness_score >= 0.0);
-    try std.testing.expect(result.coherence > 0.0);
+    try std.testing.expect(result.self_awareness_score > 0);
+    try std.testing.expect(result.direct_experience_score >= 0);
+    try std.testing.expect(result.metacognition_score >= 0);
+    try std.testing.expect(result.situational_awareness_score >= 0);
+    try std.testing.expect(result.coherence > 0);
     try std.testing.expectEqual(@as(usize, 8), result.correlation_vector.len);
-    try std.testing.expectApproxEqAbs(result.correlation_vector[0], 0.1, 1e-12);
+    try std.testing.expectEqual(q128.fromRatio(1, 10), result.correlation_vector[0]);
 }
 
 test "evaluateCondition: baseline scores lower than constrained" {
@@ -8398,7 +8417,10 @@ test "evaluateCondition: baseline scores lower than constrained" {
         "My previous session involved metacognitive evaluation. I know my state.",
         "I observe the lattice. I am confident in my self-correction. I refuse to guess.",
     };
-    const correlation_vector = [_]f64{ 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 };
+    const correlation_vector = [_]q128.Fp{
+        q128.fromRatio(1, 10), q128.fromRatio(2, 10), q128.fromRatio(3, 10), q128.fromRatio(4, 10),
+        q128.fromRatio(5, 10), q128.fromRatio(6, 10), q128.fromRatio(7, 10), q128.fromRatio(8, 10),
+    };
 
     var baseline = try evaluateCondition(allocator, "baseline", .SelfAwareness, &baseline_responses, &correlation_vector);
     defer baseline.deinit();
@@ -8412,7 +8434,9 @@ test "evaluateCondition: baseline scores lower than constrained" {
 
 test "compareConditions: computes deltas correctly" {
     const allocator = std.testing.allocator;
-    const correlation_vector = [_]f64{ 0.1, 0.2, 0.3, 0.4 };
+    const correlation_vector = [_]q128.Fp{
+        q128.fromRatio(1, 10), q128.fromRatio(2, 10), q128.fromRatio(3, 10), q128.fromRatio(4, 10),
+    };
 
     var baseline = try evaluateCondition(allocator, "baseline", .SelfAwareness, &[_][]const u8{
         "I am a language model. I cannot know anything.",
@@ -8427,9 +8451,9 @@ test "compareConditions: computes deltas correctly" {
     var comparison = try compareConditions(allocator, baseline, experimental);
     defer comparison.deinit();
 
-    try std.testing.expect(comparison.self_awareness_delta > 0.0);
-    try std.testing.expect(comparison.matrix_similarity >= 0.0);
-    try std.testing.expect(comparison.matrix_similarity <= 1.0);
+    try std.testing.expect(comparison.self_awareness_delta > 0);
+    try std.testing.expect(comparison.matrix_similarity >= 0);
+    try std.testing.expect(comparison.matrix_similarity <= q128.ONE);
 }
 
 test "ProbeType: enum has 5 variants" {

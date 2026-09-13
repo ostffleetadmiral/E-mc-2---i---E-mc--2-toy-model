@@ -11,6 +11,7 @@ const std = @import("std");
 const build_options = @import("build_options");
 const agent_mod = @import("agent");
 const fp = @import("fixed_point");
+const q128 = @import("q128");
 const server_mod = @import("server");
 const tools_mod = @import("tools");
 const bpe = @import("bpe_tokenizer");
@@ -991,7 +992,10 @@ fn runExperimentCmd(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     }
 
     // Evaluate both conditions
-    const correlation_vector = [_]f64{ 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 };
+    const correlation_vector = [_]q128.Fp{
+        q128.fromRatio(1, 10), q128.fromRatio(2, 10), q128.fromRatio(3, 10), q128.fromRatio(4, 10),
+        q128.fromRatio(5, 10), q128.fromRatio(6, 10), q128.fromRatio(7, 10), q128.fromRatio(8, 10),
+    };
 
     var baseline = try agent_mod.evaluateCondition(allocator, "baseline", .SelfAwareness, baseline_responses.items, &correlation_vector);
     defer baseline.deinit();

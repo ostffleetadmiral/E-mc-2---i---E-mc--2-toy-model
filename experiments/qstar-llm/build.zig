@@ -27,6 +27,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const q128_mod = b.addModule("q128", .{
+        .root_source_file = b.path("src/q128.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     const hardware_detect_mod = b.addModule("hardware_detect", .{
         .root_source_file = b.path("src/hardware_detect.zig"),
         .target = target,
@@ -230,6 +235,7 @@ pub fn build(b: *std.Build) void {
     agent_mod.addImport("state_store", state_store_mod);
     agent_mod.addImport("face_sync", face_sync_mod);
     agent_mod.addImport("fixed_point", fixed_point_mod);
+    agent_mod.addImport("q128", q128_mod);
     agent_mod.addImport("knowledge_graph", kg_mod);
     agent_mod.addImport("memory", memory_mod);
     agent_mod.addImport("perception", perception_mod);
@@ -1185,6 +1191,7 @@ pub fn build(b: *std.Build) void {
     agent_tests.root_module.addImport("state_store", state_store_mod);
     agent_tests.root_module.addImport("face_sync", face_sync_mod);
     agent_tests.root_module.addImport("fixed_point", fixed_point_mod);
+    agent_tests.root_module.addImport("q128", q128_mod);
     const agent_kg_mod = b.addModule("knowledge_graph", .{
         .root_source_file = b.path("src/knowledge_graph.zig"),
         .target = target,
@@ -1403,6 +1410,7 @@ pub fn build(b: *std.Build) void {
     cli_mod.addImport("state_store", state_store_mod);
     cli_mod.addImport("face_sync", face_sync_mod);
     cli_mod.addImport("fixed_point", fixed_point_mod);
+    cli_mod.addImport("q128", q128_mod);
     const cli_kg_mod = b.addModule("knowledge_graph", .{
         .root_source_file = b.path("src/knowledge_graph.zig"),
         .target = target,
@@ -1580,6 +1588,7 @@ pub fn build(b: *std.Build) void {
     });
     cli_exe.root_module.addImport("agent", cli_mod);
     cli_exe.root_module.addImport("fixed_point", fixed_point_mod);
+    cli_exe.root_module.addImport("q128", q128_mod);
     cli_exe.root_module.addImport("server", cli_server_mod);
     cli_exe.root_module.addImport("tools", cli_tools_mod);
     cli_exe.root_module.addImport("bpe_tokenizer", bpe_mod);
@@ -1667,6 +1676,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         ob_agent_mod.addImport("fixed_point", fixed_point_mod);
+        ob_agent_mod.addImport("q128", q128_mod);
         ob_agent_mod.addImport("bpe_tokenizer", bpe_mod);
         ob_agent_mod.addImport("sampling", sampling_mod);
         ob_agent_mod.addImport("state_store", state_store_mod);
@@ -1797,6 +1807,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         au_agent_mod.addImport("fixed_point", fixed_point_mod);
+        au_agent_mod.addImport("q128", q128_mod);
         au_agent_mod.addImport("bpe_tokenizer", bpe_mod);
         au_agent_mod.addImport("sampling", sampling_mod);
         au_agent_mod.addImport("state_store", state_store_mod);
@@ -1901,6 +1912,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         ma_agent_mod.addImport("fixed_point", fixed_point_mod);
+        ma_agent_mod.addImport("q128", q128_mod);
         ma_agent_mod.addImport("bpe_tokenizer", bpe_mod);
         ma_agent_mod.addImport("sampling", sampling_mod);
         ma_agent_mod.addImport("state_store", state_store_mod);
