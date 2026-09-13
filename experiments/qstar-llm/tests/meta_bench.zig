@@ -256,7 +256,7 @@ fn judgeResponse(allocator: std.mem.Allocator, config: MetaBenchConfig, prompt: 
 
 fn runQstar(allocator: std.mem.Allocator, agent: *agent_mod.Agent, prompt: []const u8) !ResponseResult {
     var timer = try std.time.Timer.start();
-    const response = try agent.generateWithReflection(prompt, allocator);
+    const response = try agent.generateWithReflection(prompt, allocator, null);
     const elapsed = timer.read();
     const tc = response.len / 4;
     const tps: f64 = if (elapsed > 0) @as(f64, @floatFromInt(tc)) / (@as(f64, @floatFromInt(elapsed)) / 1e9) else 0.0;
@@ -280,28 +280,61 @@ fn initAgent(allocator: std.mem.Allocator, config: MetaBenchConfig) !*agent_mod.
     var agent = try allocator.create(agent_mod.Agent);
     const fp = @import("fixed_point");
     agent.* = agent_mod.Agent.init(allocator, 0, fp.ONE);
+
+    // Attach neural LM (Qwen3-0.6B ONNX) for hybrid mode
+    const neural_lm = @import("neural_lm");
+    const onnx = @import("onnx_runtime");
+    if (onnx.OnnxContext.isAvailable()) {
+        const model_path: [:0]const u8 = "models/qwen3-0.6b/onnx/model_q4f16.onnx";
+        if (std.fs.cwd().access(model_path, .{})) |_| {
+            const lm = allocator.create(neural_lm.NeuralLM) catch null;
+            if (lm) |lmp| {
+                const init_result = neural_lm.NeuralLM.init(allocator, model_path) catch null;
+                if (init_result) |initialized| {
+                    lmp.* = initialized;
+                    agent.attachNeuralLM(lmp);
+                    std.debug.print("  Neural LM: attached (hybrid mode)\n", .{});
+                } else {
+                    allocator.destroy(lmp);
+                }
+            }
+        } else |_| {}
+    }
+
     if (!config.no_corpus) {
-        if (config.corpus_limit_mb > 0) {
-            // Load only first N MB of corpus for faster startup
-            const file = std.fs.cwd().openFile(config.corpus_path, .{}) catch |err| {
-                std.debug.print("WARNING: Could not open corpus: {s}\n", .{@errorName(err)});
-                return agent;
+        // Prefer .qsc streaming (fast, bounded memory) over raw .txt full-load
+        const qsc_path = "qstar_corpus.qsc";
+        if (std.fs.cwd().access(qsc_path, .{})) |_| {
+            const sentences = training.streamCorpusFromQsc(agent, qsc_path) catch |err| blk: {
+                std.debug.print("WARNING: .qsc stream failed: {s}, falling back\n", .{@errorName(err)});
+                break :blk 0;
             };
-            defer file.close();
-            const limit = config.corpus_limit_mb * 1024 * 1024;
-            var limited_reader = std.io.limitedReader(file.reader(), limit);
-            _ = agent.loadCorpus(limited_reader.reader()) catch |err| {
-                std.debug.print("WARNING: Could not load corpus: {s}\n", .{@errorName(err)});
-            };
-        } else {
-            _ = training.loadCorpusFromFile(agent, config.corpus_path) catch |err| {
-                std.debug.print("WARNING: Could not load corpus: {s}\n", .{@errorName(err)});
-            };
+            std.debug.print("  Corpus: streamed {d} sentences from {s}\n", .{ sentences, qsc_path });
+        } else |_| {
+            if (config.corpus_limit_mb > 0) {
+                const file = std.fs.cwd().openFile(config.corpus_path, .{}) catch |err| {
+                    std.debug.print("WARNING: Could not open corpus: {s}\n", .{@errorName(err)});
+                    return agent;
+                };
+                defer file.close();
+                const limit = config.corpus_limit_mb * 1024 * 1024;
+                var limited_reader = std.io.limitedReader(file.reader(), limit);
+                _ = agent.loadCorpus(limited_reader.reader()) catch |err| {
+                    std.debug.print("WARNING: Could not load corpus: {s}\n", .{@errorName(err)});
+                };
+            } else {
+                _ = training.loadCorpusFromFile(agent, config.corpus_path) catch |err| {
+                    std.debug.print("WARNING: Could not load corpus: {s}\n", .{@errorName(err)});
+                };
+            }
         }
     }
     if (bpe.Tokenizer.loadQwenTokenizer(allocator, "models/qwen1.5-0.5b-chat")) |tok| {
         agent.attachTokenizer(tok);
-        agent.buildBigramModelFromCombined() catch {};
+        // Skip bigram model when neural LM is attached (redundant, saves 20s)
+        if (agent.neural_lm == null) {
+            agent.buildBigramModelFromCombined() catch {};
+        }
     } else |_| {}
     _ = agent.loadKnowledgeGraph("qstar_kg.bin") catch 0;
     agent.loadDynamicRoutes("datasets/dynamic_routes.bin") catch |err| {
@@ -476,8 +509,8 @@ pub fn main() !void {
     if (total > 0) {
         std.debug.print("Qstar win rate: {d:.1}%\n", .{@as(f64, @floatFromInt(qwins)) / @as(f64, @floatFromInt(total)) * 100.0});
     }
-    const q_avg = q128.div(qsum, q128.fromInt(@as(i256, @intCast(prompts.len))));
-    const o_avg = q128.div(osum, q128.fromInt(@as(i256, @intCast(prompts.len))));
+    const q_avg = q128.div(qsum, q128.fromInt(@as(i64, @intCast(prompts.len))));
+    const o_avg = q128.div(osum, q128.fromInt(@as(i64, @intCast(prompts.len))));
     std.debug.print("Qstar avg: {d:.3}, OpenAI avg: {d:.3}\n", .{ q128.toF64(q_avg), q128.toF64(o_avg) });
     std.debug.print("Failed (training feed): {d}\n", .{failed.items.len});
 
@@ -528,7 +561,7 @@ pub fn main() !void {
             std.debug.print("  [{d}/{d}] Training on: \"{s}\"... ", .{ idx + 1, training_entries.items.len, entry.prompt[0..@min(entry.prompt.len, 60)] });
 
             // For failed prompts (Qstar lost), also fetch fresh OpenAI teacher response
-            if (entry.best_score < 0.5 and !config.no_openai) {
+            if (q128.toF64(entry.best_score) < 0.5 and !config.no_openai) {
                 const teacher_learned = training.trainOnPrompt(agent, entry.prompt, train_cfg, allocator) catch 0;
                 learned_total += teacher_learned;
                 std.debug.print("teacher={d} sentences, ", .{teacher_learned});

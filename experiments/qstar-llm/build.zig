@@ -3068,7 +3068,83 @@ pub fn build(b: *std.Build) void {
         mb_tools_mod.addImport("geo_math", mb_geo_math_mod);
         mb_agent_mod.addImport("tools", mb_tools_mod);
 
+        // Missing math/science modules needed by agent.zig
+        const mb_octonion_mod = b.addModule("octonion_math", .{
+            .root_source_file = b.path("src/octonion_math.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        mb_agent_mod.addImport("octonion_math", mb_octonion_mod);
+        const mb_hw_bridge_mod = b.addModule("hw_bridge", .{
+            .root_source_file = b.path("src/hw_bridge.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        mb_hw_bridge_mod.addImport("fixed_point", fixed_point_mod);
+        mb_hw_bridge_mod.addImport("lattice", mb_lat_mod);
+        mb_agent_mod.addImport("hw_bridge", mb_hw_bridge_mod);
+        const mb_e8_roots_mod = b.addModule("e8_roots", .{
+            .root_source_file = b.path("src/e8_roots.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        mb_agent_mod.addImport("e8_roots", mb_e8_roots_mod);
+        const mb_jordan_mod = b.addModule("jordan_algebra", .{
+            .root_source_file = b.path("src/jordan_algebra.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        mb_agent_mod.addImport("jordan_algebra", mb_jordan_mod);
+        const mb_so10_mod = b.addModule("so10", .{
+            .root_source_file = b.path("src/so10.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        mb_agent_mod.addImport("so10", mb_so10_mod);
+        const mb_holo_codec_mod = b.addModule("holo_codec", .{
+            .root_source_file = b.path("src/holo_codec.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        mb_agent_mod.addImport("holo_codec", mb_holo_codec_mod);
+        const mb_corpus_store_mod = b.addModule("corpus_store", .{
+            .root_source_file = b.path("src/corpus_store.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        mb_corpus_store_mod.addImport("compress", compress_mod);
+        mb_agent_mod.addImport("corpus_store", mb_corpus_store_mod);
+        mb_metacog_mod.addImport("hw_bridge", mb_hw_bridge_mod);
+
         mb_exe.root_module.addImport("agent", mb_agent_mod);
+
+        // Neural LM + ONNX runtime for hybrid mode
+        const mb_c_ffi_mod = b.addModule("c_ffi", .{
+            .root_source_file = b.path("src/c_ffi.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        });
+        const mb_onnx_mod = b.addModule("onnx_runtime", .{
+            .root_source_file = b.path("src/vision/onnx_runtime.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        });
+        mb_onnx_mod.addImport("c_ffi", mb_c_ffi_mod);
+        const mb_neural_mod = b.addModule("neural_lm", .{
+            .root_source_file = b.path("src/neural_lm.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        });
+        mb_neural_mod.addImport("onnx_runtime", mb_onnx_mod);
+        mb_neural_mod.addImport("c_ffi", mb_c_ffi_mod);
+        mb_agent_mod.addImport("neural_lm", mb_neural_mod);
+        mb_agent_mod.addImport("onnx_runtime", mb_onnx_mod);
+        mb_agent_mod.addImport("c_ffi", mb_c_ffi_mod);
+        mb_exe.root_module.addImport("neural_lm", mb_neural_mod);
+        mb_exe.root_module.addImport("onnx_runtime", mb_onnx_mod);
 
         // Ollama client
         const mb_ollama_mod = b.addModule("ollama_client", .{
