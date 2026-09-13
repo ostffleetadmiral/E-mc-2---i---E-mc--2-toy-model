@@ -5,6 +5,7 @@
 //! Used by the corpus training pipeline to ingest large document sets.
 
 const std = @import("std");
+const q128 = @import("q128");
 
 pub const DocStats = struct {
     files_scanned: usize = 0,
@@ -24,8 +25,91 @@ pub const DocEntry = struct {
     }
 };
 
+/// Directories that should never be ingested (virtual envs, caches, VCS, build artifacts).
+pub const EXCLUDED_DIRS = [_][]const u8{
+    ".venv",
+    "__pycache__",
+    "node_modules",
+    ".git",
+    "venv",
+    "env",
+    ".env",
+    ".zig-cache",
+    "target",
+    "build",
+    "dist",
+    ".cache",
+};
+
+/// File extensions that should never be ingested (binaries, archives, media).
+pub const EXCLUDED_EXTENSIONS = [_][]const u8{
+    ".pyc",
+    ".pyo",
+    ".so",
+    ".dll",
+    ".exe",
+    ".bin",
+    ".mp4",
+    ".mp3",
+    ".jpg",
+    ".png",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".pdf",
+    ".docx",
+    ".xlsx",
+    ".pptx",
+    ".class",
+    ".o",
+    ".obj",
+    ".wasm",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    ".eot",
+    ".ico",
+    ".gif",
+    ".bmp",
+    ".tiff",
+    ".webp",
+    ".mpg",
+    ".mpeg",
+    ".avi",
+    ".mov",
+    ".flv",
+    ".wav",
+    ".flac",
+    ".aac",
+    ".ogg",
+    ".opus",
+    ".m4a",
+    ".m4v",
+    ".mkv",
+    ".webm",
+};
+
+/// Check if a directory name should be excluded from ingestion.
+pub fn isExcludedDir(name: []const u8) bool {
+    for (EXCLUDED_DIRS) |excluded| {
+        if (std.mem.eql(u8, name, excluded)) return true;
+    }
+    return false;
+}
+
+/// Check if a file extension is explicitly excluded (binary/media/archive).
+pub fn isExcludedExtension(name: []const u8) bool {
+    for (EXCLUDED_EXTENSIONS) |ext| {
+        if (std.mem.endsWith(u8, name, ext)) return true;
+    }
+    return false;
+}
+
 /// Check if a file extension is supported.
 fn isSupportedFile(name: []const u8) bool {
+    // Reject excluded extensions first (defense-in-depth)
+    if (isExcludedExtension(name)) return false;
     if (std.mem.endsWith(u8, name, ".md")) return true;
     if (std.mem.endsWith(u8, name, ".txt")) return true;
     if (std.mem.endsWith(u8, name, ".tex")) return true;
@@ -93,6 +177,8 @@ fn walkDir(allocator: std.mem.Allocator, dir_path: []const u8, paths: *std.Array
     var it = dir.iterate();
     while (try it.next()) |entry| {
         if (entry.name[0] == '.') continue; // Skip hidden files/dirs
+        // Skip explicitly excluded directories (venv, __pycache__, node_modules, etc.)
+        if (entry.kind == .directory and isExcludedDir(entry.name)) continue;
         const full_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir_path, entry.name });
         if (entry.kind == .directory) {
             walkDir(allocator, full_path, paths) catch |err| {
@@ -305,7 +391,7 @@ pub fn extractSentences(
     allocator: std.mem.Allocator,
     text: []const u8,
     min_len: usize,
-    min_alpha_ratio: f64,
+    min_alpha_ratio: q128.Fp,
     out_sentences: *std.ArrayList([]const u8),
 ) !void {
     var start: usize = 0;
@@ -318,12 +404,12 @@ pub fn extractSentences(
             const trimmed = std.mem.trim(u8, sent_raw, " \t\r\n");
 
             if (trimmed.len >= min_len) {
-                // Check alpha ratio
+                // Check alpha ratio (Q128.128)
                 var alpha_count: usize = 0;
                 for (trimmed) |c| {
                     if (std.ascii.isAlphabetic(c) or c == ' ' or c == ',' or c == ';' or c == ':' or c == '\'' or c == '-') alpha_count += 1;
                 }
-                const ratio = @as(f64, @floatFromInt(alpha_count)) / @as(f64, @floatFromInt(trimmed.len));
+                const ratio = q128.fromRatio(@as(i256, @intCast(alpha_count)), @as(i256, @intCast(trimmed.len)));
                 if (ratio >= min_alpha_ratio) {
                     try out_sentences.append(trimmed);
                 }
@@ -343,7 +429,7 @@ pub fn extractSentences(
             for (trimmed) |c| {
                 if (std.ascii.isAlphabetic(c) or c == ' ' or c == ',' or c == ';' or c == ':' or c == '\'' or c == '-') alpha_count += 1;
             }
-            const ratio = @as(f64, @floatFromInt(alpha_count)) / @as(f64, @floatFromInt(trimmed.len));
+            const ratio = q128.fromRatio(@as(i256, @intCast(alpha_count)), @as(i256, @intCast(trimmed.len)));
             if (ratio >= min_alpha_ratio) {
                 try out_sentences.append(trimmed);
             }
@@ -364,7 +450,7 @@ pub fn processFile(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     var sentences = std.ArrayList([]const u8).init(allocator);
     defer sentences.deinit();
 
-    try extractSentences(allocator, cleaned, 15, 0.5, &sentences);
+    try extractSentences(allocator, cleaned, 15, q128.fromRatio(1, 2), &sentences);
 
     // Join sentences with ". " and add trailing "."
     var result = std.ArrayList(u8).init(allocator);
@@ -431,6 +517,134 @@ test "doc_loader: isSupportedFile recognizes extensions" {
     try std.testing.expect(!isSupportedFile("binary.bin"));
 }
 
+test "doc_loader: isExcludedDir rejects known excluded dirs" {
+    try std.testing.expect(isExcludedDir(".venv"));
+    try std.testing.expect(isExcludedDir("__pycache__"));
+    try std.testing.expect(isExcludedDir("node_modules"));
+    try std.testing.expect(isExcludedDir(".git"));
+    try std.testing.expect(isExcludedDir("venv"));
+    try std.testing.expect(isExcludedDir("env"));
+    try std.testing.expect(isExcludedDir(".env"));
+    try std.testing.expect(isExcludedDir(".zig-cache"));
+    try std.testing.expect(isExcludedDir("target"));
+    try std.testing.expect(isExcludedDir("build"));
+    try std.testing.expect(isExcludedDir("dist"));
+    try std.testing.expect(isExcludedDir(".cache"));
+}
+
+test "doc_loader: isExcludedDir accepts normal dirs" {
+    try std.testing.expect(!isExcludedDir("datasets"));
+    try std.testing.expect(!isExcludedDir("academic"));
+    try std.testing.expect(!isExcludedDir("gutenberg"));
+    try std.testing.expect(!isExcludedDir("programming"));
+    try std.testing.expect(!isExcludedDir("wikipedia"));
+    try std.testing.expect(!isExcludedDir("dictionaries"));
+    try std.testing.expect(!isExcludedDir("src"));
+    try std.testing.expect(!isExcludedDir("tests"));
+}
+
+test "doc_loader: isExcludedExtension rejects binary/media/archive files" {
+    try std.testing.expect(isExcludedExtension("module.pyc"));
+    try std.testing.expect(isExcludedExtension("lib.so"));
+    try std.testing.expect(isExcludedExtension("app.exe"));
+    try std.testing.expect(isExcludedExtension("routes.bin"));
+    try std.testing.expect(isExcludedExtension("video.mp4"));
+    try std.testing.expect(isExcludedExtension("audio.mp3"));
+    try std.testing.expect(isExcludedExtension("photo.jpg"));
+    try std.testing.expect(isExcludedExtension("archive.zip"));
+    try std.testing.expect(isExcludedExtension("data.tar"));
+    try std.testing.expect(isExcludedExtension("backup.gz"));
+    try std.testing.expect(isExcludedExtension("doc.pdf"));
+}
+
+test "doc_loader: isExcludedExtension accepts text files" {
+    try std.testing.expect(!isExcludedExtension("readme.md"));
+    try std.testing.expect(!isExcludedExtension("notes.txt"));
+    try std.testing.expect(!isExcludedExtension("paper.tex"));
+    try std.testing.expect(!isExcludedExtension("data.json"));
+    try std.testing.expect(!isExcludedExtension("script.py"));
+    try std.testing.expect(!isExcludedExtension("main.zig"));
+}
+
+test "doc_loader: isSupportedFile rejects excluded extensions" {
+    // Even though .py is supported, .pyc should be rejected
+    try std.testing.expect(isSupportedFile("script.py"));
+    try std.testing.expect(!isSupportedFile("module.pyc"));
+    try std.testing.expect(!isSupportedFile("library.so"));
+    try std.testing.expect(!isSupportedFile("binary.bin"));
+    try std.testing.expect(!isSupportedFile("video.mp4"));
+    try std.testing.expect(!isSupportedFile("archive.zip"));
+    try std.testing.expect(!isSupportedFile("document.pdf"));
+}
+
+test "doc_loader: extractSentences with Q128.128 alpha ratio" {
+    const allocator = std.testing.allocator;
+    var sentences = std.ArrayList([]const u8).init(allocator);
+    defer sentences.deinit();
+
+    // High alpha ratio text should pass
+    const text = "This is a valid sentence with enough words. 12345678901234567890. Another good sentence here with words.";
+    try extractSentences(allocator, text, 15, q128.fromRatio(1, 2), &sentences);
+
+    // Should have at least 2 valid sentences (the all-numeric one should fail alpha ratio)
+    try std.testing.expect(sentences.items.len >= 2);
+    for (sentences.items) |s| {
+        try std.testing.expect(s.len >= 15);
+    }
+}
+
+test "doc_loader: extractSentences with strict Q128.128 alpha ratio" {
+    const allocator = std.testing.allocator;
+    var sentences = std.ArrayList([]const u8).init(allocator);
+    defer sentences.deinit();
+
+    // With 90% alpha ratio threshold, only very text-heavy sentences pass
+    const text = "This sentence contains mostly alphabetic characters and should pass easily here.";
+    try extractSentences(allocator, text, 15, q128.fromRatio(9, 10), &sentences);
+
+    // Should have at least 1 valid sentence
+    try std.testing.expect(sentences.items.len >= 1);
+}
+
+test "doc_loader: collectFilePaths skips excluded directories" {
+    const allocator = std.testing.allocator;
+    // Create a temporary directory structure with excluded dirs
+    const tmp_base = "/tmp/test_doc_loader_exclusion";
+    defer std.fs.cwd().deleteTree(tmp_base) catch {};
+
+    // Create directories
+    try std.fs.cwd().makePath(tmp_base ++ "/valid_subdir");
+    try std.fs.cwd().makePath(tmp_base ++ "/__pycache__");
+    try std.fs.cwd().makePath(tmp_base ++ "/node_modules");
+
+    // Create files
+    createTestFile(tmp_base ++ "/valid.md", "# Valid content") catch {};
+    createTestFile(tmp_base ++ "/valid_subdir/nested.txt", "Nested text content") catch {};
+    createTestFile(tmp_base ++ "/__pycache__/cached.pyc", "cached binary") catch {};
+    createTestFile(tmp_base ++ "/node_modules/lib.js", "module.exports = 1;") catch {};
+
+    var paths = try collectFilePaths(allocator, tmp_base);
+    defer {
+        for (paths.items) |p| allocator.free(p);
+        paths.deinit();
+    }
+
+    // Should find valid.md and nested.txt but NOT files in __pycache__ or node_modules
+    try std.testing.expectEqual(@as(usize, 2), paths.items.len);
+
+    // Verify none of the paths contain excluded dirs
+    for (paths.items) |path| {
+        try std.testing.expect(std.mem.indexOf(u8, path, "__pycache__") == null);
+        try std.testing.expect(std.mem.indexOf(u8, path, "node_modules") == null);
+    }
+}
+
+fn createTestFile(path: []const u8, content: []const u8) !void {
+    var file = try std.fs.cwd().createFile(path, .{});
+    defer file.close();
+    try file.writeAll(content);
+}
+
 test "doc_loader: stripMarkdown removes code blocks" {
     const allocator = std.testing.allocator;
     const input = "Before\n```zig\nconst x = 1;\n```\nAfter";
@@ -468,7 +682,7 @@ test "doc_loader: extractSentences filters by min length and alpha ratio" {
     defer sentences.deinit();
 
     const text = "This is a valid sentence with enough words. Short. Another good sentence here with words.";
-    try extractSentences(allocator, text, 15, 0.5, &sentences);
+    try extractSentences(allocator, text, 15, q128.fromRatio(1, 2), &sentences);
 
     try std.testing.expect(sentences.items.len >= 2);
     for (sentences.items) |s| {

@@ -15,6 +15,7 @@ const openai = @import("openai_client");
 const env_loader = @import("env_loader");
 const training = @import("training");
 const bpe = @import("bpe_tokenizer");
+const q128 = @import("q128");
 
 const Config = struct {
     num_prompts: usize = 100,

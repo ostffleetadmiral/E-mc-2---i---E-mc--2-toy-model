@@ -14,6 +14,7 @@ const ollama = @import("ollama_client");
 const openai = @import("openai_client");
 const doc_loader = @import("doc_loader");
 const corpus_store = @import("corpus_store");
+const q128 = @import("q128");
 const dyn_routes = agent_mod.dyn_routes;
 const mc_engine = agent_mod.mc_engine;
 
@@ -329,7 +330,7 @@ pub fn trainAndCreateRoute(
     agent: *agent_mod.Agent,
     prompt: []const u8,
     best_response: []const u8,
-    response_score: f64,
+    response_score: q128.Fp,
     allocator: std.mem.Allocator,
 ) !usize {
     _ = allocator;
@@ -339,7 +340,7 @@ pub fn trainAndCreateRoute(
 
     // Skip route creation for very low quality responses (even from teacher)
     // This prevents registering garbled or irrelevant content as routes
-    if (response_score < 0.3) return learned;
+    if (response_score < q128.fromRatio(3, 10)) return learned;
 
     // Extract keywords from the prompt for route matching
     var kws: [dyn_routes.MAX_KEYWORDS][]const u8 = undefined;
@@ -1698,6 +1699,144 @@ test "training: loadCorpusFromFile auto-detects .qsc container" {
     try std.testing.expect(std.mem.indexOf(u8, agent.dynamic_corpus.items, "Fact number 49") != null);
 }
 
+test "training: FailureRecord initialization with Q128.128 fields" {
+    const record = FailureRecord{
+        .prompt = "What is quantum entanglement?",
+        .qstar_score = q128.fromRatio(3, 10),
+        .openai_score = q128.fromRatio(8, 10),
+        .qstar_response_preview = "Entanglement is a quantum phenomenon...",
+        .judge_naturalness = q128.fromRatio(5, 10),
+        .judge_relevance = q128.fromRatio(2, 10),
+        .judge_engagement = q128.fromRatio(4, 10),
+        .judge_factual_accuracy = q128.fromRatio(3, 10),
+        .judge_originality = q128.fromRatio(6, 10),
+        .judge_personalization = q128.fromRatio(7, 10),
+    };
+    try std.testing.expectEqualStrings("What is quantum entanglement?", record.prompt);
+    try std.testing.expect(record.qstar_score == q128.fromRatio(3, 10));
+    try std.testing.expect(record.openai_score == q128.fromRatio(8, 10));
+    try std.testing.expect(record.judge_naturalness == q128.fromRatio(5, 10));
+    try std.testing.expect(record.judge_relevance == q128.fromRatio(2, 10));
+}
+
+test "training: DistillationResult initialization with Q128.128 fields" {
+    const result = DistillationResult{
+        .qstar_score = q128.fromRatio(7, 10),
+        .teacher_score = q128.fromRatio(6, 10),
+        .qstar_won = true,
+        .learned_from_teacher = false,
+        .sentences_learned = 15,
+        .kg_triplets = 3,
+        .route_created = true,
+    };
+    try std.testing.expect(result.qstar_score == q128.fromRatio(7, 10));
+    try std.testing.expect(result.teacher_score == q128.fromRatio(6, 10));
+    try std.testing.expect(result.qstar_won == true);
+    try std.testing.expect(result.sentences_learned == 15);
+    try std.testing.expect(result.route_created == true);
+}
+
+test "training: DistillationResult default values are zero Q128.128" {
+    const result = DistillationResult{};
+    try std.testing.expect(result.qstar_score == 0);
+    try std.testing.expect(result.teacher_score == 0);
+    try std.testing.expect(result.qstar_won == false);
+    try std.testing.expect(result.sentences_learned == 0);
+}
+
+test "training: classifyPromptCategory covers all categories" {
+    // Creative
+    try std.testing.expect(classifyPromptCategory("Write a story about a dragon") == .creative);
+    try std.testing.expect(classifyPromptCategory("Imagine a world without gravity") == .creative);
+    try std.testing.expect(classifyPromptCategory("Compose a haiku about autumn") == .creative);
+
+    // Opinion
+    try std.testing.expect(classifyPromptCategory("Should we colonize Mars?") == .opinion);
+    try std.testing.expect(classifyPromptCategory("Do you think AI is dangerous?") == .opinion);
+    try std.testing.expect(classifyPromptCategory("Argue for or against nuclear power") == .opinion);
+
+    // Reasoning
+    try std.testing.expect(classifyPromptCategory("Why does the sun shine?") == .reasoning);
+    try std.testing.expect(classifyPromptCategory("What follows from the premise that all men are mortal?") == .reasoning);
+    try std.testing.expect(classifyPromptCategory("Because the ground is wet, it must have rained") == .reasoning);
+
+    // Factual (default)
+    try std.testing.expect(classifyPromptCategory("What is the capital of France?") == .factual);
+    try std.testing.expect(classifyPromptCategory("How tall is Mount Everest?") == .factual);
+    try std.testing.expect(classifyPromptCategory("When was the Declaration of Independence signed?") == .factual);
+}
+
+test "training: confidenceForCategory returns expected BP values" {
+    try std.testing.expectEqual(@as(u16, 8500), confidenceForCategory(.factual));
+    try std.testing.expectEqual(@as(u16, 7500), confidenceForCategory(.reasoning));
+    try std.testing.expectEqual(@as(u16, 6500), confidenceForCategory(.opinion));
+    try std.testing.expectEqual(@as(u16, 6500), confidenceForCategory(.creative));
+    try std.testing.expectEqual(@as(u16, 6000), confidenceForCategory(.naturalness));
+    try std.testing.expectEqual(@as(u16, 5500), confidenceForCategory(.chitchat));
+    try std.testing.expectEqual(@as(u16, 6000), confidenceForCategory(.open_ended));
+    try std.testing.expectEqual(@as(u16, 9000), confidenceForCategory(.framework_query));
+}
+
+test "training: trainAndCreateRoute with Q128.128 high score creates route" {
+    const allocator = std.testing.allocator;
+    var agent = agent_mod.Agent.init(allocator, 0, @import("fixed_point").ONE);
+    defer agent.deinit();
+
+    const prompt = "What is quantum entanglement?";
+    const response = "Quantum entanglement is a phenomenon where particles become correlated.";
+    const score = q128.fromRatio(9, 10); // High score
+
+    const learned = try trainAndCreateRoute(&agent, prompt, response, score, allocator);
+    try std.testing.expect(learned > 0);
+}
+
+test "training: trainAndCreateRoute with Q128.128 low score skips route" {
+    const allocator = std.testing.allocator;
+    var agent = agent_mod.Agent.init(allocator, 0, @import("fixed_point").ONE);
+    defer agent.deinit();
+
+    const prompt = "What is quantum entanglement?";
+    const response = "Quantum entanglement is a phenomenon where particles become correlated.";
+    const score = q128.fromRatio(1, 10); // Low score (below 0.3 threshold)
+
+    const learned = try trainAndCreateRoute(&agent, prompt, response, score, allocator);
+    // Should still learn sentences but not create a route
+    try std.testing.expect(learned > 0);
+}
+
+test "training: analyzeFailures with Q128.128 score fields" {
+    const allocator = std.testing.allocator;
+    var failures = std.ArrayList(FailureRecord).init(allocator);
+    defer failures.deinit();
+
+    // Garbled: both naturalness and relevance below 0.3
+    try failures.append(.{
+        .prompt = "Test prompt 1",
+        .qstar_score = q128.fromRatio(1, 10),
+        .openai_score = q128.fromRatio(9, 10),
+        .qstar_response_preview = "asdf jkl random text here that is long enough for the preview",
+        .judge_naturalness = q128.fromRatio(1, 10),
+        .judge_relevance = q128.fromRatio(2, 10),
+    });
+
+    // Off-topic: low relevance but decent naturalness
+    try failures.append(.{
+        .prompt = "Test prompt 2",
+        .qstar_score = q128.fromRatio(2, 10),
+        .openai_score = q128.fromRatio(8, 10),
+        .qstar_response_preview = "This is a well-written response about something completely different than asked.",
+        .judge_naturalness = q128.fromRatio(7, 10),
+        .judge_relevance = q128.fromRatio(2, 10),
+    });
+
+    const analysis = try analyzeFailures(failures.items, allocator);
+    defer allocator.free(analysis.categories.items);
+
+    try std.testing.expectEqual(@as(usize, 2), analysis.categories.items.len);
+    try std.testing.expect(analysis.category_counts[@intFromEnum(FailureCategory.garbled_output)] >= 1);
+    try std.testing.expect(analysis.category_counts[@intFromEnum(FailureCategory.off_topic)] >= 1);
+}
+
 /// Enriches the corpus by sending document excerpts to Ollama for key sentence extraction.
 /// For each document, Ollama is prompted to extract 5 key factual sentences.
 /// Saves corpus every 10 files for crash recovery.
@@ -1885,15 +2024,15 @@ pub const FailureCategory = enum {
 /// A single benchmark failure record for analysis.
 pub const FailureRecord = struct {
     prompt: []const u8,
-    qstar_score: f64,
-    openai_score: f64,
+    qstar_score: q128.Fp,
+    openai_score: q128.Fp,
     qstar_response_preview: []const u8,
-    judge_naturalness: f64 = 0.0,
-    judge_relevance: f64 = 0.0,
-    judge_engagement: f64 = 0.0,
-    judge_factual_accuracy: f64 = 0.0,
-    judge_originality: f64 = 0.0,
-    judge_personalization: f64 = 0.0,
+    judge_naturalness: q128.Fp = 0,
+    judge_relevance: q128.Fp = 0,
+    judge_engagement: q128.Fp = 0,
+    judge_factual_accuracy: q128.Fp = 0,
+    judge_originality: q128.Fp = 0,
+    judge_personalization: q128.Fp = 0,
 };
 
 /// Analyzes a batch of failure records and classifies each into a FailureCategory.
@@ -1935,26 +2074,28 @@ pub fn analyzeFailures(
 
 /// Classifies a single failure record into a FailureCategory.
 fn classifyFailure(f: FailureRecord) FailureCategory {
+    const threshold_low = q128.fromRatio(3, 10);
+    const threshold_mid = q128.fromRatio(4, 10);
     // Garbled output: very low naturalness + relevance
-    if (f.judge_naturalness < 0.3 and f.judge_relevance < 0.3) return .garbled_output;
+    if (f.judge_naturalness < threshold_low and f.judge_relevance < threshold_low) return .garbled_output;
 
     // Off-topic: low relevance but decent naturalness
-    if (f.judge_relevance < 0.3 and f.judge_naturalness >= 0.3) return .off_topic;
+    if (f.judge_relevance < threshold_low and f.judge_naturalness >= threshold_low) return .off_topic;
 
     // Too short: response preview is very short
     if (f.qstar_response_preview.len < 100) return .too_short;
 
     // Factual error: low factual accuracy but otherwise decent
-    if (f.judge_factual_accuracy < 0.3 and f.judge_relevance >= 0.3) return .factual_error;
+    if (f.judge_factual_accuracy < threshold_low and f.judge_relevance >= threshold_low) return .factual_error;
 
     // Low naturalness
-    if (f.judge_naturalness < 0.4) return .low_naturalness;
+    if (f.judge_naturalness < threshold_mid) return .low_naturalness;
 
     // Low engagement
-    if (f.judge_engagement < 0.4) return .low_engagement;
+    if (f.judge_engagement < threshold_mid) return .low_engagement;
 
     // Low originality
-    if (f.judge_originality < 0.4) return .low_originality;
+    if (f.judge_originality < threshold_mid) return .low_originality;
 
     return .unknown;
 }
@@ -2063,8 +2204,8 @@ pub fn generateCategoryPrompts(
 /// judge scores both. If Qstar loses, learn from teacher. If Qstar wins, reinforce.
 /// Returns the training result and whether Qstar won.
 pub const DistillationResult = struct {
-    qstar_score: f64 = 0.0,
-    teacher_score: f64 = 0.0,
+    qstar_score: q128.Fp = 0,
+    teacher_score: q128.Fp = 0,
     qstar_won: bool = false,
     learned_from_teacher: bool = false,
     sentences_learned: usize = 0,
@@ -2098,7 +2239,7 @@ pub fn distillOnPolicy(
     var oa_resp = openai.simplePrompt(allocator, oa_config, system_prompt, prompt) catch |err| {
         std.debug.print("  Teacher error: {s}\n", .{@errorName(err)});
         // Teacher unavailable — just reinforce Qstar's response
-        result.qstar_score = 0.5;
+        result.qstar_score = q128.fromRatio(1, 2);
         result.qstar_won = true;
         return result;
     };
@@ -2112,7 +2253,7 @@ pub fn distillOnPolicy(
     result.teacher_score = t_score;
     result.qstar_won = q_score >= t_score;
 
-    std.debug.print("  Q={d:.3} T={d:.3} => {s}\n", .{ q_score, t_score, if (result.qstar_won) "Q wins" else "T wins" });
+    std.debug.print("  Q={d:.3} T={d:.3} => {s}\n", .{ q128.toF64(q_score), q128.toF64(t_score), if (result.qstar_won) "Q wins" else "T wins" });
 
     if (result.qstar_won) {
         // Qstar won — reinforce by creating a high-confidence route
@@ -2143,17 +2284,17 @@ pub fn distillOnPolicy(
 }
 
 /// Judges a single response using OpenAI and returns an overall score (0-1).
-fn judgeSingleResponse(allocator: std.mem.Allocator, oa_config: openai.OpenAIConfig, prompt: []const u8, response: []const u8) f64 {
+fn judgeSingleResponse(allocator: std.mem.Allocator, oa_config: openai.OpenAIConfig, prompt: []const u8, response: []const u8) q128.Fp {
     var jp = std.ArrayList(u8).init(allocator);
     defer jp.deinit();
-    jp.appendSlice("Rate this response 1-10. Return ONLY JSON: {\"naturalness\":N,\"relevance\":N,\"engagement\":N,\"factual_accuracy\":N,\"originality\":N,\"personalization\":N}\n\nPrompt: ") catch return 0.0;
-    jp.appendSlice(prompt) catch return 0.0;
-    jp.appendSlice("\n\nResponse: ") catch return 0.0;
-    jp.appendSlice(response) catch return 0.0;
+    jp.appendSlice("Rate this response 1-10. Return ONLY JSON: {\"naturalness\":N,\"relevance\":N,\"engagement\":N,\"factual_accuracy\":N,\"originality\":N,\"personalization\":N}\n\nPrompt: ") catch return 0;
+    jp.appendSlice(prompt) catch return 0;
+    jp.appendSlice("\n\nResponse: ") catch return 0;
+    jp.appendSlice(response) catch return 0;
 
     var judge_cfg = oa_config;
     judge_cfg.model = "gpt-4o-mini";
-    var resp = openai.simplePrompt(allocator, judge_cfg, "You are a response judge. Rate responses on a 1-10 scale. Return ONLY the JSON object.", jp.items) catch return 0.0;
+    var resp = openai.simplePrompt(allocator, judge_cfg, "You are a response judge. Rate responses on a 1-10 scale. Return ONLY the JSON object.", jp.items) catch return 0;
     defer resp.deinit();
 
     // Parse JSON scores
@@ -2165,24 +2306,26 @@ fn judgeSingleResponse(allocator: std.mem.Allocator, oa_config: openai.OpenAICon
     const o = extractJsonScore(text, "originality");
     const p = extractJsonScore(text, "personalization");
 
-    return (n + r + e + f + o + p) / 6.0 / 10.0;
+    // (n + r + e + f + o + p) / 6 / 10
+    const sum = q128.add(q128.add(q128.add(n, r), q128.add(e, f)), q128.add(o, p));
+    return q128.div(q128.div(sum, q128.fromInt(6)), q128.fromInt(10));
 }
 
 /// Extracts a numeric score from JSON text for a given key.
-fn extractJsonScore(text: []const u8, key: []const u8) f64 {
+fn extractJsonScore(text: []const u8, key: []const u8) q128.Fp {
     // Find "key":N pattern
     var search_buf: [64]u8 = undefined;
-    const pattern = std.fmt.bufPrint(&search_buf, "\"{s}\":", .{key}) catch return 0.0;
+    const pattern = std.fmt.bufPrint(&search_buf, "\"{s}\":", .{key}) catch return 0;
 
-    const idx = std.mem.indexOf(u8, text, pattern) orelse return 0.0;
+    const idx = std.mem.indexOf(u8, text, pattern) orelse return 0;
     var pos = idx + pattern.len;
     // Skip whitespace
     while (pos < text.len and (text[pos] == ' ' or text[pos] == '\t')) pos += 1;
     // Parse number
     var end = pos;
     while (end < text.len and (std.ascii.isDigit(text[end]) or text[end] == '.')) end += 1;
-    if (end == pos) return 0.0;
-    return std.fmt.parseFloat(f64, text[pos..end]) catch 0.0;
+    if (end == pos) return 0;
+    return q128.fromF64(std.fmt.parseFloat(f64, text[pos..end]) catch 0.0);
 }
 
 /// Result for corpus-wide distillation operations.

@@ -16,6 +16,7 @@ const env_loader = @import("env_loader");
 const training = @import("training");
 const prompt_gen = @import("prompt_generator");
 const bpe = @import("bpe_tokenizer");
+const q128 = @import("q128");
 
 // =============================================================================
 // Config
@@ -43,16 +44,19 @@ const MetaBenchConfig = struct {
 // =============================================================================
 
 const JudgeScores = struct {
-    naturalness: f64 = 0.0,
-    relevance: f64 = 0.0,
-    engagement: f64 = 0.0,
-    factual_accuracy: f64 = 0.0,
-    originality: f64 = 0.0,
-    personalization: f64 = 0.0,
+    naturalness: q128.Fp = 0,
+    relevance: q128.Fp = 0,
+    engagement: q128.Fp = 0,
+    factual_accuracy: q128.Fp = 0,
+    originality: q128.Fp = 0,
+    personalization: q128.Fp = 0,
 
-    fn overall(self: JudgeScores) f64 {
-        return (self.naturalness + self.relevance + self.engagement +
-            self.factual_accuracy + self.originality + self.personalization) / 6.0;
+    fn overall(self: JudgeScores) q128.Fp {
+        const sum = q128.add(
+            q128.add(q128.add(self.naturalness, self.relevance), q128.add(self.engagement, self.factual_accuracy)),
+            q128.add(self.originality, self.personalization),
+        );
+        return q128.div(sum, q128.fromInt(6));
     }
 };
 
@@ -82,8 +86,8 @@ const PromptResult = struct {
     qstar: ResponseResult,
     openai_resp: ?ResponseResult = null,
     winner: Winner = .tie,
-    qstar_score: f64 = 0.0,
-    openai_score: f64 = 0.0,
+    qstar_score: q128.Fp = 0,
+    openai_score: q128.Fp = 0,
     allocator: std.mem.Allocator,
 
     fn deinit(self: *PromptResult) void {
@@ -98,7 +102,7 @@ const Winner = enum { qstar, openai, tie };
 const TrainingEntry = struct {
     prompt: []const u8,
     best_response: []const u8,
-    best_score: f64,
+    best_score: q128.Fp,
     category: u8 = 0, // 0=factual, 1=creative, 2=opinion, 3=reasoning
 };
 
@@ -206,9 +210,9 @@ fn generateDiversePrompts(allocator: std.mem.Allocator, config: MetaBenchConfig)
     return try all.toOwnedSlice();
 }
 
-fn extractJsonFloat(text: []const u8, field: []const u8) f64 {
+fn extractJsonFloat(text: []const u8, field: []const u8) q128.Fp {
     var buf: [128]u8 = undefined;
-    if (field.len + 4 > buf.len) return 0.0;
+    if (field.len + 4 > buf.len) return 0;
     buf[0] = '"';
     @memcpy(buf[1 .. 1 + field.len], field);
     buf[1 + field.len] = '"';
@@ -218,19 +222,20 @@ fn extractJsonFloat(text: []const u8, field: []const u8) f64 {
         while (i < text.len and (text[i] == ':' or text[i] == ' ')) i += 1;
         var end = i;
         while (end < text.len and (std.ascii.isDigit(text[end]) or text[end] == '.' or text[end] == '-')) end += 1;
-        if (end > i) return std.fmt.parseFloat(f64, text[i..end]) catch 0.0;
+        if (end > i) return q128.fromF64(std.fmt.parseFloat(f64, text[i..end]) catch 0.0);
     }
-    return 0.0;
+    return 0;
 }
 
 fn parseJudgeJson(text: []const u8) JudgeScores {
+    const ten = q128.fromInt(10);
     return .{
-        .naturalness = extractJsonFloat(text, "naturalness") / 10.0,
-        .relevance = extractJsonFloat(text, "relevance") / 10.0,
-        .engagement = extractJsonFloat(text, "engagement") / 10.0,
-        .factual_accuracy = extractJsonFloat(text, "factual_accuracy") / 10.0,
-        .originality = extractJsonFloat(text, "originality") / 10.0,
-        .personalization = extractJsonFloat(text, "personalization") / 10.0,
+        .naturalness = q128.div(extractJsonFloat(text, "naturalness"), ten),
+        .relevance = q128.div(extractJsonFloat(text, "relevance"), ten),
+        .engagement = q128.div(extractJsonFloat(text, "engagement"), ten),
+        .factual_accuracy = q128.div(extractJsonFloat(text, "factual_accuracy"), ten),
+        .originality = q128.div(extractJsonFloat(text, "originality"), ten),
+        .personalization = q128.div(extractJsonFloat(text, "personalization"), ten),
     };
 }
 
@@ -347,8 +352,8 @@ pub fn main() !void {
     var qwins: usize = 0;
     var owins: usize = 0;
     var ties: usize = 0;
-    var qsum: f64 = 0.0;
-    var osum: f64 = 0.0;
+    var qsum: q128.Fp = 0;
+    var osum: q128.Fp = 0;
     var failed = std.ArrayList([]const u8).init(allocator);
     defer failed.deinit();
     var training_entries = std.ArrayList(TrainingEntry).init(allocator);
@@ -374,28 +379,29 @@ pub fn main() !void {
             continue;
         };
         qres.judge = judgeResponse(allocator, config, prompt, qres.text);
-        const qs = if (qres.judge) |j| j.overall() else 0.0;
-        qsum += qs;
-        std.debug.print("  Q: {d}ch s={d:.3}\n", .{ qres.text.len, qs });
+        const qs = if (qres.judge) |j| j.overall() else 0;
+        qsum = q128.add(qsum, qs);
+        std.debug.print("  Q: {d}ch s={d:.3}\n", .{ qres.text.len, q128.toF64(qs) });
         std.debug.print("  Q response: {s}\n", .{qres.text[0..@min(qres.text.len, 300)]});
 
-        var os: f64 = 0.0;
+        var os: q128.Fp = 0;
         var best_text: []const u8 = qres.text;
-        var best_score: f64 = qs;
+        var best_score: q128.Fp = qs;
         var best_is_qstar = true;
 
         if (!config.no_openai) {
             if (try runOpenAI(allocator, config, prompt)) |oar_val| {
                 var oar = oar_val;
                 oar.judge = judgeResponse(allocator, config, prompt, oar.text);
-                os = if (oar.judge) |j| j.overall() else 0.0;
-                osum += os;
-                std.debug.print("  O: {d}ch s={d:.3}\n", .{ oar.text.len, os });
+                os = if (oar.judge) |j| j.overall() else 0;
+                osum = q128.add(osum, os);
+                std.debug.print("  O: {d}ch s={d:.3}\n", .{ oar.text.len, q128.toF64(os) });
                 std.debug.print("  O response: {s}\n", .{oar.text[0..@min(oar.text.len, 300)]});
-                if (qs > os + 0.01) {
+                const margin = q128.fromRatio(1, 100); // 0.01
+                if (qs > q128.add(os, margin)) {
                     qwins += 1;
                     std.debug.print(" => Q\n", .{});
-                } else if (os > qs + 0.01) {
+                } else if (os > q128.add(qs, margin)) {
                     owins += 1;
                     try failed.append(prompt);
                     // OpenAI won — use its response as best
@@ -417,7 +423,7 @@ pub fn main() !void {
                 const entry_prompt = try allocator.dupe(u8, prompt);
                 const entry_response = try allocator.dupe(u8, best_text);
                 try w.print("[{d}] {s}\n  Q({d}ch,{d:.3}): {s}\n  O({d:.3})\n\n", .{
-                    i + 1, prompt, qres.text.len, qs, qres.text[0..@min(qres.text.len, 200)], os,
+                    i + 1, prompt, qres.text.len, q128.toF64(qs), qres.text[0..@min(qres.text.len, 200)], q128.toF64(os),
                 });
                 try training_entries.append(.{
                     .prompt = entry_prompt,
@@ -437,7 +443,7 @@ pub fn main() !void {
                 const entry_prompt = try allocator.dupe(u8, prompt);
                 const entry_response = try allocator.dupe(u8, qres.text);
                 try w.print("[{d}] {s}\n  Q({d}ch,{d:.3}): {s}\n  O({d:.3})\n\n", .{
-                    i + 1, prompt, qres.text.len, qs, qres.text[0..@min(qres.text.len, 200)], os,
+                    i + 1, prompt, qres.text.len, q128.toF64(qs), qres.text[0..@min(qres.text.len, 200)], q128.toF64(os),
                 });
                 try training_entries.append(.{
                     .prompt = entry_prompt,
@@ -452,7 +458,7 @@ pub fn main() !void {
             const entry_prompt = try allocator.dupe(u8, prompt);
             const entry_response = try allocator.dupe(u8, qres.text);
             try w.print("[{d}] {s}\n  Q({d}ch,{d:.3}): {s}\n  O({d:.3})\n\n", .{
-                i + 1, prompt, qres.text.len, qs, qres.text[0..@min(qres.text.len, 200)], os,
+                i + 1, prompt, qres.text.len, q128.toF64(qs), qres.text[0..@min(qres.text.len, 200)], q128.toF64(os),
             });
             try training_entries.append(.{
                 .prompt = entry_prompt,
@@ -470,12 +476,14 @@ pub fn main() !void {
     if (total > 0) {
         std.debug.print("Qstar win rate: {d:.1}%\n", .{@as(f64, @floatFromInt(qwins)) / @as(f64, @floatFromInt(total)) * 100.0});
     }
-    std.debug.print("Qstar avg: {d:.3}, OpenAI avg: {d:.3}\n", .{ qsum / @as(f64, @floatFromInt(prompts.len)), osum / @as(f64, @floatFromInt(prompts.len)) });
+    const q_avg = q128.div(qsum, q128.fromInt(@as(i256, @intCast(prompts.len))));
+    const o_avg = q128.div(osum, q128.fromInt(@as(i256, @intCast(prompts.len))));
+    std.debug.print("Qstar avg: {d:.3}, OpenAI avg: {d:.3}\n", .{ q128.toF64(q_avg), q128.toF64(o_avg) });
     std.debug.print("Failed (training feed): {d}\n", .{failed.items.len});
 
     try w.print("\n=== SUMMARY ===\n", .{});
     try w.print("Total: {d}, Qstar: {d}, OpenAI: {d}, Ties: {d}\n", .{ prompts.len, qwins, owins, ties });
-    try w.print("Qstar avg: {d:.3}, OpenAI avg: {d:.3}\n", .{ qsum / @as(f64, @floatFromInt(prompts.len)), osum / @as(f64, @floatFromInt(prompts.len)) });
+    try w.print("Qstar avg: {d:.3}, OpenAI avg: {d:.3}\n", .{ q128.toF64(q_avg), q128.toF64(o_avg) });
     try w.print("Failed: {d}\n", .{failed.items.len});
 
     // Save training feed (failed prompts for reference)

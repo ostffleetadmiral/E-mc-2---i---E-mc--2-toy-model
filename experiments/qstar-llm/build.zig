@@ -549,6 +549,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    doc_loader_mod.addImport("q128", q128_mod);
 
     const memory_pool_mod = b.addModule("memory_pool", .{
         .root_source_file = b.path("src/memory_pool.zig"),
@@ -591,6 +592,7 @@ pub fn build(b: *std.Build) void {
     training_mod.addImport("corpus_store", corpus_store_mod);
     training_mod.addImport("fixed_point", fixed_point_mod);
     training_mod.addImport("prompt_generator", prompt_gen_test_mod);
+    training_mod.addImport("q128", q128_mod);
 
     const turing_test_mod = b.addModule("turing_test", .{
         .root_source_file = b.path("src/turing_test.zig"),
@@ -1052,7 +1054,7 @@ pub fn build(b: *std.Build) void {
         .{ .file = "src/master_server.zig", .imports = &.{.{ .name = "dynamic_dns", .mod = dynamic_dns_mod }} },
         .{ .file = "src/master_publish.zig", .imports = &.{} },
         // p2p_update test is added conditionally after the loop (depends on -Dp2p)
-        .{ .file = "src/doc_loader.zig", .imports = &.{} },
+        .{ .file = "src/doc_loader.zig", .imports = &.{.{ .name = "q128", .mod = q128_mod }} },
         .{ .file = "src/memory_pool.zig", .imports = &.{} },
         .{ .file = "src/config.zig", .imports = &.{.{ .name = "fixed_point", .mod = fixed_point_mod }} },
         .{ .file = "src/external_db.zig", .imports = &.{.{ .name = "knowledge_graph", .mod = kg_mod }} },
@@ -1069,6 +1071,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "corpus_store", .mod = corpus_store_mod },
             .{ .name = "fixed_point", .mod = fixed_point_mod },
             .{ .name = "prompt_generator", .mod = prompt_gen_test_mod },
+            .{ .name = "q128", .mod = q128_mod },
         } },
         .{ .file = "src/heartbeat.zig", .imports = &.{
             .{ .name = "agent", .mod = agent_mod },
@@ -1615,6 +1618,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    cli_doc_loader_mod.addImport("q128", q128_mod);
     const cli_external_db_mod = b.addModule("external_db", .{
         .root_source_file = b.path("src/external_db.zig"),
         .target = target,
@@ -1633,6 +1637,7 @@ pub fn build(b: *std.Build) void {
     cli_training_mod.addImport("doc_loader", cli_doc_loader_mod);
     cli_training_mod.addImport("corpus_store", corpus_store_mod);
     cli_training_mod.addImport("fixed_point", fixed_point_mod);
+    cli_training_mod.addImport("q128", q128_mod);
     const cli_prompt_gen_mod = b.addModule("prompt_generator", .{
         .root_source_file = b.path("src/prompt_generator.zig"),
         .target = target,
@@ -2906,6 +2911,7 @@ pub fn build(b: *std.Build) void {
             .link_libc = true,
         });
         mb_exe.root_module.addImport("fixed_point", fixed_point_mod);
+        mb_exe.root_module.addImport("q128", q128_mod);
 
         // Agent module
         const mb_agent_mod = b.addModule("agent", .{
@@ -2914,6 +2920,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         mb_agent_mod.addImport("fixed_point", fixed_point_mod);
+        mb_agent_mod.addImport("q128", q128_mod);
         mb_agent_mod.addImport("bpe_tokenizer", bpe_mod);
         mb_agent_mod.addImport("sampling", sampling_mod);
         mb_agent_mod.addImport("state_store", state_store_mod);
@@ -3066,6 +3073,7 @@ pub fn build(b: *std.Build) void {
         mb_training_mod.addImport("fixed_point", fixed_point_mod);
         mb_training_mod.addImport("dynamic_routes", mb_dyn_routes_mod);
         mb_training_mod.addImport("metacognition_engine", mb_metacog_mod);
+        mb_training_mod.addImport("q128", q128_mod);
 
         // Prompt generator
         const mb_prompt_gen_mod = b.addModule("prompt_generator", .{
@@ -3278,6 +3286,7 @@ pub fn build(b: *std.Build) void {
             .link_libc = true,
         });
         ct_exe.root_module.addImport("fixed_point", fixed_point_mod);
+        ct_exe.root_module.addImport("q128", q128_mod);
 
         // Agent module
         const ct_agent_mod = b.addModule("agent", .{
@@ -3286,6 +3295,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         ct_agent_mod.addImport("fixed_point", fixed_point_mod);
+        ct_agent_mod.addImport("q128", q128_mod);
         ct_agent_mod.addImport("bpe_tokenizer", bpe_mod);
         ct_agent_mod.addImport("sampling", sampling_mod);
         ct_agent_mod.addImport("state_store", state_store_mod);
@@ -3438,6 +3448,7 @@ pub fn build(b: *std.Build) void {
         ct_training_mod.addImport("fixed_point", fixed_point_mod);
         ct_training_mod.addImport("dynamic_routes", ct_dyn_routes_mod);
         ct_training_mod.addImport("metacognition_engine", ct_metacog_mod);
+        ct_training_mod.addImport("q128", q128_mod);
         ct_exe.root_module.addImport("training", ct_training_mod);
 
         const ct_run = b.addRunArtifact(ct_exe);
