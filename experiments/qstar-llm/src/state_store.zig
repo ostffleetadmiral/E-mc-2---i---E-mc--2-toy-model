@@ -8,7 +8,7 @@
 const std = @import("std");
 
 pub const E0_NODE_COUNT: usize = 421;
-pub const CHANNEL_COUNT: usize = 7;
+pub const CHANNEL_COUNT: usize = 8;
 
 pub const AgentState = struct {
     activations: [E0_NODE_COUNT][CHANNEL_COUNT]i128,

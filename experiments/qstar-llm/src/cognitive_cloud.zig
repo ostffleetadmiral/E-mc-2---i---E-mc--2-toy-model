@@ -12,7 +12,7 @@
 const std = @import("std");
 const fp = @import("fixed_point");
 
-pub const CHANNEL_COUNT: usize = 7;
+pub const CHANNEL_COUNT: usize = 8;
 pub const E0_NODE_COUNT: usize = 421;
 
 // === Polyglot Payload ===
@@ -57,7 +57,7 @@ pub const EpisodePayload = struct {
 
 pub const PolyglotPayload = union(PayloadFormat) {
     text: []const u8,
-    audio_codes: [7]i128,
+    audio_codes: [8]i128,
     lattice_activations: [E0_NODE_COUNT][CHANNEL_COUNT]i128,
     token_ids: []const u32,
     file_ref: []const u8,
@@ -65,7 +65,7 @@ pub const PolyglotPayload = union(PayloadFormat) {
     kg_triplet: KGTriplet,
     evaluation: EvalPayload,
     episode: EpisodePayload,
-    phase_signature: [7]i128,
+    phase_signature: [8]i128,
 };
 
 // === Point ===
@@ -406,16 +406,16 @@ pub fn phaseCoherence(a: *const PointCloud, b: *const PointCloud) i128 {
 test "cognitive_cloud: Point init and phase distance" {
     var p1 = Point.init(1, 10, 3);
     var p2 = Point.init(2, 10, 3);
-    p1.setPhase([_]i128{ fp.fromInt(1), fp.fromInt(2), fp.fromInt(3), fp.fromInt(4), fp.fromInt(5), fp.fromInt(6), fp.fromInt(7) });
-    p2.setPhase([_]i128{ fp.fromInt(1), fp.fromInt(2), fp.fromInt(3), fp.fromInt(4), fp.fromInt(5), fp.fromInt(6), fp.fromInt(7) });
+    p1.setPhase([_]i128{ fp.fromInt(1), fp.fromInt(2), fp.fromInt(3), fp.fromInt(4), fp.fromInt(5), fp.fromInt(6), fp.fromInt(7), fp.fromInt(8) });
+    p2.setPhase([_]i128{ fp.fromInt(1), fp.fromInt(2), fp.fromInt(3), fp.fromInt(4), fp.fromInt(5), fp.fromInt(6), fp.fromInt(7), fp.fromInt(8) });
     try std.testing.expectEqual(@as(i128, 0), Point.phaseDistance(p1, p2));
-    p2.setPhase([_]i128{ fp.fromInt(2), fp.fromInt(3), fp.fromInt(4), fp.fromInt(5), fp.fromInt(6), fp.fromInt(7), fp.fromInt(8) });
+    p2.setPhase([_]i128{ fp.fromInt(2), fp.fromInt(3), fp.fromInt(4), fp.fromInt(5), fp.fromInt(6), fp.fromInt(7), fp.fromInt(8), fp.fromInt(9) });
     try std.testing.expect(Point.phaseDistance(p1, p2) > 0);
 }
 
 test "cognitive_cloud: Point GUT rotation identity" {
     var p = Point.init(1, 0, 0);
-    p.setPhase([_]i128{ fp.fromInt(5), fp.fromInt(3), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0) });
+    p.setPhase([_]i128{ fp.fromInt(5), fp.fromInt(3), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0) });
     const m = fp.gutRotation(fp.fromInt(0));
     p.applyGutRotation(m, 0, 1);
     try std.testing.expectEqual(fp.fromInt(5), p.phase[0]);
@@ -443,11 +443,11 @@ test "cognitive_cloud: PointCloud add and centroid" {
     var cloud = PointCloud.init(allocator, 1, "test");
     defer cloud.deinit();
     var p1 = Point.init(1, 0, 0);
-    p1.setPhase([_]i128{ fp.fromInt(2), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0) });
+    p1.setPhase([_]i128{ fp.fromInt(2), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0) });
     p1.magnitude = fp.fromInt(10);
     try cloud.addPoint(p1);
     var p2 = Point.init(2, 1, 1);
-    p2.setPhase([_]i128{ fp.fromInt(4), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0) });
+    p2.setPhase([_]i128{ fp.fromInt(4), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0), fp.fromInt(0) });
     p2.magnitude = fp.fromInt(20);
     try cloud.addPoint(p2);
     try std.testing.expectEqual(@as(usize, 2), cloud.pointCount());
@@ -462,7 +462,7 @@ test "cognitive_cloud: PointCloudGraph create and add" {
     _ = try graph.createCloud("concept_b");
     try std.testing.expectEqual(@as(usize, 2), graph.cloudCount());
     var p = Point.init(1, 5, 2);
-    p.setPhase([_]i128{ fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1) });
+    p.setPhase([_]i128{ fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1) });
     try graph.addPointToCloud(id1, p);
     const cloud = graph.getCloud(id1).?;
     try std.testing.expectEqual(@as(usize, 1), cloud.pointCount());
@@ -488,14 +488,14 @@ test "cognitive_cloud: injectIntoLattice identity rotation" {
     var p = Point.init(1, 0, 0);
     p.activation = fp.fromInt(0);
     try cloud.addPoint(p);
-    var activations = [_][CHANNEL_COUNT]i128{[_]i128{ fp.fromInt(5), fp.fromInt(3), fp.fromInt(7), fp.fromInt(2), fp.fromInt(9), fp.fromInt(1), fp.fromInt(4) }} ** E0_NODE_COUNT;
+    var activations = [_][CHANNEL_COUNT]i128{[_]i128{ fp.fromInt(5), fp.fromInt(3), fp.fromInt(7), fp.fromInt(2), fp.fromInt(9), fp.fromInt(1), fp.fromInt(4), fp.fromInt(0) }} ** E0_NODE_COUNT;
     injectIntoLattice(&cloud, &activations);
     try std.testing.expectEqual(fp.fromInt(5), activations[0][0]);
     try std.testing.expectEqual(fp.fromInt(3), activations[0][1]);
 }
 
 test "cognitive_cloud: readFromLattice extracts phase" {
-    var activations = [_][CHANNEL_COUNT]i128{[_]i128{ fp.fromInt(5), fp.fromInt(3), fp.fromInt(7), fp.fromInt(2), fp.fromInt(9), fp.fromInt(1), fp.fromInt(4) }} ** E0_NODE_COUNT;
+    var activations = [_][CHANNEL_COUNT]i128{[_]i128{ fp.fromInt(5), fp.fromInt(3), fp.fromInt(7), fp.fromInt(2), fp.fromInt(9), fp.fromInt(1), fp.fromInt(4), fp.fromInt(0) }} ** E0_NODE_COUNT;
     const p = readFromLattice(&activations, 0, 42);
     try std.testing.expectEqual(@as(u64, 42), p.id);
     try std.testing.expectEqual(fp.fromInt(5), p.phase[0]);
@@ -509,7 +509,7 @@ test "cognitive_cloud: phaseCoherence identical clouds" {
     var cloud_b = PointCloud.init(allocator, 2, "b");
     defer cloud_b.deinit();
     var p = Point.init(1, 0, 0);
-    p.setPhase([_]i128{ fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1) });
+    p.setPhase([_]i128{ fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1), fp.fromInt(1) });
     p.magnitude = fp.fromInt(10);
     try cloud_a.addPoint(p);
     try cloud_b.addPoint(p);

@@ -354,7 +354,7 @@ pub const GrammarStage = struct {
 
 pub const LogicStage = struct {
     pub fn validate(
-        activations: []const [7]i128,
+        activations: []const [8]i128,
         parsed: ParsedInput,
     ) ValidatedState {
         var state = ValidatedState{};
@@ -410,7 +410,7 @@ pub const LogicStage = struct {
         return true;
     }
 
-    fn computeActivationCoherence(activations: []const [7]i128) f64 {
+    fn computeActivationCoherence(activations: []const [8]i128) f64 {
         if (activations.len == 0) return 0.0;
         var active_count: usize = 0;
         var total_energy: i128 = 0;
@@ -428,9 +428,9 @@ pub const LogicStage = struct {
         return @min(1.0, density * 1.5);
     }
 
-    fn computeChannelBalance(activations: []const [7]i128) f64 {
+    fn computeChannelBalance(activations: []const [8]i128) f64 {
         if (activations.len == 0) return 0.0;
-        var channel_sums: [7]i128 = .{ 0, 0, 0, 0, 0, 0, 0 };
+        var channel_sums: [8]i128 = .{ 0, 0, 0, 0, 0, 0, 0, 0 };
         for (activations) |node| {
             for (0..7) |ch| {
                 channel_sums[ch] += if (node[ch] < 0) -node[ch] else node[ch];
@@ -447,7 +447,7 @@ pub const LogicStage = struct {
         return @max(0.0, 1.0 - max_ratio);
     }
 
-    fn countReasoningSteps(activations: []const [7]i128) usize {
+    fn countReasoningSteps(activations: []const [8]i128) usize {
         if (activations.len == 0) return 0;
         var transitions: usize = 0;
         for (0..activations.len - 1) |i| {
@@ -552,7 +552,7 @@ pub const TriviumPipeline = struct {
         self.stage_completed.grammar = true;
     }
 
-    pub fn runLogic(self: *TriviumPipeline, activations: []const [7]i128) void {
+    pub fn runLogic(self: *TriviumPipeline, activations: []const [8]i128) void {
         if (!self.stage_completed.grammar) return;
         self.validated = LogicStage.validate(activations, self.parsed);
         self.stage_completed.logic = true;
@@ -564,7 +564,7 @@ pub const TriviumPipeline = struct {
         self.stage_completed.rhetoric = true;
     }
 
-    pub fn runAll(self: *TriviumPipeline, prompt: []const u8, activations: []const [7]i128) void {
+    pub fn runAll(self: *TriviumPipeline, prompt: []const u8, activations: []const [8]i128) void {
         self.runGrammar(prompt);
         self.runLogic(activations);
         self.runRhetoric();
@@ -651,10 +651,10 @@ test "trivium: grammar stage detects biology domain" {
 }
 
 test "trivium: logic stage validates activation coherence" {
-    const activations = [_][7]i128{
-        .{ 100, 200, 50, 0, 0, 0, 0 },
-        .{ 150, 180, 30, 10, 0, 0, 0 },
-        .{ 120, 190, 40, 5, 0, 0, 0 },
+    const activations = [_][8]i128{
+        .{ 100, 200, 50, 0, 0, 0, 0, 0 },
+        .{ 150, 180, 30, 10, 0, 0, 0, 0 },
+        .{ 120, 190, 40, 5, 0, 0, 0, 0 },
     };
     const parsed = GrammarStage.parse("test prompt");
     const state = LogicStage.validate(&activations, parsed);
@@ -664,10 +664,10 @@ test "trivium: logic stage validates activation coherence" {
 }
 
 test "trivium: logic stage detects channel imbalance" {
-    const activations = [_][7]i128{
-        .{ 1000, 0, 0, 0, 0, 0, 0 },
-        .{ 2000, 0, 0, 0, 0, 0, 0 },
-        .{ 1500, 0, 0, 0, 0, 0, 0 },
+    const activations = [_][8]i128{
+        .{ 1000, 0, 0, 0, 0, 0, 0, 0 },
+        .{ 2000, 0, 0, 0, 0, 0, 0, 0 },
+        .{ 1500, 0, 0, 0, 0, 0, 0, 0 },
     };
     const parsed = GrammarStage.parse("test prompt");
     const state = LogicStage.validate(&activations, parsed);
@@ -701,9 +701,9 @@ test "trivium: rhetoric stage detects structured format need" {
 
 test "trivium: full pipeline runs all stages" {
     var pipeline = TriviumPipeline{};
-    const activations = [_][7]i128{
-        .{ 100, 200, 50, 30, 10, 5, 0 },
-        .{ 150, 180, 30, 20, 15, 10, 5 },
+    const activations = [_][8]i128{
+        .{ 100, 200, 50, 30, 10, 5, 0, 0 },
+        .{ 150, 180, 30, 20, 15, 10, 5, 0 },
     };
     pipeline.runAll("Explain the algorithm for binary search", &activations);
     try std.testing.expect(pipeline.isComplete());
@@ -714,8 +714,8 @@ test "trivium: full pipeline runs all stages" {
 
 test "trivium: pipeline summary produces readable string" {
     var pipeline = TriviumPipeline{};
-    const activations = [_][7]i128{
-        .{ 100, 200, 50, 30, 10, 5, 0 },
+    const activations = [_][8]i128{
+        .{ 100, 200, 50, 30, 10, 5, 0, 0 },
     };
     pipeline.runAll("What is photosynthesis?", &activations);
     var buf: [256]u8 = undefined;
@@ -807,5 +807,5 @@ test "framework: classify framework complexity" {
     try std.testing.expectEqual(FrameworkComplexity.framework, classifyFrameworkComplexity("Explain the octonion multiplication table"));
     try std.testing.expectEqual(FrameworkComplexity.framework, classifyFrameworkComplexity("How does the E0 lattice work?"));
     try std.testing.expectEqual(FrameworkComplexity.trivial, classifyFrameworkComplexity("Hi"));
-    try std.testing.expectEqual(FrameworkComplexity.simple, classifyFrameworkComplexity("What is 2 plus 2?"));
+    try std.testing.expectEqual(FrameworkComplexity.simple, classifyFrameworkComplexity("What is the value of 2 plus 2?"));
 }

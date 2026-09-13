@@ -164,7 +164,7 @@ pub const Perception = struct {
     /// Analog to UniFace's SCRFD/RetinaFace detection: scan the lattice grid,
     /// find regions with high activation density, apply NMS to remove overlaps.
     ///
-    /// `activations` is [421][7]i128 — E0 node activations in Q32.32.
+    /// `activations` is [421][8]i128 — E0 node activations in Q32.32.
     /// `coords` is [421]struct { x, y, z } — E0 node grid coordinates.
     pub fn detectActivations(
         allocator: std.mem.Allocator,
@@ -532,7 +532,7 @@ pub const Perception = struct {
     /// between steps, while a "spoofed" (replay) state stays static.
     ///
     /// `states` is an array of lattice states at consecutive time steps.
-    /// Each state is [421][7]i128 activations.
+    /// Each state is [421][8]i128 activations.
     pub fn livenessCheck(
         states: []const []const [CHANNELS]i128,
     ) LivenessResult {
@@ -717,7 +717,7 @@ pub const VisionPerception = struct {
         return activations;
     }
 
-    /// Project a face embedding to full 7-channel lattice activations.
+    /// Project a face embedding to full 8-channel lattice activations.
     /// Channels are filled by cycling through embedding dimensions.
     pub fn projectFaceToLatticeChannels(embedding: []const f32) [E0_NODE_COUNT][CHANNELS]i128 {
         var activations: [E0_NODE_COUNT][CHANNELS]i128 = [_][CHANNELS]i128{[_]i128{0} ** CHANNELS} ** E0_NODE_COUNT;
@@ -1232,7 +1232,7 @@ pub fn frameworkDetectsActivation(activation: i128) bool {
 
 /// Computes the framework-aware channel imbalance indicator.
 /// Returns true if the maximum channel activation exceeds 7/8 of the total.
-pub fn frameworkChannelImbalance(channels: *const [7]i128) bool {
+pub fn frameworkChannelImbalance(channels: *const [8]i128) bool {
     var total: i128 = 0;
     var max_val: i128 = 0;
     for (channels) |c| {
@@ -1268,10 +1268,10 @@ test "framework: activation detection" {
 
 test "framework: channel imbalance detection" {
     // Balanced channels — no imbalance
-    const balanced = [_]i128{ fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE };
+    const balanced = [_]i128{ fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE };
     try std.testing.expect(!frameworkChannelImbalance(&balanced));
 
     // One channel dominates — imbalance
-    const imbalanced = [_]i128{ fp.ONE * 100, 0, 0, 0, 0, 0, 0 };
+    const imbalanced = [_]i128{ fp.ONE * 100, 0, 0, 0, 0, 0, 0, 0 };
     try std.testing.expect(frameworkChannelImbalance(&imbalanced));
 }

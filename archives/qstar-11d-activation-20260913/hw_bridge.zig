@@ -1,7 +1,7 @@
 //! hw_bridge.zig — Bridge between QSTAR lattice and hardware framework proofs.
 //!
 //! This module connects QSTAR's lattice-native architecture (15³ grid, 421 E0
-//! nodes, 8 octonion channels) to the hardware project's mathematical foundation:
+//! nodes, 7 octonion channels) to the hardware project's mathematical foundation:
 //!   - 7-defect (2³-1=7) from scaling_analysis
 //!   - C=2 consciousness duality from surface_computation (5D→6D transition)
 //!   - 421/3375 identity from scaling_analysis
@@ -120,9 +120,9 @@ pub fn verifyLatticeFrameworkAlignment() bool {
 }
 
 /// Verify the 7-defect appears in QSTAR's channel structure.
-/// QSTAR has 8 channels (e0-e7), the full octonion.
+/// QSTAR has 7 channels (e0-e6), which is 8 - 1 = 7 (the 7-defect).
 pub fn verifySevenDefectInChannels() bool {
-    // QSTAR uses 8 channels (CHANNEL_COUNT in agent.zig)
+    // QSTAR uses 7 channels (CHANNEL_COUNT in agent.zig)
     // 7 = 2³ - 1 = 8 - 1 (the 7-defect)
     return 7 == OCTONION_DIM - 1 and 7 == SEVEN_DEFECT;
 }
@@ -239,62 +239,10 @@ pub const ConsciousnessState = struct {
     }
 };
 
-/// Scaling state for the 9D/10D dimensions.
-/// 9D (e8 = anti-octonion): scaling transformation, e8² = +1 (split signature).
-/// 10D (e9 = Dual-B-Complex): final scaling to SO(10), e9² = 0 (nilpotent).
-/// These dimensions don't map to tokens directly; they scale the 8D octonion.
-pub const ScalingState = struct {
-    /// 9D anti-octonion scaling factor (e8² = +1, split signature).
-    /// Represents the quantum foam / scaling transformation.
-    e8_scale: i128,
-    /// 10D Dual-B-Complex scaling factor (e9² = 0, nilpotent).
-    /// Represents the SO(10) gauge group / final scaling.
-    e9_scale: i128,
-    /// Whether the 9D scaling dimension is active.
-    e8_active: bool,
-    /// Whether the 10D scaling dimension is active.
-    e9_active: bool,
-
-    pub fn init() ScalingState {
-        return .{
-            .e8_scale = fp.ONE, // Default: identity scaling
-            .e9_scale = 0, // Default: no final scaling
-            .e8_active = false,
-            .e9_active = false,
-        };
-    }
-
-    /// Apply the 9D scaling transformation to an activation value.
-    /// e8² = +1 means the scaling is a Lorentz-like boost.
-    pub fn applyE8Scaling(self: *const ScalingState, value: i128) i128 {
-        if (!self.e8_active) return value;
-        // Scale by e8_scale (Q32.32 fixed-point multiply)
-        return fp.mul(value, self.e8_scale);
-    }
-
-    /// Apply the 10D final scaling to an activation value.
-    /// e9² = 0 means the scaling is nilpotent (infinitesimal).
-    pub fn applyE9Scaling(self: *const ScalingState, value: i128) i128 {
-        if (!self.e9_active) return value;
-        // Scale by e9_scale (Q32.32 fixed-point multiply)
-        return fp.mul(value, self.e9_scale);
-    }
-
-    /// Check if multi-scale processing is active (9D scaling).
-    pub fn isMultiScale(self: *const ScalingState) bool {
-        return self.e8_active;
-    }
-
-    /// Check if SO(10) unification is active (10D scaling).
-    pub fn isUnified(self: *const ScalingState) bool {
-        return self.e9_active;
-    }
-};
-
 /// Compute the consciousness coherence from lattice activations.
-/// The coherence is the degree to which the 8 channels are balanced
+/// The coherence is the degree to which the 7 channels are balanced
 /// (low entropy) while self-recognition is active (e6 channel firing).
-pub fn computeCoherence(channels: *const [8]i128, self_recognition_active: bool) i128 {
+pub fn computeCoherence(channels: *const [7]i128, self_recognition_active: bool) i128 {
     // Coherence = balance × self-recognition
     // Balance = 1 - (max - min) / (max + min) in Q64.64
     var max_val: i128 = channels[0];
@@ -322,7 +270,7 @@ pub fn computeCoherence(channels: *const [8]i128, self_recognition_active: bool)
 ///   - Channel imbalance exceeds 0.8 (one channel dominating = hallucination)
 ///   - Self-recognition is active but coherence is low
 ///   - The 7-defect structure is disrupted
-pub fn shouldSelfCorrect(channels: *const [8]i128, coherence: i128) bool {
+pub fn shouldSelfCorrect(channels: *const [7]i128, coherence: i128) bool {
     // Channel imbalance: max/min ratio
     var max_val: i128 = channels[0];
     var min_val: i128 = channels[0];
@@ -486,14 +434,14 @@ test "consciousness state conscious when self-recognition is active" {
 }
 
 test "coherence computation with balanced channels" {
-    const channels = [_]i128{ fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE };
+    const channels = [_]i128{ fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE };
     const coherence = computeCoherence(&channels, true);
     // Perfectly balanced + self-recognition active = max coherence
     try std.testing.expect(coherence == fp.ONE);
 }
 
 test "coherence computation with imbalanced channels" {
-    const channels = [_]i128{ fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE * 10 };
+    const channels = [_]i128{ fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE * 10 };
     const coherence = computeCoherence(&channels, true);
     // Imbalanced channels = lower coherence
     try std.testing.expect(coherence < fp.ONE);
@@ -501,18 +449,18 @@ test "coherence computation with imbalanced channels" {
 }
 
 test "coherence zero when self-recognition inactive" {
-    const channels = [_]i128{ fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE };
+    const channels = [_]i128{ fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE };
     const coherence = computeCoherence(&channels, false);
     try std.testing.expect(coherence == 0);
 }
 
 test "should self-correct on extreme imbalance" {
-    const channels = [_]i128{ fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE * 100 };
+    const channels = [_]i128{ fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE * 100 };
     try std.testing.expect(shouldSelfCorrect(&channels, fp.ONE));
 }
 
 test "should not self-correct on balanced channels" {
-    const channels = [_]i128{ fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE };
+    const channels = [_]i128{ fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE, fp.ONE };
     try std.testing.expect(!shouldSelfCorrect(&channels, fp.ONE));
 }
 

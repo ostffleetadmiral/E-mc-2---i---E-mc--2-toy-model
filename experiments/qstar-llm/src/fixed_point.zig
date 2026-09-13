@@ -208,7 +208,7 @@ pub const LOGIT_SCALE: i128 = 184467440737095516160; // 10.0 * 2^64
 /// 33.0 in Q64.64 (Fibonacci normalization)
 pub const FIB_NORM: i128 = 608742474512415204288; // 33.0 * 2^64
 
-/// Fibonacci weights in Q64.64: [1, 1, 2, 3, 5, 8, 13]
+/// Fibonacci weights in Q64.64: [1, 1, 2, 3, 5, 8, 13, 21]
 pub const FIB_WEIGHTS = [_]i128{
     fromInt(1), // 1.0
     fromInt(1), // 1.0
@@ -217,6 +217,7 @@ pub const FIB_WEIGHTS = [_]i128{
     fromInt(5), // 5.0
     fromInt(8), // 8.0
     fromInt(13), // 13.0
+    fromInt(21), // 21.0
 };
 
 // =============================================================================

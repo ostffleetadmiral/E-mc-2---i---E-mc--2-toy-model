@@ -295,14 +295,14 @@ pub const CorpusLearner = struct {
             else => .factual,
         };
 
-        var synth_activations: [421][7]i128 = std.mem.zeroes([421][7]i128);
+        var synth_activations: [421][8]i128 = std.mem.zeroes([421][8]i128);
         var hash_it = std.mem.tokenizeAny(u8, definition, " \t\n\r.,!?;:\"'()[]{}");
         var node_idx: usize = 0;
         while (hash_it.next()) |w| {
             if (w.len < 3) continue;
             const h = std.hash.CityHash64.hash(w);
             const node = h % 421;
-            const channel: usize = @intCast(h % 7);
+            const channel: usize = @intCast(h % 8);
             synth_activations[node][channel] += @intCast(h % 1000);
             node_idx += 1;
             if (node_idx >= 421) break;

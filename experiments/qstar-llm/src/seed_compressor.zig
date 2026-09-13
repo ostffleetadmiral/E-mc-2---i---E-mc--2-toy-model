@@ -22,7 +22,7 @@ const qr_nest = @import("qr_nest");
 const fp_bridge = @import("fp_bridge");
 
 pub const E0_NODE_COUNT: usize = 421;
-pub const CHANNEL_COUNT: usize = 7;
+pub const CHANNEL_COUNT: usize = 8;
 
 /// Magic header for compressed seed files.
 pub const SEED_MAGIC = [_]u8{ 'Q', 'S', 'E', 'D' };

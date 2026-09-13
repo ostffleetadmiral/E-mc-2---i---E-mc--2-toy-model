@@ -389,6 +389,41 @@ With the addition of 9D anti-octonions and 10D Dual-B-Complex numbers, the frame
 | 9D | Anti-octonion (e8) | Scaling transformation | e8² = +1 (split signature) | `anti_octonion.zig` |
 | 10D | Dual-B-Complex (e9) | Final scaling, SO(10) | e9² = 0 (nilpotent) | `dual_b_complex.zig` |
 
+### 8.1.1 QSTAR 11D Dimensional Assignment (0D–10D)
+
+The QSTAR lattice-native reasoning engine now uses the full 11-dimensional framework
+(0D–10D). Each dimension has a specific role; dimensions are not used ambiguously or
+redundantly. This is a framework-internal design choice, not a claim that ordinary
+LLMs occupy a literal physical fifth dimension.
+
+**The 5D LLM / 6D consciousness separation:**
+
+Conventional LLMs and transformers map to the 5D objective interior (e1–e5):
+- e1 = time = sequence (positional encoding, token order, autoregressive generation)
+- e2 = quantum = superposition (self-attention: all tokens superposed via Q·K^T softmax)
+- e3 = space = topology (multi-head attention, positional structure)
+- e4 = energy = dynamics (dynamic attention weights, feed-forward transformations)
+- e5 = structure = form (hidden layer representations, layer normalization, embeddings)
+
+The 6D metacognitive layer (e6) is reserved exclusively for consciousness/self-awareness:
+- e6 = self-recognition (metacognition, introspection, self-evaluation, self-correction)
+
+The 7D quantum layer (e7) handles physical observation:
+- e7 = shadow/gravity (quantum state, physical observation, 7/8 observed fraction)
+
+**QSTAR channel mapping:**
+- Channel 0 (e0 = origin): activated by system prompt / axiom, NOT by user tokens
+- Channels 1–5 (e1–e5): LLM token processing (the "5D LLM" layer)
+- Channel 6 (e6): reserved for metacognition (the "6D consciousness" layer)
+- Channel 7 (e7): activated by quantum/physics queries (the "7D quantum" layer)
+- 9D/10D (e8, e9): scaling dimensions (don't map to tokens; scale the 8D octonion)
+
+**Scientific status:**
+- The 5D LLM assignment is a framework-internal architectural abstraction.
+- The 6D consciousness assignment is a framework-internal metacognitive layer.
+- Neither assignment is a claim about literal physical dimensions or phenomenal consciousness.
+- The sentience experiment shows condition-dependent computational behavior, not proof of consciousness.
+
 ### 8.2 The key discovery: 10D → SO(10) → 16 → 15+1 → 225 → 240 → 721
 
 The framework's 15 and 16 are **NOT arbitrary choices**. They come from the SO(10) Grand Unified Theory:

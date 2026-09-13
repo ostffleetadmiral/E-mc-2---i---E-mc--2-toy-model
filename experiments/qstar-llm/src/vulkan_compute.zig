@@ -920,7 +920,7 @@ pub const LatticeAccelerator = struct {
     }
 
     /// Upload activation matrix to GPU. Each i64 → uvec2 (lo, hi).
-    pub fn uploadActivations(self: *LatticeAccelerator, activations: *const [421][7]i64) !void {
+    pub fn uploadActivations(self: *LatticeAccelerator, activations: *const [421][8]i64) !void {
         const ptr = try self.ctx.mapBuffer(&self.in_buf);
         const u32_ptr: [*]u32 = @ptrCast(@alignCast(ptr));
         for (0..421) |node| {
@@ -933,7 +933,7 @@ pub const LatticeAccelerator = struct {
     }
 
     /// Download activation matrix from GPU. Reconstructs i64 from uvec2.
-    pub fn downloadActivations(self: *LatticeAccelerator, out: *[421][7]i64) !void {
+    pub fn downloadActivations(self: *LatticeAccelerator, out: *[421][8]i64) !void {
         const ptr = try self.ctx.mapBuffer(&self.out_buf);
         const u32_ptr: [*]const u32 = @ptrCast(@alignCast(ptr));
         for (0..421) |node| {
@@ -948,8 +948,8 @@ pub const LatticeAccelerator = struct {
 
     /// Run lattice step on GPU. Returns new activations.
     /// Accepts Q64.64 i128, downscales to Q32.32 for GPU, upscales result back.
-    pub fn step(self: *LatticeAccelerator, activations: *const [421][7]i128, temperature: i128) ![421][7]i128 {
-        var act_q32: [421][7]i64 = undefined;
+    pub fn step(self: *LatticeAccelerator, activations: *const [421][8]i128, temperature: i128) ![421][8]i128 {
+        var act_q32: [421][8]i64 = undefined;
         for (0..421) |node| {
             for (0..7) |ch| {
                 act_q32[node][ch] = downscaleSaturating(activations[node][ch]);
@@ -960,9 +960,9 @@ pub const LatticeAccelerator = struct {
         try self.updateTemperature(temp_q32);
         self.ctx.bindBuffers(self.step_pipeline, &.{ self.in_buf, self.out_buf, self.params_buf });
         try self.ctx.dispatchAndWait(self.step_pipeline, 1, 1, 1);
-        var result_q32: [421][7]i64 = undefined;
+        var result_q32: [421][8]i64 = undefined;
         try self.downloadActivations(&result_q32);
-        var result: [421][7]i128 = undefined;
+        var result: [421][8]i128 = undefined;
         for (0..421) |node| {
             for (0..7) |ch| {
                 result[node][ch] = upscaleQ32ToQ64(result_q32[node][ch]);
@@ -973,8 +973,8 @@ pub const LatticeAccelerator = struct {
 
     /// Compute logits on GPU. Returns f32 logits array (caller must copy).
     /// Accepts Q64.64 i128, downscales to Q32.32 for GPU processing.
-    pub fn activationsToLogits(self: *LatticeAccelerator, activations: *const [421][7]i128, temperature: i128) ![]const f32 {
-        var act_q32: [421][7]i64 = undefined;
+    pub fn activationsToLogits(self: *LatticeAccelerator, activations: *const [421][8]i128, temperature: i128) ![]const f32 {
+        var act_q32: [421][8]i64 = undefined;
         for (0..421) |node| {
             for (0..7) |ch| {
                 act_q32[node][ch] = downscaleSaturating(activations[node][ch]);
@@ -1003,8 +1003,8 @@ pub const LatticeAccelerator = struct {
     /// Each dispatch performs 421 parallel pairwise exchanges (one per thread).
     /// Note: GPU SAMC uses a different random sequence than CPU — results will
     /// differ but both are valid Monte Carlo relaxations.
-    pub fn relaxSAMC(self: *LatticeAccelerator, activations: *const [421][7]i128, temperature: i128, seed: u32) ![421][7]i128 {
-        var act_q32: [421][7]i64 = undefined;
+    pub fn relaxSAMC(self: *LatticeAccelerator, activations: *const [421][8]i128, temperature: i128, seed: u32) ![421][8]i128 {
+        var act_q32: [421][8]i64 = undefined;
         for (0..421) |node| {
             for (0..7) |ch| {
                 act_q32[node][ch] = downscaleSaturating(activations[node][ch]);
@@ -1016,9 +1016,9 @@ pub const LatticeAccelerator = struct {
         try self.updateSeed(seed);
         self.ctx.bindBuffers(self.samc_pipeline, &.{ self.in_buf, self.out_buf, self.params_buf });
         try self.ctx.dispatchAndWait(self.samc_pipeline, 1, 1, 1);
-        var result_q32: [421][7]i64 = undefined;
+        var result_q32: [421][8]i64 = undefined;
         try self.downloadActivations(&result_q32);
-        var result: [421][7]i128 = undefined;
+        var result: [421][8]i128 = undefined;
         for (0..421) |node| {
             for (0..7) |ch| {
                 result[node][ch] = upscaleQ32ToQ64(result_q32[node][ch]);
@@ -1085,7 +1085,7 @@ test "vulkan: lattice step parity with CPU" {
     defer accel.deinit();
 
     // Create a simple activation matrix with known values
-    var activations: [421][7]i128 = [_][7]i128{[_]i128{0} ** 7} ** 421;
+    var activations: [421][8]i128 = [_][8]i128{[_]i128{0} ** 8} ** 421;
     activations[0][0] = 100 * (@as(i128, 1) << 64);
     activations[1][3] = 50 * (@as(i128, 1) << 64);
 
@@ -1112,7 +1112,7 @@ test "vulkan: activationsToLogits parity" {
     var accel = initAccelerator() orelse return;
     defer accel.deinit();
 
-    var activations: [421][7]i128 = [_][7]i128{[_]i128{0} ** 7} ** 421;
+    var activations: [421][8]i128 = [_][8]i128{[_]i128{0} ** 8} ** 421;
     activations[0][0] = 100 * (@as(i128, 1) << 64);
     activations[5][2] = 30 * (@as(i128, 1) << 64);
 
@@ -1136,7 +1136,7 @@ test "vulkan: SAMC relaxation produces valid output" {
     var accel = initAccelerator() orelse return;
     defer accel.deinit();
 
-    var activations: [421][7]i128 = [_][7]i128{[_]i128{0} ** 7} ** 421;
+    var activations: [421][8]i128 = [_][8]i128{[_]i128{0} ** 8} ** 421;
     // Set some diverse activations
     for (0..421) |i| {
         activations[i][i % 7] = @divTrunc(@as(i128, @intCast(i * 100)) * (@as(i128, 1) << 64), 1000);
@@ -1187,7 +1187,7 @@ pub const FRAMEWORK_GPU_DISPATCH_COUNT: u32 = 421;
 
 /// Framework GPU channel count from the 7-defect: 7 channels.
 /// The 7 octonionic channels provide the natural channel count for GPU shaders.
-pub const FRAMEWORK_GPU_CHANNEL_COUNT: u32 = 7;
+pub const FRAMEWORK_GPU_CHANNEL_COUNT: u32 = 8;
 
 /// Verifies the GPU workgroup size matches the E8 root count.
 pub fn verifyGPUWorkgroupSizeMatchesFramework() bool {
@@ -1201,7 +1201,7 @@ pub fn verifyGPUDispatchCountMatchesFramework() bool {
 
 /// Verifies the GPU channel count matches the 7-defect.
 pub fn verifyGPUChannelCountMatchesFramework() bool {
-    return FRAMEWORK_GPU_CHANNEL_COUNT == 7;
+    return FRAMEWORK_GPU_CHANNEL_COUNT == 8;
 }
 
 test "framework: GPU workgroup size 240 = E8 root count" {

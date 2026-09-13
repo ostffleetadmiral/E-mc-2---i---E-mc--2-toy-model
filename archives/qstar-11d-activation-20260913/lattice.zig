@@ -125,7 +125,7 @@ pub fn unflatCoords(chunk_idx: usize, level: u8) Coords {
 pub const E0_NODE_COUNT: usize = 421;
 
 /// Number of channels per node (octonionic dimensions e0..e6).
-pub const CHANNEL_COUNT: usize = 8;
+pub const CHANNEL_COUNT: usize = 7;
 
 /// Number of nodes for a given lattice scaling level s:
 /// nodes = 421 × 8^s (e.g. s=0 → 421, s=1 → 3,368, s=2 → 26,944, s=3 → 215,552).
@@ -1240,10 +1240,10 @@ test "scaledNodeCount produces correct values s=0..s=3" {
 }
 
 test "scaledTokenSlots produces correct slot capacities s=0..s=3" {
-    try std.testing.expectEqual(@as(usize, 3368), scaledTokenSlots(0));
-    try std.testing.expectEqual(@as(usize, 26944), scaledTokenSlots(1));
-    try std.testing.expectEqual(@as(usize, 215552), scaledTokenSlots(2));
-    try std.testing.expectEqual(@as(usize, 1724416), scaledTokenSlots(3));
+    try std.testing.expectEqual(@as(usize, 2947), scaledTokenSlots(0));
+    try std.testing.expectEqual(@as(usize, 23576), scaledTokenSlots(1));
+    try std.testing.expectEqual(@as(usize, 188608), scaledTokenSlots(2));
+    try std.testing.expectEqual(@as(usize, 1508864), scaledTokenSlots(3));
 }
 
 test "scaled token mapping round-trip is exact within mappable range" {

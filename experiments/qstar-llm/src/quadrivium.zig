@@ -15,7 +15,7 @@ const fp = @import("fixed_point");
 // =============================================================================
 
 const E0_NODE_COUNT: usize = 421;
-const CHANNEL_COUNT: usize = 7;
+const CHANNEL_COUNT: usize = 8;
 
 /// Formant frequency bands in Hz (Q64.64 fixed-point)
 pub const F1_MIN: i128 = 200 << 64;
@@ -79,7 +79,7 @@ pub const ArithmeticLayer = struct {
 // =============================================================================
 
 pub const GeometryLayer = struct {
-    pub fn manifoldDistance(a: [7]i128, b: [7]i128) i128 {
+    pub fn manifoldDistance(a: [8]i128, b: [8]i128) i128 {
         var sum_sq: i128 = 0;
         for (0..7) |ch| {
             const diff = a[ch] - b[ch];
@@ -88,7 +88,7 @@ pub const GeometryLayer = struct {
         return isqrt(sum_sq);
     }
 
-    pub fn cosineSimilarity(a: [7]i128, b: [7]i128) f64 {
+    pub fn cosineSimilarity(a: [8]i128, b: [8]i128) f64 {
         var dot: i128 = 0;
         var norm_a: i128 = 0;
         var norm_b: i128 = 0;
@@ -115,7 +115,7 @@ pub const GeometryLayer = struct {
         return @as(usize, hash) % node_count;
     }
 
-    pub fn compressActivationVolume(activations: []const [7]i128) [E0_NODE_COUNT * 7 / 8]u8 {
+    pub fn compressActivationVolume(activations: []const [8]i128) [E0_NODE_COUNT * 7 / 8]u8 {
         var compressed: [E0_NODE_COUNT * 7 / 8]u8 = std.mem.zeroes([E0_NODE_COUNT * 7 / 8]u8);
         var bit_offset: usize = 0;
         for (activations) |node| {
@@ -153,8 +153,8 @@ pub const MusicLayer = struct {
         };
     }
 
-    pub fn harmonicSeries(_: MusicLayer, fundamental: i128) [7]i128 {
-        var harmonics: [7]i128 = undefined;
+    pub fn harmonicSeries(_: MusicLayer, fundamental: i128) [8]i128 {
+        var harmonics: [8]i128 = undefined;
         for (1..8) |n| {
             harmonics[n - 1] = fundamental * @as(i128, @intCast(n));
         }
@@ -193,7 +193,7 @@ pub const MusicLayer = struct {
         return if (f1 > f2) f1 - f2 else f2 - f1;
     }
 
-    pub fn prosodyEnvelope(activations: []const [7]i128) struct { values: [E0_NODE_COUNT]i128, count: usize } {
+    pub fn prosodyEnvelope(activations: []const [8]i128) struct { values: [E0_NODE_COUNT]i128, count: usize } {
         var envelope: [E0_NODE_COUNT]i128 = undefined;
         const count = @min(activations.len, E0_NODE_COUNT);
         for (0..count) |i| {
@@ -206,7 +206,7 @@ pub const MusicLayer = struct {
         return .{ .values = envelope, .count = count };
     }
 
-    pub fn pitchContour(activations: []const [7]i128) struct { values: [E0_NODE_COUNT]i128, count: usize } {
+    pub fn pitchContour(activations: []const [8]i128) struct { values: [E0_NODE_COUNT]i128, count: usize } {
         var contour: [E0_NODE_COUNT]i128 = undefined;
         const count = @min(activations.len, E0_NODE_COUNT);
         for (0..count) |i| {
@@ -237,12 +237,12 @@ pub const AstronomyLayer = struct {
         return .{};
     }
 
-    pub fn stateTrajectory(activations: []const [7]i128, steps: usize) [16][7]i128 {
-        var trajectory: [16][7]i128 = undefined;
+    pub fn stateTrajectory(activations: []const [8]i128, steps: usize) [16][8]i128 {
+        var trajectory: [16][8]i128 = undefined;
         const count = @min(steps, 16);
         if (activations.len == 0) return trajectory;
 
-        var current: [7]i128 = activations[activations.len - 1];
+        var current: [8]i128 = activations[activations.len - 1];
         for (0..count) |step| {
             trajectory[step] = current;
             current = evolveState(current, @intCast(step));
@@ -250,8 +250,8 @@ pub const AstronomyLayer = struct {
         return trajectory;
     }
 
-    pub fn evolveState(state: [7]i128, delta: i128) [7]i128 {
-        var next: [7]i128 = undefined;
+    pub fn evolveState(state: [8]i128, delta: i128) [8]i128 {
+        var next: [8]i128 = undefined;
         for (0..7) |ch| {
             const ch_next = state[(ch + 1) % 7];
             const ch_prev = state[(ch + 6) % 7];
@@ -262,8 +262,8 @@ pub const AstronomyLayer = struct {
         return next;
     }
 
-    pub fn predictFuture(state: [7]i128, horizon: usize) [16][7]i128 {
-        var predictions: [16][7]i128 = undefined;
+    pub fn predictFuture(state: [8]i128, horizon: usize) [16][8]i128 {
+        var predictions: [16][8]i128 = undefined;
         const count = @min(horizon, 16);
         var current = state;
         for (0..count) |h| {
@@ -273,7 +273,7 @@ pub const AstronomyLayer = struct {
         return predictions;
     }
 
-    pub fn orbitalEnergy(activations: []const [7]i128) i128 {
+    pub fn orbitalEnergy(activations: []const [8]i128) i128 {
         var energy: i128 = 0;
         for (activations) |node| {
             for (node) |ch| {
@@ -286,7 +286,7 @@ pub const AstronomyLayer = struct {
         return energy;
     }
 
-    pub fn stabilityMetric(activations: []const [7]i128) f64 {
+    pub fn stabilityMetric(activations: []const [8]i128) f64 {
         if (activations.len < 2) return 1.0;
         var total_change: f64 = 0.0;
         var comparisons: f64 = 0.0;
@@ -322,19 +322,19 @@ pub const QuadriviumPipeline = struct {
         };
     }
 
-    pub fn processState(self: *QuadriviumPipeline, activations: []const [7]i128) void {
+    pub fn processState(self: *QuadriviumPipeline, activations: []const [8]i128) void {
         self.arithmetic.total_operations += 1;
         self.astronomy.cycle += 1;
         self.astronomy.trajectory_energy = AstronomyLayer.orbitalEnergy(activations);
     }
 
-    pub fn predictNext(self: *QuadriviumPipeline, activations: []const [7]i128) [16][7]i128 {
-        if (activations.len == 0) return std.mem.zeroes([16][7]i128);
+    pub fn predictNext(self: *QuadriviumPipeline, activations: []const [8]i128) [16][8]i128 {
+        if (activations.len == 0) return std.mem.zeroes([16][8]i128);
         const last = activations[activations.len - 1];
         return AstronomyLayer.predictFuture(last, self.astronomy.prediction_horizon);
     }
 
-    pub fn stabilityScore(self: *QuadriviumPipeline, activations: []const [7]i128) f64 {
+    pub fn stabilityScore(self: *QuadriviumPipeline, activations: []const [8]i128) f64 {
         _ = self;
         return AstronomyLayer.stabilityMetric(activations);
     }
@@ -379,17 +379,17 @@ test "quadrivium: arithmetic quantization round-trip" {
 }
 
 test "quadrivium: geometry manifold distance" {
-    const a: [7]i128 = .{ 100, 200, 300, 0, 0, 0, 0 };
-    const b: [7]i128 = .{ 100, 200, 300, 0, 0, 0, 0 };
+    const a: [8]i128 = .{ 100, 200, 300, 0, 0, 0, 0, 0 };
+    const b: [8]i128 = .{ 100, 200, 300, 0, 0, 0, 0, 0 };
     try std.testing.expect(GeometryLayer.manifoldDistance(a, b) == 0);
 
-    const c: [7]i128 = .{ 200, 300, 400, 0, 0, 0, 0 };
+    const c: [8]i128 = .{ 200, 300, 400, 0, 0, 0, 0, 0 };
     try std.testing.expect(GeometryLayer.manifoldDistance(a, c) > 0);
 }
 
 test "quadrivium: geometry cosine similarity" {
-    const a: [7]i128 = .{ 100, 200, 300, 0, 0, 0, 0 };
-    const b: [7]i128 = .{ 100, 200, 300, 0, 0, 0, 0 };
+    const a: [8]i128 = .{ 100, 200, 300, 0, 0, 0, 0, 0 };
+    const b: [8]i128 = .{ 100, 200, 300, 0, 0, 0, 0, 0 };
     const sim = GeometryLayer.cosineSimilarity(a, b);
     try std.testing.expectApproxEqAbs(@as(f64, 1.0), sim, 0.001);
 }
@@ -428,7 +428,7 @@ test "quadrivium: music formant to lattice mapping" {
 }
 
 test "quadrivium: music lattice to formants" {
-    const activations: [7]i128 = .{ 500 << 64, 1500 << 64, 2500 << 64, 0, 0, 0, 0 };
+    const activations: [8]i128 = .{ 500 << 64, 1500 << 64, 2500 << 64, 0, 0, 0, 0, 0 };
     const formants = MusicLayer.latticeToFormants(activations);
     try std.testing.expect(formants.f1 == 500 << 64);
     try std.testing.expect(formants.f2 == 1500 << 64);
@@ -450,15 +450,15 @@ test "quadrivium: music resonance attenuation" {
 }
 
 test "quadrivium: astronomy state trajectory" {
-    const activations = [_][7]i128{
-        .{ 100, 200, 300, 50, 30, 20, 10 },
+    const activations = [_][8]i128{
+        .{ 100, 200, 300, 50, 30, 20, 10, 0 },
     };
     const traj = AstronomyLayer.stateTrajectory(&activations, 4);
     try std.testing.expect(traj[0][0] == 100);
 }
 
 test "quadrivium: astronomy evolve state" {
-    const state: [7]i128 = .{ 100, 200, 300, 50, 30, 20, 10 };
+    const state: [8]i128 = .{ 100, 200, 300, 50, 30, 20, 10, 0 };
     const next = AstronomyLayer.evolveState(state, 1);
     var has_change = false;
     for (0..7) |ch| {
@@ -468,33 +468,33 @@ test "quadrivium: astronomy evolve state" {
 }
 
 test "quadrivium: astronomy predict future" {
-    const state: [7]i128 = .{ 100, 200, 300, 50, 30, 20, 10 };
+    const state: [8]i128 = .{ 100, 200, 300, 50, 30, 20, 10, 0 };
     const predictions = AstronomyLayer.predictFuture(state, 4);
     try std.testing.expect(predictions[0][0] != state[0]);
 }
 
 test "quadrivium: astronomy orbital energy" {
-    const activations = [_][7]i128{
-        .{ 100, 200, 300, 0, 0, 0, 0 },
-        .{ 50, 100, 150, 0, 0, 0, 0 },
+    const activations = [_][8]i128{
+        .{ 100, 200, 300, 0, 0, 0, 0, 0 },
+        .{ 50, 100, 150, 0, 0, 0, 0, 0 },
     };
     const energy = AstronomyLayer.orbitalEnergy(&activations);
     try std.testing.expect(energy > 0);
 }
 
 test "quadrivium: astronomy stability metric" {
-    const stable = [_][7]i128{
-        .{ 100, 200, 300, 50, 30, 20, 10 },
-        .{ 100, 200, 300, 50, 30, 20, 10 },
-        .{ 100, 200, 300, 50, 30, 20, 10 },
+    const stable = [_][8]i128{
+        .{ 100, 200, 300, 50, 30, 20, 10, 0 },
+        .{ 100, 200, 300, 50, 30, 20, 10, 0 },
+        .{ 100, 200, 300, 50, 30, 20, 10, 0 },
     };
     const stability = AstronomyLayer.stabilityMetric(&stable);
     try std.testing.expectApproxEqAbs(@as(f64, 1.0), stability, 0.01);
 
-    const unstable = [_][7]i128{
-        .{ 1000, 2000, 3000, 500, 300, 200, 100 },
-        .{ 10, 20, 30, 5, 3, 2, 1 },
-        .{ 500, 1000, 1500, 250, 150, 100, 50 },
+    const unstable = [_][8]i128{
+        .{ 1000, 2000, 3000, 500, 300, 200, 100, 0 },
+        .{ 10, 20, 30, 5, 3, 2, 1, 0 },
+        .{ 500, 1000, 1500, 250, 150, 100, 50, 0 },
     };
     const instability = AstronomyLayer.stabilityMetric(&unstable);
     try std.testing.expect(instability < 1.0);
@@ -502,9 +502,9 @@ test "quadrivium: astronomy stability metric" {
 
 test "quadrivium: pipeline process and predict" {
     var pipeline = QuadriviumPipeline.init(44100 << 64);
-    const activations = [_][7]i128{
-        .{ 100, 200, 300, 50, 30, 20, 10 },
-        .{ 120, 180, 280, 60, 25, 15, 5 },
+    const activations = [_][8]i128{
+        .{ 100, 200, 300, 50, 30, 20, 10, 0 },
+        .{ 120, 180, 280, 60, 25, 15, 5, 0 },
     };
     pipeline.processState(&activations);
     try std.testing.expect(pipeline.astronomy.cycle == 1);
