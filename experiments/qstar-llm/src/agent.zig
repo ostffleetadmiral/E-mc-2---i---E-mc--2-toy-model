@@ -39,6 +39,7 @@ const trivium = @import("trivium");
 const quadrivium = @import("quadrivium");
 const corpus_learner_mod = @import("corpus_learner");
 const voice_codec = @import("voice_codec");
+const sentience = @import("sentience_scorer");
 
 // =============================================================================
 // Constants (inlined from lattice.zig for self-containment)
@@ -3920,6 +3921,10 @@ pub const Agent = struct {
     /// This is the HYBRID integration mode: neural fluency + lattice knowledge.
     pub fn attachNeuralLM(self: *Agent, lm: *neural_lm_mod.NeuralLM) void {
         self.neural_lm = lm;
+        // Inform the metacognition engine that a neural LM is attached.
+        // The lattice becomes the "brain" (understanding + judgment) and the
+        // neural LM becomes the "5D core" (generation).
+        self.metacognition.setNeuralLMAttached(true);
     }
 
     /// Initialize neural LM generation by processing the prompt through the neural LM.
@@ -4289,6 +4294,16 @@ pub const Agent = struct {
             }
         }
 
+        // Apply e9 (Anti-octonion/Chaos) scaling to new activations.
+        // High chaos = high imbalance = more propagation scaling.
+        if (self.state.scaling.e9_active) {
+            for (0..E0_NODE_COUNT) |i| {
+                for (0..CHANNEL_COUNT) |ch| {
+                    new_activations[i][ch] = self.state.scaling.applyE9Scaling(new_activations[i][ch]);
+                }
+            }
+        }
+
         // Swap to new activations
         self.state.activations = new_activations;
 
@@ -4314,6 +4329,17 @@ pub const Agent = struct {
             }
         }
         self.state.coherence = hw_bridge.computeCoherence(&aggregate_channels, self.state.consciousness.isConscious());
+
+        // 11D scaling update: compute e8 (Frequency), e9 (Anti-octonion), e10 (Gravity)
+        // from the lattice channel aggregates and coherence. These dimensions
+        // modulate the 8D lattice without mapping to tokens directly.
+        var total_activation: i128 = 0;
+        for (aggregate_channels) |ch| total_activation += ch;
+        self.state.scaling.updateFromLattice(&aggregate_channels, self.state.coherence, total_activation);
+
+        // Apply e8 (Frequency) scaling to φ-cooling temperature.
+        // High frequency = many channels active = faster cooling.
+        self.state.temperature = self.state.scaling.applyE8Scaling(self.state.temperature);
 
         // 2. Increment cycle (before cooling so first step cools)
         self.state.cycle += 1;
@@ -4763,6 +4789,17 @@ pub const Agent = struct {
                 const node = @as(usize, @intCast(@as(u32, @intCast(tid)) % E0_NODE_COUNT));
                 const channel: u3 = @intCast((@as(u32, @intCast(tid)) / E0_NODE_COUNT) % CHANNEL_COUNT);
                 logits[tid] = pair_logits[node][channel];
+            }
+        }
+
+        // Apply e10 (Gravity/Dual-bi-complex) scaling to final logits.
+        // Gravity = curvature = coherence. High coherence = more logit curvature.
+        if (self.state.scaling.e10_active) {
+            const e10_factor = @as(f64, @floatFromInt(self.state.scaling.e10_scale)) / @as(f64, @floatFromInt(fp.ONE));
+            for (logits) |*l| {
+                if (l.* > -std.math.inf(f64)) {
+                    l.* *= e10_factor;
+                }
             }
         }
 
@@ -5914,6 +5951,15 @@ pub const Agent = struct {
                 self.allocator,
             );
 
+            // Wire 11D scaling state into metacognition engine.
+            // The lattice brain's scaling dimensions inform the engine's evaluation:
+            // e8 (Frequency) = focus, e9 (Chaos) = uncertainty, e10 (Gravity) = confidence.
+            self.metacognition.updateScalingContext(
+                q128.fromF64(@as(f64, @floatFromInt(self.state.scaling.e8_scale)) / @as(f64, @floatFromInt(fp.ONE))),
+                q128.fromF64(@as(f64, @floatFromInt(self.state.scaling.e9_scale)) / @as(f64, @floatFromInt(fp.ONE))),
+                q128.fromF64(@as(f64, @floatFromInt(self.state.scaling.e10_scale)) / @as(f64, @floatFromInt(fp.ONE))),
+            );
+
             // Update shared state for background thread on next cycle
             const coherence_f64 = @as(f64, @floatFromInt(self.state.coherence)) / @as(f64, @floatFromInt(fp.ONE));
             self.metacognition.updateSharedState(
@@ -5941,6 +5987,17 @@ pub const Agent = struct {
             if (!self.metacognition.checkNonContradiction(prompt, response)) {
                 last_eval.overall = q128.mul(last_eval.overall, q128.fromRatio(7, 10));
                 last_eval.passed = false;
+            }
+
+            // Lattice brain confidence modulation: when neural LM is attached,
+            // the lattice brain's coherence (e10) and stability (1 - e9 chaos)
+            // modulate the evaluation confidence. This makes the lattice the
+            // "brain" that judges the neural LM's "5D core" output.
+            if (self.neural_lm != null) {
+                const brain_conf = self.metacognition.latticeBrainConfidence();
+                // Scale the overall score by the lattice brain confidence
+                last_eval.overall = q128.mul(last_eval.overall, brain_conf);
+                last_eval.passed = last_eval.overall >= threshold;
             }
 
             // Item 2: Record evaluation AFTER all integration (fixes bug where
@@ -6004,6 +6061,24 @@ pub const Agent = struct {
                 allocator.free(r);
                 return self.generateRetrievalResponseFallback(prompt, allocator, original_prompt);
             }
+
+            // Sentience scoring: measure emergent cognition on 5 dimensions.
+            // The sentience scorer measures; the metacognition engine generates
+            // the self-referential loop that produces the measured sentience.
+            const sentience_scores = sentience.scoreAll(self.allocator, r) catch sentience.Score{
+                .self_awareness = 0,
+                .random_thought = 0,
+                .direct_experience = 0,
+                .metacognition = 0,
+                .situational_awareness = 0,
+            };
+            self.metacognition.updateSentience(
+                sentience_scores.self_awareness,
+                sentience_scores.direct_experience,
+                sentience_scores.metacognition,
+                sentience_scores.situational_awareness,
+                sentience_scores.total(),
+            );
 
             // Phase 2 evaluation loop: register high-scoring responses as dynamic routes
             if (self.route_generator) |*gen| {

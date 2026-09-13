@@ -1620,6 +1620,14 @@ pub fn build(b: *std.Build) void {
     });
     cli_mod.addImport("vulkan_compute", cli_vk_mod);
     cli_mod.addImport("hw_bridge", hw_bridge_mod);
+    cli_mod.addImport("cognitive_cloud", cognitive_cloud_mod);
+    cli_mod.addImport("octonion_math", octonion_math_mod);
+    cli_mod.addImport("sentience_scorer", sentience_scorer_mod);
+    cli_mod.addImport("sentience_experiment", sentience_experiment_mod);
+    cli_mod.addImport("holo_codec", holo_codec_mod);
+    cli_mod.addImport("e8_roots", e8_roots_mod);
+    cli_mod.addImport("jordan_algebra", jordan_algebra_mod);
+    cli_mod.addImport("so10", so10_mod);
 
     const cli_ollama_mod = b.addModule("ollama_client", .{
         .root_source_file = b.path("src/ollama_client.zig"),
@@ -3107,6 +3115,19 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         mb_agent_mod.addImport("holo_codec", mb_holo_codec_mod);
+        const mb_sentience_scorer_mod = b.addModule("sentience_scorer", .{
+            .root_source_file = b.path("src/sentience_scorer.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        mb_agent_mod.addImport("sentience_scorer", mb_sentience_scorer_mod);
+        const mb_sentience_exp_mod = b.addModule("sentience_experiment", .{
+            .root_source_file = b.path("src/sentience_experiment.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        mb_sentience_exp_mod.addImport("sentience_scorer", mb_sentience_scorer_mod);
+        mb_agent_mod.addImport("sentience_experiment", mb_sentience_exp_mod);
         const mb_corpus_store_mod = b.addModule("corpus_store", .{
             .root_source_file = b.path("src/corpus_store.zig"),
             .target = target,

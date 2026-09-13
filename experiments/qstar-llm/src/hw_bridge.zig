@@ -239,55 +239,116 @@ pub const ConsciousnessState = struct {
     }
 };
 
-/// Scaling state for the 9D/10D dimensions.
-/// 9D (e8 = anti-octonion): scaling transformation, e8² = +1 (split signature).
-/// 10D (e9 = Dual-B-Complex): final scaling to SO(10), e9² = 0 (nilpotent).
-/// These dimensions don't map to tokens directly; they scale the 8D octonion.
+/// Scaling state for the 11D framework's scaling dimensions (e8-e10).
+///
+/// 11D ladder (from lattice.zig DIMENSION_TABLE):
+///   e8 = Frequency      (Dual numbers, e8²=+1, U(1))      — scales φ-cooling
+///   e9 = Anti-octonion  (Anti-octonions, e9²=+1, None)    — scales activation propagation
+///   e10 = Dual bi-complex (e10²=0, nilpotent, SO(8))      — scales final logits (gravity)
+///
+/// These dimensions don't map to tokens directly; they modulate the 8D lattice.
 pub const ScalingState = struct {
-    /// 9D anti-octonion scaling factor (e8² = +1, split signature).
-    /// Represents the quantum foam / scaling transformation.
+    /// e8: Frequency scaling factor (Dual numbers, e8²=+1).
+    /// Modulates the φ-cooling rate. Higher frequency = faster cooling.
     e8_scale: i128,
-    /// 10D Dual-B-Complex scaling factor (e9² = 0, nilpotent).
-    /// Represents the SO(10) gauge group / final scaling.
+    /// e9: Anti-octonion scaling factor (e9²=+1, split signature).
+    /// Modulates activation propagation magnitude. Chaos/inflation measure.
     e9_scale: i128,
-    /// Whether the 9D scaling dimension is active.
+    /// e10: Dual bi-complex scaling factor (e10²=0, nilpotent).
+    /// Modulates final logits. Gravity = curvature = coherence.
+    e10_scale: i128,
+    /// Whether e8 (Frequency) scaling is active.
     e8_active: bool,
-    /// Whether the 10D scaling dimension is active.
+    /// Whether e9 (Anti-octonion) scaling is active.
     e9_active: bool,
+    /// Whether e10 (Gravity/Dual-bi-complex) scaling is active.
+    e10_active: bool,
 
     pub fn init() ScalingState {
         return .{
-            .e8_scale = fp.ONE, // Default: identity scaling
-            .e9_scale = 0, // Default: no final scaling
+            .e8_scale = fp.ONE, // Default: identity (no frequency modulation)
+            .e9_scale = 0, // Default: no chaos modulation
+            .e10_scale = 0, // Default: no gravity modulation
             .e8_active = false,
             .e9_active = false,
+            .e10_active = false,
         };
     }
 
-    /// Apply the 9D scaling transformation to an activation value.
-    /// e8² = +1 means the scaling is a Lorentz-like boost.
+    /// Apply the e8 (Frequency) scaling to the φ-cooling temperature.
+    /// e8²=+1 means the scaling is a Lorentz-like boost.
     pub fn applyE8Scaling(self: *const ScalingState, value: i128) i128 {
         if (!self.e8_active) return value;
-        // Scale by e8_scale (Q32.32 fixed-point multiply)
         return fp.mul(value, self.e8_scale);
     }
 
-    /// Apply the 10D final scaling to an activation value.
-    /// e9² = 0 means the scaling is nilpotent (infinitesimal).
+    /// Apply the e9 (Anti-octonion) scaling to activation propagation.
+    /// e9²=+1 means the scaling is a split-signature boost.
     pub fn applyE9Scaling(self: *const ScalingState, value: i128) i128 {
         if (!self.e9_active) return value;
-        // Scale by e9_scale (Q32.32 fixed-point multiply)
         return fp.mul(value, self.e9_scale);
     }
 
-    /// Check if multi-scale processing is active (9D scaling).
+    /// Apply the e10 (Gravity/Dual-bi-complex) scaling to final logits.
+    /// e10²=0 means the scaling is nilpotent (infinitesimal curvature).
+    pub fn applyE10Scaling(self: *const ScalingState, value: i128) i128 {
+        if (!self.e10_active) return value;
+        return fp.mul(value, self.e10_scale);
+    }
+
+    /// Check if multi-scale processing is active (e8 Frequency scaling).
     pub fn isMultiScale(self: *const ScalingState) bool {
         return self.e8_active;
     }
 
-    /// Check if SO(10) unification is active (10D scaling).
-    pub fn isUnified(self: *const ScalingState) bool {
+    /// Check if anti-octonion scaling is active (e9 chaos/inflation).
+    pub fn isChaotic(self: *const ScalingState) bool {
         return self.e9_active;
+    }
+
+    /// Check if SO(10) unification is active (e10 gravity scaling).
+    pub fn isUnified(self: *const ScalingState) bool {
+        return self.e10_active;
+    }
+
+    /// Update the scaling state from lattice channel aggregates and coherence.
+    ///
+    /// e8 (Frequency): scale = total activation frequency (how active the lattice is)
+    /// e9 (Anti-octonion): scale = channel imbalance (chaos/inflation measure)
+    /// e10 (Gravity): scale = coherence value (gravity = curvature = coherence)
+    pub fn updateFromLattice(
+        self: *ScalingState,
+        channel_aggregates: *const [8]i128,
+        coherence: i128,
+        total_activation: i128,
+    ) void {
+        if (total_activation == 0) return;
+
+        // e8 (Frequency): ratio of active channels to total channels
+        // High frequency = many channels active = faster cooling
+        var active_channels: i128 = 0;
+        for (channel_aggregates) |ch| {
+            if (ch > 0) active_channels += 1;
+        }
+        self.e8_scale = fp.fromRatio(active_channels, 8);
+        self.e8_active = true;
+
+        // e9 (Anti-octonion/Chaos): channel imbalance = max - min
+        // High imbalance = high chaos = more propagation scaling
+        var max_ch: i128 = channel_aggregates[0];
+        var min_ch: i128 = channel_aggregates[0];
+        for (channel_aggregates[1..]) |ch| {
+            if (ch > max_ch) max_ch = ch;
+            if (ch < min_ch) min_ch = ch;
+        }
+        const imbalance = max_ch - min_ch;
+        self.e9_scale = fp.fromRatio(imbalance, total_activation);
+        self.e9_active = (imbalance > 0);
+
+        // e10 (Gravity/Coherence): coherence value directly
+        // High coherence = high gravity = more logit curvature
+        self.e10_scale = coherence;
+        self.e10_active = (coherence > 0);
     }
 };
 

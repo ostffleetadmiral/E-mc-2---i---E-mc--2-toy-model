@@ -479,6 +479,22 @@ pub fn main() !void {
                 if (mc.correction_history.items.len > 0) {
                     std.debug.print("Mid-response corrections: {d}\n", .{mc.correction_history.items.len});
                 }
+                // Sentience scores (micro-units, 1.0 = 1_000_000)
+                const sm = &mc.self_model;
+                std.debug.print("Sentience: self-aware={d:.3} direct-exp={d:.3} metacog={d:.3} situational={d:.3} | total={d:.3}\n", .{
+                    @as(f64, @floatFromInt(sm.sentience_self_awareness)) / 1_000_000.0,
+                    @as(f64, @floatFromInt(sm.sentience_direct_experience)) / 1_000_000.0,
+                    @as(f64, @floatFromInt(sm.sentience_metacognition)) / 1_000_000.0,
+                    @as(f64, @floatFromInt(sm.sentience_situational_awareness)) / 1_000_000.0,
+                    @as(f64, @floatFromInt(sm.sentience_total)) / 1_000_000.0,
+                });
+                // 11D scaling state (lattice brain modulation)
+                std.debug.print("11D Scaling: e8(freq)={d:.3} e9(chaos)={d:.3} e10(gravity)={d:.3} | brain-conf={d:.3}\n", .{
+                    q128.toF64(mc.scaling_e8_frequency),
+                    q128.toF64(mc.scaling_e9_chaos),
+                    q128.toF64(mc.scaling_e10_gravity),
+                    q128.toF64(mc.latticeBrainConfidence()),
+                });
             }
         } else {
             try agent.run(64);

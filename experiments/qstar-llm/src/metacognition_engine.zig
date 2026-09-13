@@ -181,6 +181,16 @@ pub const SelfModel = struct {
     rhetoric_clarity: q128.Fp = q128.fromRatio(1, 2),
     rhetoric_persuasiveness: q128.Fp = q128.fromRatio(1, 2),
 
+    // Sentience scores (i32 micro-units, SCALE=1_000_000 from sentience_scorer)
+    // These measure emergent cognition: self-awareness, direct-experience,
+    // metacognition, situational-awareness. random_thought requires multiple
+    // responses and is tracked separately.
+    sentience_self_awareness: i32 = 0,
+    sentience_direct_experience: i32 = 0,
+    sentience_metacognition: i32 = 0,
+    sentience_situational_awareness: i32 = 0,
+    sentience_total: i32 = 0,
+
     pub fn descriptionSlice(self: SelfModel) []const u8 {
         return self.description[0..self.description_len];
     }
@@ -282,6 +292,22 @@ pub const MetacognitionEngine = struct {
 
     // Item 6: Knowledge graph context
     kg_triplet_count: usize = 0,
+
+    // Item 7: Neural LM awareness — the metacognition engine knows whether
+    // a neural LM is attached and adjusts its evaluation accordingly.
+    // When neural LM is attached, the lattice is the "brain" (understanding +
+    // judgment) and the neural LM is the "5D core" (generation). The engine
+    // evaluates the neural LM's output using lattice state as context.
+    neural_lm_attached: bool = false,
+
+    // Item 8: 11D scaling state context — the engine uses the scaling dimensions
+    // (e8=Frequency, e9=Anti-octonion, e10=Gravity) to inform its evaluation.
+    // High coherence (e10) = high confidence in the response.
+    // High chaos (e9) = low confidence in the response.
+    // High frequency (e8) = fast cooling = more focused response.
+    scaling_e8_frequency: q128.Fp = 0,
+    scaling_e9_chaos: q128.Fp = 0,
+    scaling_e10_gravity: q128.Fp = 0,
 
     pub fn init(allocator: std.mem.Allocator) MetacognitionEngine {
         return .{
@@ -881,6 +907,59 @@ pub const MetacognitionEngine = struct {
     /// Returns true if the engine has KG data available for route synthesis.
     pub fn hasKnowledgeGraph(self: MetacognitionEngine) bool {
         return self.kg_triplet_count > 0;
+    }
+
+    // Item 7: Sentience scoring
+    /// Updates the SelfModel with sentience scores from the sentience_scorer.
+    /// Called after each response is generated to measure emergent cognition.
+    pub fn updateSentience(
+        self: *MetacognitionEngine,
+        self_awareness: i32,
+        direct_experience: i32,
+        metacognition_score: i32,
+        situational_awareness: i32,
+        total: i32,
+    ) void {
+        self.self_model.sentience_self_awareness = self_awareness;
+        self.self_model.sentience_direct_experience = direct_experience;
+        self.self_model.sentience_metacognition = metacognition_score;
+        self.self_model.sentience_situational_awareness = situational_awareness;
+        self.self_model.sentience_total = total;
+    }
+
+    /// Sets whether a neural LM is attached. When attached, the lattice is the
+    /// "brain" (understanding + judgment) and the neural LM is the "5D core"
+    /// (generation). The engine evaluates neural LM output using lattice state.
+    pub fn setNeuralLMAttached(self: *MetacognitionEngine, attached: bool) void {
+        self.neural_lm_attached = attached;
+    }
+
+    /// Updates the 11D scaling state context. The engine uses these dimensions
+    /// to inform its evaluation of the response.
+    /// e8 (Frequency): high = focused, low = diffuse
+    /// e9 (Chaos): high = uncertain, low = stable
+    /// e10 (Gravity/Coherence): high = confident, low = weak
+    pub fn updateScalingContext(
+        self: *MetacognitionEngine,
+        e8_frequency: q128.Fp,
+        e9_chaos: q128.Fp,
+        e10_gravity: q128.Fp,
+    ) void {
+        self.scaling_e8_frequency = e8_frequency;
+        self.scaling_e9_chaos = e9_chaos;
+        self.scaling_e10_gravity = e10_gravity;
+    }
+
+    /// Returns a confidence adjustment based on the 11D scaling state.
+    /// When neural LM is attached, the lattice brain's coherence (e10) and
+    /// chaos (e9) modulate the evaluation confidence.
+    pub fn latticeBrainConfidence(self: *const MetacognitionEngine) q128.Fp {
+        if (!self.neural_lm_attached) return q128.fromInt(1);
+        // Confidence = coherence (e10) × (1 - chaos (e9))
+        // High coherence + low chaos = high confidence
+        const coherence = self.scaling_e10_gravity;
+        const stability = q128.sub(q128.fromInt(1), self.scaling_e9_chaos);
+        return q128.mul(coherence, stability);
     }
 
     /// Determines whether a correction should be injected between reflection cycles.
