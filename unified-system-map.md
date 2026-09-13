@@ -269,6 +269,67 @@ design choice that parallels the LLM 5D mapping. It is not a claim about physica
 dimensions. The mapping enables consistent routing and logging, not physical
 interpretation.
 
+### 5.1.3 Holographic Context Memory → Point Cloud + ISG Boundary Storage
+
+The 33 context memory chunks in `.devin/memories/` are mapped onto the
+cognitive_cloud PointCloud system, and ISG (RGB transcoder + Q128 error
+correction) is used to encode memories onto the 721 boundary nodes of the
+16³ shell for holographic retrieval.
+
+**Memory Chunk → Point Cloud Mapping:**
+
+Each memory chunk becomes a `Point` in the `PointCloudGraph`:
+- `lattice_node` = chunk_id mod 421 (maps to E0 lattice node)
+- `channel` = dimension from category (e0-e7)
+- `phase[8]` = derived from category + tags (hash into 8-channel phase)
+- `magnitude` = information density (concepts + equations + key_results count)
+- `payload` = chunk content (text/markdown)
+
+**Category → Dimension Mapping (33 chunks across 8 dimensions):**
+
+| Dimension | Categories | Count |
+|---|---|---|
+| e0 origin | generative-equations, bootstrap | 2 |
+| e1 time | propagation-graph, dimensional-ladder | 2 |
+| e2 quantum | hydrogen-line, codata-network (×2) | 3 |
+| e3 space | offset-symmetry, smith-chart, surface-computation | 3 |
+| e4 energy | over-constraint, cross-project-integration | 2 |
+| e5 structure | numerical-foundations, triad-operator, constants-table, lattice-structure, architecture, test-plan, scaling-analysis | 7 |
+| e6 metacognition | scorecard, error-analysis, codon-integration, neuraleak-integration, checksum-6d, free-will | 6 |
+| e7 physics | fine-structure, qed-corrections, octonionic-architecture, e8-correspondence, shell-transition, 10d-completion, gap-closure | 7 |
+
+**ISG RGB Transcoder:**
+
+ISG (Information Set Generator) encodes each memory as an RGB triplet:
+- **R** = payload hash (content fingerprint: title + concepts + equations + key_results)
+- **G** = metadata hash (category + tags)
+- **B** = checksum (R XOR G — Q128-style error correction)
+
+Verification: R XOR G == B (internal consistency check).
+
+**Holographic Boundary Storage:**
+
+The 721 boundary nodes of 16³ - 15³ = 721 serve as the holographic storage medium:
+- Each memory is distributed across 7 consecutive boundary nodes (7-defect redundancy)
+- Retrieval requires at least 3 matching nodes (holographic reconstruction threshold)
+- Any sufficient subset of boundary nodes can reconstruct the memory
+- Q128 error correction provides redundancy against node loss
+
+**Implementation:**
+- `src/holographic_memory.zig` — Complete module with MemoryChunk, ISGRgb, BoundaryStorage, HolographicMemory
+- `MemoryChunk.toPoint()` — Converts chunk to cognitive_cloud Point
+- `ISGRgb.encode(chunk)` — Encodes chunk as RGB triplet
+- `BoundaryStorage.store(chunk)` — Distributes chunk across 7 boundary nodes
+- `BoundaryStorage.retrieve(id)` — Holographic retrieval from boundary
+- `HolographicMemory.store(chunk)` — Stores in both point cloud and boundary
+- 10 tests: framework constants, category mapping, point conversion, ISG encoding,
+  boundary storage, 7-defect redundancy, full system, dimensional distribution
+
+**Scientific status:** The holographic memory mapping is a framework-internal
+storage architecture. The 721 boundary nodes and 7-defect redundancy are
+mathematical properties of the 15³/16³ lattice, not physical claims. The ISG
+RGB transcoder is a computational encoding, not a physical mechanism.
+
 ### 5.2 The 15-Lattice Spine
 
 All three layers share the 15-parameter lattice:

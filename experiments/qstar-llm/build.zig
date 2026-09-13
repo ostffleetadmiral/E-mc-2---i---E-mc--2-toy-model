@@ -205,6 +205,14 @@ pub fn build(b: *std.Build) void {
     });
     cognitive_cloud_mod.addImport("fixed_point", fixed_point_mod);
 
+    const holographic_memory_mod = b.addModule("holographic_memory", .{
+        .root_source_file = b.path("src/holographic_memory.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    holographic_memory_mod.addImport("fixed_point", fixed_point_mod);
+    holographic_memory_mod.addImport("cognitive_cloud", cognitive_cloud_mod);
+
     const voice_codec_mod = b.addModule("voice_codec", .{
         .root_source_file = b.path("src/voice_codec.zig"),
         .target = target,
@@ -1142,6 +1150,7 @@ pub fn build(b: *std.Build) void {
         } },
         .{ .file = "src/voice_codec.zig", .imports = &.{.{ .name = "fixed_point", .mod = fixed_point_mod }} },
         .{ .file = "src/cognitive_cloud.zig", .imports = &.{.{ .name = "fixed_point", .mod = fixed_point_mod }} },
+        .{ .file = "src/holographic_memory.zig", .imports = &.{ .{ .name = "fixed_point", .mod = fixed_point_mod }, .{ .name = "cognitive_cloud", .mod = cognitive_cloud_mod } } },
     };
 
     var prev_test_step: ?*std.Build.Step = null;
