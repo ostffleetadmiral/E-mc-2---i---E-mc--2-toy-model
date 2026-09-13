@@ -3305,7 +3305,7 @@ pub const Agent = struct {
     neural_lm: ?*neural_lm_mod.NeuralLM = null,
     dynamic_corpus: std.ArrayList(u8) = undefined,
     knowledge_graph: if (is_lite) void else ?kg_mod.KnowledgeGraph = if (is_lite) {} else null,
-    sample_config: sampling.SampleConfig = .{ .strategy = .top_k, .temperature = q128.ONE, .top_k = 20, .top_p = q128.fromRatio(9, 10), .seed = 0, .repetition_penalty = q128.fromRatio(13, 10) },
+    sample_config: sampling.SampleConfig = .{ .strategy = .top_k, .temperature = q128.ONE, .top_k = 40, .top_p = q128.fromRatio(9, 10), .seed = 0, .repetition_penalty = q128.fromRatio(11, 10) },
     rng: std.Random.DefaultPrng = undefined,
     deterministic: bool = false,
     metacognition: mc_engine.MetacognitionEngine = undefined,
@@ -3937,8 +3937,10 @@ pub const Agent = struct {
         const lm = self.neural_lm.?;
         lm.reset();
 
-        // Build Qwen3 chat template: <|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n
-        const chat_template = try std.fmt.allocPrint(self.allocator, "<|im_start|>user\n{s}<|im_end|>\n<|im_start|>assistant\n", .{prompt});
+        // Build Qwen3 chat template with system prompt for direct, complete answers.
+        // The system prompt guides the model to answer questions directly and thoroughly
+        // rather than generating "thinking" or meta-reasoning text.
+        const chat_template = try std.fmt.allocPrint(self.allocator, "<|im_start|>system\nYou are a helpful assistant. Answer the user's question directly, thoroughly, and accurately. Provide complete explanations with specific details and examples.<|im_end|>\n<|im_start|>user\n{s}<|im_end|>\n<|im_start|>assistant\n", .{prompt});
         defer self.allocator.free(chat_template);
 
         // Tokenize
@@ -4529,9 +4531,13 @@ pub const Agent = struct {
                         }
                     }
                     // Suppress special tokens in combined logits — the neural LM
-                    // shouldn't generate <|im_start|>, <|im_end|>, etc. during response.
-                    // Qwen3 special tokens: 151643-151655.
-                    for (151643..151656) |st| {
+                    // shouldn't generate <|im_start|> during response. But ALLOW
+                    // <|im_end|> (151645) as the natural end-of-response signal.
+                    // Qwen3 special tokens: 151643 (EOS), 151644 (<|im_start|>), 151645 (<|im_end|>).
+                    // Suppress 151643, 151644, 151646-151655. Allow 151645 as stop signal.
+                    logits[151643] = -1e9; // EOS — suppressed, use <|im_end|> instead
+                    logits[151644] = -1e9; // <|im_start|>
+                    for (151646..151656) |st| {
                         if (st < logits.len) {
                             logits[st] = -1e9;
                         }
@@ -4628,8 +4634,10 @@ pub const Agent = struct {
                             l.* = neural_f64 + lattice_norm * lattice_weight;
                         }
                     }
-                    // Suppress special tokens in combined logits
-                    for (151643..151656) |st| {
+                    // Suppress special tokens — allow <|im_end|> (151645) as stop signal
+                    logits[151643] = -1e9; // EOS
+                    logits[151644] = -1e9; // <|im_start|>
+                    for (151646..151656) |st| {
                         if (st < logits.len) {
                             logits[st] = -1e9;
                         }
@@ -7255,11 +7263,11 @@ pub const Agent = struct {
 
         // Step 2: Run inference cycles
         // With BPE tokenizer: use response length profile for cycle count
-        // With neural LM: generate up to 512 tokens (until EOS/<|im_end|>)
+        // With neural LM: generate up to 512 tokens (until <|im_end|> or EOS)
         // Without BPE: cycles = input length (char-level, minimal diffusion)
         const length_profile = classifyResponseLength(prompt);
         const cycles: u64 = if (self.neural_lm != null)
-            32
+            96
         else if (self.tokenizer != null)
             length_profile.cycleCount()
         else
