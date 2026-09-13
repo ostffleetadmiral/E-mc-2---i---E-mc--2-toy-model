@@ -59,18 +59,17 @@ pub const ONNXTensorElementDataType = enum(c_int) {
     Int8 = 3,
     Uint16 = 4,
     Int16 = 5,
-    Uint32 = 6,
-    Int32 = 7,
-    Uint64 = 8,
-    Int64 = 9,
-    String = 10,
-    Bool = 11,
-    Float16 = 12,
-    Double = 13,
-    Uint32_b = 14,
-    Complex64 = 15,
-    Complex128 = 16,
-    BFloat16 = 17,
+    Int32 = 6,
+    Int64 = 7,
+    String = 8,
+    Bool = 9,
+    Float16 = 10,
+    Double = 11,
+    Uint32 = 12,
+    Uint64 = 13,
+    Complex64 = 14,
+    Complex128 = 15,
+    BFloat16 = 16,
 };
 
 pub const OrtAllocatorType = enum(c_int) {
@@ -177,79 +176,87 @@ const GetAllocatorWithDefaultOptionsFn = *const fn (out: **OrtAllocator) callcon
 // OrtApi — accessed by byte offset for version robustness
 // =============================================================================
 
-/// ORT_API_VERSION from the header. We request version 20 (ONNX Runtime 1.16+).
+/// ORT_API_VERSION from the header. We request version 23 (ONNX Runtime 1.23+).
 /// If the installed runtime is older, GetApi returns null.
-pub const ORT_API_VERSION: u32 = 20;
+pub const ORT_API_VERSION: u32 = 23;
 
 /// Function pointer offsets in the OrtApi struct (in field order, each is 8 bytes on 64-bit).
 /// These correspond to the field order in onnxruntime_c_api.h.
-/// Only the fields we use are listed; offsets are computed from the known field order.
+/// Verified against ONNX Runtime 1.23.2 header.
 const Offsets = struct {
-    const CreateStatus: usize = 0;
-    const GetErrorCode: usize = 8;
-    const GetErrorMessage: usize = 16;
-    const CreateEnv: usize = 24;
-    const CreateEnvWithCustomLogger: usize = 32;
-    const Run: usize = 40;
-    const CreateSession: usize = 48;
-    const CreateSessionFromArray: usize = 56;
-    const CreateSessionOptions: usize = 64;
-    const ReleaseSession: usize = 72;
-    const CreateMemoryInfo: usize = 80;
-    const CreateCpuMemoryInfo: usize = 88;
-    const ReleaseMemoryInfo: usize = 96;
-    const CreateRunOptions: usize = 104;
-    const ReleaseRunOptions: usize = 112;
-    const SetSessionLogSeverityLevel: usize = 120;
-    const SetSessionLogVerbosityLevel: usize = 128;
-    const SetSessionLogId: usize = 136;
-    const SetSessionGraphOptimizationLevel: usize = 144;
-    const SetOptimizedModelFilePath: usize = 152;
-    // Skip: CreateCustomOpDomain, AddCustomOpDomain, ReleaseCustomOpDomain, RegisterCustomOpsLibrary (4 * 8 = 32)
-    const SetSessionExecutionMode: usize = 192;
-    const EnableMemPattern: usize = 200;
-    const DisableMemPattern: usize = 208;
-    const EnableCpuMemArena: usize = 216;
-    const DisableCpuMemArena: usize = 224;
-    const SetInterOpNumThreads: usize = 232;
-    const SetIntraOpNumThreads: usize = 240;
-    const CreateTensorWithDataAsOrtValue: usize = 248;
-    const CreateTensorAsOrtValue: usize = 256;
-    const ReleaseValue: usize = 264;
-    const GetTensorMutableData: usize = 272;
-    const FillStringTensor: usize = 280;
-    const GetStringTensorContent: usize = 288;
-    const GetStringTensorDataLength: usize = 296;
-    const GetTypeInfo: usize = 304;
-    const GetValueType: usize = 312;
-    const GetOnnxTypeFromTypeInfo: usize = 320;
-    const CastTypeInfoToTensorInfo: usize = 328;
-    const ReleaseTypeInfo: usize = 336;
-    const GetTensorTypeAndShape: usize = 344;
-    const GetTensorElementType: usize = 352;
-    const GetDimensionsCount: usize = 360;
-    const GetDimensions: usize = 368;
-    const GetSymbolicDimensions: usize = 376;
-    const GetTensorShapeElementCount: usize = 384;
-    const ReleaseTensorTypeAndShapeInfo: usize = 392;
-    const GetTensorSizeInBytes: usize = 400;
-    const GetTensorData: usize = 408;
-    const GetStringTensorElement: usize = 416;
-    const GetStringTensorElementLength: usize = 424;
-    const FillStringTensorElement: usize = 432;
-    const SessionGetInputCount: usize = 440;
-    const SessionGetInputName: usize = 448;
-    const SessionGetOutputCount: usize = 456;
-    const SessionGetOutputName: usize = 464;
-    const SessionGetInputTypeInfo: usize = 472;
-    const SessionGetOutputTypeInfo: usize = 480;
-    const GetAvailableProviders: usize = 488;
-    const ReleaseAvailableProviders: usize = 496;
-    const ReleaseEnv: usize = 504;
-    const ReleaseStatus: usize = 512;
-    const ReleaseSessionOptions: usize = 520;
-    // GetAllocatorWithDefaultOptions is much later in the struct
-    // We'll look it up dynamically if needed
+    const CreateStatus: usize = 0; // 1
+    const GetErrorCode: usize = 8; // 2
+    const GetErrorMessage: usize = 16; // 3
+    const CreateEnv: usize = 24; // 4
+    const CreateEnvWithCustomLogger: usize = 32; // 5
+    // 6: EnableTelemetryEvents
+    // 7: DisableTelemetryEvents
+    const CreateSession: usize = 56; // 8
+    const CreateSessionFromArray: usize = 64; // 9
+    const Run: usize = 72; // 10
+    const CreateSessionOptions: usize = 80; // 11
+    const SetOptimizedModelFilePath: usize = 88; // 12
+    // 13: CloneSessionOptions
+    const SetSessionExecutionMode: usize = 104; // 14
+    // 15: EnableProfiling
+    // 16: DisableProfiling
+    const EnableMemPattern: usize = 128; // 17
+    const DisableMemPattern: usize = 136; // 18
+    const EnableCpuMemArena: usize = 144; // 19
+    const DisableCpuMemArena: usize = 152; // 20
+    const SetSessionLogId: usize = 160; // 21
+    const SetSessionLogVerbosityLevel: usize = 168; // 22
+    const SetSessionLogSeverityLevel: usize = 176; // 23
+    const SetSessionGraphOptimizationLevel: usize = 184; // 24
+    const SetIntraOpNumThreads: usize = 192; // 25
+    const SetInterOpNumThreads: usize = 200; // 26
+    // 27-30: CreateCustomOpDomain, CustomOpDomain_Add, AddCustomOpDomain, RegisterCustomOpsLibrary
+    const SessionGetInputCount: usize = 240; // 31
+    const SessionGetOutputCount: usize = 248; // 32
+    // 33: SessionGetOverridableInitializerCount
+    const SessionGetInputTypeInfo: usize = 264; // 34
+    const SessionGetOutputTypeInfo: usize = 272; // 35
+    // 36: SessionGetOverridableInitializerTypeInfo
+    const SessionGetInputName: usize = 288; // 37
+    const SessionGetOutputName: usize = 296; // 38
+    // 39: SessionGetOverridableInitializerName
+    const CreateRunOptions: usize = 312; // 40
+    // 41-48: RunOptions* functions
+    const CreateTensorAsOrtValue: usize = 384; // 49
+    const CreateTensorWithDataAsOrtValue: usize = 392; // 50
+    // 51: IsTensor
+    const GetTensorMutableData: usize = 408; // 52
+    const FillStringTensor: usize = 416; // 53
+    const GetStringTensorDataLength: usize = 424; // 54
+    const GetStringTensorContent: usize = 432; // 55
+    const CastTypeInfoToTensorInfo: usize = 440; // 56
+    const GetOnnxTypeFromTypeInfo: usize = 448; // 57
+    // 58-60: CreateTensorTypeAndShapeInfo, SetTensorElementType, SetDimensions
+    const GetTensorElementType: usize = 480; // 61
+    const GetDimensionsCount: usize = 488; // 62
+    const GetDimensions: usize = 496; // 63
+    const GetSymbolicDimensions: usize = 504; // 64
+    const GetTensorShapeElementCount: usize = 512; // 65
+    const GetTensorTypeAndShape: usize = 520; // 66
+    const GetTypeInfo: usize = 528; // 67
+    const GetValueType: usize = 536; // 68
+    const CreateMemoryInfo: usize = 544; // 69
+    const CreateCpuMemoryInfo: usize = 552; // 70
+    // 71-78: MemoryInfo*, Allocator*
+    const GetAllocatorWithDefaultOptions: usize = 624; // 79
+    // 80-92: AddFreeDimensionOverride through KernelContext_GetOutput
+    const ReleaseEnv: usize = 736; // 93
+    const ReleaseStatus: usize = 744; // 94
+    const ReleaseMemoryInfo: usize = 752; // 95
+    const ReleaseSession: usize = 760; // 96
+    const ReleaseValue: usize = 768; // 97
+    const ReleaseRunOptions: usize = 776; // 98
+    const ReleaseTypeInfo: usize = 784; // 99
+    const ReleaseTensorTypeAndShapeInfo: usize = 792; // 100
+    const ReleaseSessionOptions: usize = 800; // 101
+    // 102-111: ReleaseCustomOpDomain through GetAvailableProviders
+    const GetAvailableProviders: usize = 888; // 112
+    const ReleaseAvailableProviders: usize = 896; // 113
 };
 
 /// The ONNX Runtime C API, accessed via function pointers at known offsets.
@@ -258,7 +265,9 @@ pub const OrtApi = struct {
 
     fn getFn(self: OrtApi, comptime T: type, offset: usize) T {
         const base: [*]const u8 = @ptrCast(self.ptr);
-        const fn_ptr: *const anyopaque = @ptrCast(@alignCast(base + offset));
+        // The OrtApi struct contains function pointers at each offset.
+        // We need to dereference the pointer at base+offset to get the actual function pointer.
+        const fn_ptr: *const anyopaque = @as(*const *const anyopaque, @ptrCast(@alignCast(base + offset))).*;
         return @as(T, @ptrCast(@alignCast(fn_ptr)));
     }
 
@@ -386,6 +395,7 @@ pub const OnnxError = error{
     TensorDataAccessFailed,
     InvalidTensorShape,
     FreestandingUnsupported,
+    OutOfMemory,
 };
 
 fn checkStatus(api: OrtApi, status: ?*OrtStatus) OnnxError!void {
@@ -416,13 +426,31 @@ pub const OnnxContext = struct {
         _ = allocator;
         if (c_ffi.is_freestanding) return error.FreestandingUnsupported;
 
-        var lib = c_ffi.DynLib.open("libonnxruntime.so") catch |err| {
-            if (err == error.LibraryNotFound) return error.LibraryNotFound;
+        // Try multiple library names (unversioned, then versioned)
+        // Use RTLD_NOW | RTLD_GLOBAL because ONNX Runtime 1.23 segfaults with RTLD_LAZY
+        const lib_names = [_][*:0]const u8{
+            "libonnxruntime.so",
+            "libonnxruntime.so.1.23",
+            "libonnxruntime.so.1.22",
+            "libonnxruntime.so.1.21",
+            "libonnxruntime.so.1.20",
+            "libonnxruntime.so.1.19",
+            "libonnxruntime.so.1.18",
+            "libonnxruntime.so.1.17",
+            "libonnxruntime.so.1.16",
+            "libonnxruntime.so.1.15",
+        };
+        const load_flags = c_ffi.RTLD_NOW | c_ffi.RTLD_GLOBAL;
+        const lib = blk: {
+            for (lib_names) |name| {
+                if (c_ffi.DynLib.openWithFlags(name, load_flags)) |l| break :blk l else |_| continue;
+            }
             return error.LibraryNotFound;
         };
+        var lib_mut = lib;
 
-        const get_api_base = lib.lookup(OrtGetApiBaseFn, "OrtGetApiBase") orelse {
-            lib.close();
+        const get_api_base = lib_mut.lookup(OrtGetApiBaseFn, "OrtGetApiBase") orelse {
+            lib_mut.close();
             return error.ApiBaseNotFound;
         };
 
@@ -430,7 +458,7 @@ pub const OnnxContext = struct {
         const version_str = std.mem.sliceTo(api_base.GetVersionString(), 0);
 
         const api_ptr = api_base.GetApi(ORT_API_VERSION) orelse {
-            lib.close();
+            lib_mut.close();
             return error.ApiVersionUnsupported;
         };
 
@@ -459,11 +487,27 @@ pub const OnnxContext = struct {
 
     pub fn isAvailable() bool {
         if (c_ffi.is_freestanding) return false;
-        var lib = c_ffi.DynLib.open("libonnxruntime.so") catch return false;
-        defer lib.close();
-        const get_api_base = lib.lookup(OrtGetApiBaseFn, "OrtGetApiBase") orelse return false;
-        const api_base = get_api_base();
-        return api_base.GetApi(ORT_API_VERSION) != null;
+        const lib_names = [_][*:0]const u8{
+            "libonnxruntime.so",
+            "libonnxruntime.so.1.23",
+            "libonnxruntime.so.1.22",
+            "libonnxruntime.so.1.21",
+            "libonnxruntime.so.1.20",
+            "libonnxruntime.so.1.19",
+            "libonnxruntime.so.1.18",
+            "libonnxruntime.so.1.17",
+            "libonnxruntime.so.1.16",
+            "libonnxruntime.so.1.15",
+        };
+        const load_flags = c_ffi.RTLD_NOW | c_ffi.RTLD_GLOBAL;
+        for (lib_names) |name| {
+            var lib = c_ffi.DynLib.openWithFlags(name, load_flags) catch continue;
+            defer lib.close();
+            const get_api_base = lib.lookup(OrtGetApiBaseFn, "OrtGetApiBase") orelse continue;
+            const api_base = get_api_base();
+            if (api_base.GetApi(ORT_API_VERSION) != null) return true;
+        }
+        return false;
     }
 };
 
@@ -658,8 +702,8 @@ test "OnnxError includes all expected error variants" {
     try std.testing.expect(errs.len == 7);
 }
 
-test "ORT_API_VERSION is 20" {
-    try std.testing.expect(ORT_API_VERSION == 20);
+test "ORT_API_VERSION is 23" {
+    try std.testing.expect(ORT_API_VERSION == 23);
 }
 
 test "Offsets are 8-byte aligned" {

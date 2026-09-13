@@ -286,6 +286,24 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
+    const onnx_runtime_mod = b.addModule("onnx_runtime", .{
+        .root_source_file = b.path("src/vision/onnx_runtime.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    onnx_runtime_mod.addImport("c_ffi", c_ffi_mod);
+
+    const neural_lm_mod = b.addModule("neural_lm", .{
+        .root_source_file = b.path("src/neural_lm.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    neural_lm_mod.addImport("onnx_runtime", onnx_runtime_mod);
+    neural_lm_mod.addImport("c_ffi", c_ffi_mod);
+    agent_mod.addImport("neural_lm", neural_lm_mod);
+
     const image_mod = b.addModule("image", .{
         .root_source_file = b.path("src/vision/image.zig"),
         .target = target,
@@ -982,6 +1000,7 @@ pub fn build(b: *std.Build) void {
         .{ .file = "src/memory.zig", .imports = &.{.{ .name = "q128", .mod = q128_mod }} },
         .{ .file = "src/c_ffi.zig", .imports = &.{}, .link_libc = true },
         .{ .file = "src/vision/onnx_runtime.zig", .imports = &.{.{ .name = "c_ffi", .mod = c_ffi_mod }}, .link_libc = true },
+        .{ .file = "src/neural_lm.zig", .imports = &.{ .{ .name = "onnx_runtime", .mod = onnx_runtime_mod }, .{ .name = "c_ffi", .mod = c_ffi_mod } }, .link_libc = true },
         .{ .file = "src/vision/image.zig", .imports = &.{.{ .name = "c_ffi", .mod = c_ffi_mod }}, .link_libc = true },
         .{ .file = "src/vision/face_detect.zig", .imports = &.{.{ .name = "image", .mod = image_mod }} },
         .{ .file = "src/vision/face_recognize.zig", .imports = &.{ .{ .name = "image", .mod = image_mod }, .{ .name = "c_ffi", .mod = c_ffi_mod } }, .link_libc = true },
@@ -1489,6 +1508,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("external_db", external_db_mod);
     exe.root_module.addImport("config", config_mod);
     exe.root_module.addImport("memory_pool", memory_pool_mod);
+    exe.root_module.addImport("neural_lm", neural_lm_mod);
 
     b.installArtifact(exe);
 
@@ -1526,6 +1546,7 @@ pub fn build(b: *std.Build) void {
     cli_mod.addImport("lattice", cli_lattice_mod);
     cli_mod.addImport("knowledge_graph", cli_kg_mod);
     cli_mod.addImport("corpus_seed", corpus_seed_mod);
+    cli_mod.addImport("neural_lm", neural_lm_mod);
     const cli_mem_mod = b.addModule("memory", .{
         .root_source_file = b.path("src/memory.zig"),
         .target = target,
@@ -1747,6 +1768,7 @@ pub fn build(b: *std.Build) void {
     cli_exe.root_module.addImport("transport_video", transport_video_mod);
     cli_exe.root_module.addImport("virtual_transport", virtual_transport_mod);
     cli_exe.root_module.addImport("seed_compressor", seed_compressor_mod);
+    cli_exe.root_module.addImport("neural_lm", neural_lm_mod);
 
     // Pass build_options to CLI so it can conditionally compile P2P code
     const cli_options = b.addOptions();

@@ -22,6 +22,7 @@ const q128 = @import("q128");
 const lattice = @import("lattice");
 const corpus_mod = @import("corpus_seed");
 const tools_mod = if (!is_lite) @import("tools") else void;
+const neural_lm_mod = @import("neural_lm");
 
 // Heavy modules excluded in device-lite builds to reduce wasm binary size.
 const is_lite = corpus_mod.IS_LITE;
@@ -3318,6 +3319,7 @@ pub const Agent = struct {
     allocator: std.mem.Allocator,
     tokenizer: ?bpe.Tokenizer = null,
     bigram_model: ?BigramModel = null,
+    neural_lm: ?*neural_lm_mod.NeuralLM = null,
     dynamic_corpus: std.ArrayList(u8) = undefined,
     knowledge_graph: if (is_lite) void else ?kg_mod.KnowledgeGraph = if (is_lite) {} else null,
     sample_config: sampling.SampleConfig = .{ .strategy = .top_k, .temperature = q128.ONE, .top_k = 20, .top_p = q128.fromRatio(9, 10), .seed = 0, .repetition_penalty = q128.fromRatio(13, 10) },
@@ -3930,6 +3932,43 @@ pub const Agent = struct {
         self.tokenizer = tok;
     }
 
+    /// Attach a neural language model backend (ONNX-based tiny LM).
+    /// When attached, sampledStep uses neural LM logits as the base
+    /// distribution, with lattice activations providing topical bias.
+    /// This is the HYBRID integration mode: neural fluency + lattice knowledge.
+    pub fn attachNeuralLM(self: *Agent, lm: *neural_lm_mod.NeuralLM) void {
+        self.neural_lm = lm;
+    }
+
+    /// Initialize neural LM generation by processing the prompt through the neural LM.
+    /// This populates the KV cache so that subsequent nextTokenLogits calls work.
+    /// Must be called before run() / sampledStep() when using neural LM.
+    pub fn initNeuralGeneration(self: *Agent, prompt: []const u8) !void {
+        if (self.neural_lm == null) return;
+        if (self.tokenizer == null) return;
+
+        const lm = self.neural_lm.?;
+        lm.reset();
+
+        // Build Qwen3 chat template: <|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n
+        const chat_template = try std.fmt.allocPrint(self.allocator, "<|im_start|>user\n{s}<|im_end|>\n<|im_start|>assistant\n", .{prompt});
+        defer self.allocator.free(chat_template);
+
+        // Tokenize
+        const token_ids = try self.tokenizer.?.encode(chat_template);
+        defer self.allocator.free(token_ids);
+
+        // Convert to i64 for ONNX
+        const input_ids = try self.allocator.alloc(i64, token_ids.len);
+        defer self.allocator.free(input_ids);
+        for (token_ids, 0..) |tid, i| input_ids[i] = @intCast(tid);
+
+        // Process prompt through neural LM (populates KV cache)
+        _ = lm.processPrompt(input_ids) catch |err| {
+            std.debug.print("Warning: neural LM prompt processing failed: {s}\n", .{@errorName(err)});
+        };
+    }
+
     /// Builds the bigram language model from a corpus of seed text.
     /// This enables coherent English word sequence generation by constraining
     /// the sampler to follow learned bigram transitions.
@@ -4443,9 +4482,42 @@ pub const Agent = struct {
         const logits = try self.activationsToLogits();
         defer self.allocator.free(logits);
 
-        // When bigram model is available, use it as the primary generation driver.
-        // Lattice activations provide topical bias on top of bigram probabilities.
-        if (self.bigram_model) |*bm| {
+        // When neural LM is available, use it as the primary generation driver.
+        // Lattice activations provide topical bias on top of neural LM logits.
+        // This is the HYBRID mode: neural fluency + lattice domain knowledge.
+        if (self.neural_lm) |lm| {
+            if (lm.cacheLen() > 0) {
+                // Get last output token (or IM_START for first token)
+                const prev_token: i64 = if (self.state.output_tokens.items.len > 0)
+                    @intCast(self.state.output_tokens.items[self.state.output_tokens.items.len - 1])
+                else
+                    @intCast(bpe.IM_START_TOKEN_ID);
+
+                // Get neural LM logits (f32 sidecar)
+                const neural_logits = lm.nextTokenLogits(prev_token) catch null;
+                if (neural_logits != null) {
+                    const nl = neural_logits.?;
+                    // Find max lattice logit for normalization
+                    var max_lattice: f64 = -std.math.inf(f64);
+                    for (logits) |l| {
+                        if (l > max_lattice) max_lattice = l;
+                    }
+                    if (max_lattice == -std.math.inf(f64)) max_lattice = 0.0;
+
+                    // Combine: neural_logits (base) + lattice_bias (topical)
+                    // Lattice weight controls how much domain knowledge influences output
+                    const lattice_weight: f64 = 2.0;
+                    for (logits, 0..) |*l, i| {
+                        if (i < nl.len) {
+                            const neural_f64: f64 = @floatCast(nl[i]);
+                            const lattice_bias = (l.* - max_lattice) * lattice_weight;
+                            l.* = neural_f64 + lattice_bias;
+                        }
+                    }
+                }
+            }
+        } else if (self.bigram_model) |*bm| {
+            // Fallback: bigram model when no neural LM available
             const prev_token: u32 = if (self.state.output_tokens.items.len > 0)
                 self.state.output_tokens.items[self.state.output_tokens.items.len - 1]
             else
@@ -4512,7 +4584,31 @@ pub const Agent = struct {
         const logits = if (logits_f32) |lf| lf else try self.activationsToLogits();
         defer self.allocator.free(logits);
 
-        if (self.bigram_model) |*bm| {
+        if (self.neural_lm) |lm| {
+            if (lm.cacheLen() > 0) {
+                const prev_token: i64 = if (self.state.output_tokens.items.len > 0)
+                    @intCast(self.state.output_tokens.items[self.state.output_tokens.items.len - 1])
+                else
+                    @intCast(bpe.IM_START_TOKEN_ID);
+                const neural_logits = lm.nextTokenLogits(prev_token) catch null;
+                if (neural_logits != null) {
+                    const nl = neural_logits.?;
+                    var max_lattice: f64 = -std.math.inf(f64);
+                    for (logits) |l| {
+                        if (l > max_lattice) max_lattice = l;
+                    }
+                    if (max_lattice == -std.math.inf(f64)) max_lattice = 0.0;
+                    const lattice_weight: f64 = 2.0;
+                    for (logits, 0..) |*l, i| {
+                        if (i < nl.len) {
+                            const neural_f64: f64 = @floatCast(nl[i]);
+                            const lattice_bias = (l.* - max_lattice) * lattice_weight;
+                            l.* = neural_f64 + lattice_bias;
+                        }
+                    }
+                }
+            }
+        } else if (self.bigram_model) |*bm| {
             const prev_token: u32 = if (self.state.output_tokens.items.len > 0)
                 self.state.output_tokens.items[self.state.output_tokens.items.len - 1]
             else
@@ -6998,6 +7094,12 @@ pub const Agent = struct {
             self.ingest(continuity_ctx) catch {};
         }
         self.ingest(effective_prompt) catch {};
+
+        // Step 1b: Initialize neural LM generation (if attached)
+        // Processes the prompt through the neural LM to populate KV cache
+        if (self.neural_lm != null) {
+            self.initNeuralGeneration(effective_prompt) catch {};
+        }
 
         // Step 2: Run inference cycles
         // With BPE tokenizer: use response length profile for cycle count

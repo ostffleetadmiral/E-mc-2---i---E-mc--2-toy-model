@@ -17,6 +17,7 @@ const tools_mod = @import("tools");
 const bpe = @import("bpe_tokenizer");
 const training = @import("training");
 const ollama = @import("ollama_client");
+const neural_lm = @import("neural_lm");
 const openai = @import("openai_client");
 const llm_provider = @import("llm_provider");
 const doc_loader = @import("doc_loader");
@@ -31,6 +32,8 @@ const virtual_transport = @import("virtual_transport");
 
 /// Path to the Qwen1.5-0.5B-Chat tokenizer files (vocab.json + merges.txt).
 const QWEN_MODEL_DIR = "models/qwen1.5-0.5b-chat";
+const QWEN3_MODEL_DIR = "models/qwen3-0.6b";
+const QWEN3_ONNX_PATH = "models/qwen3-0.6b/onnx/model_q4f16.onnx";
 
 /// Seed corpus for the bigram language model. Covers diverse topics to enable
 /// coherent English generation across many domains.
@@ -225,6 +228,30 @@ fn loadTokenizer(allocator: std.mem.Allocator) ?bpe.Tokenizer {
     return bpe.Tokenizer.loadQwenTokenizer(allocator, QWEN_MODEL_DIR) catch null;
 }
 
+/// Attempts to load the Qwen3-0.6B neural LM backend (ONNX q4f16).
+/// Returns null if ONNX Runtime or model file is not available.
+/// The returned NeuralLM must be freed by the caller via deinit().
+fn loadNeuralLM(allocator: std.mem.Allocator) ?*neural_lm.NeuralLM {
+    if (!neural_lm.NeuralLM.isAvailable()) {
+        std.debug.print("Neural LM: ONNX Runtime not available, using lattice-only mode.\n", .{});
+        return null;
+    }
+    // Check if model file exists
+    std.fs.cwd().access(QWEN3_ONNX_PATH, .{}) catch {
+        std.debug.print("Neural LM: Model file not found at {s}, using lattice-only mode.\n", .{QWEN3_ONNX_PATH});
+        return null;
+    };
+    const model_path: [:0]const u8 = QWEN3_ONNX_PATH;
+    const lm = allocator.create(neural_lm.NeuralLM) catch return null;
+    lm.* = neural_lm.NeuralLM.init(allocator, model_path) catch |err| {
+        std.debug.print("Neural LM: Failed to load model: {s}, using lattice-only mode.\n", .{@errorName(err)});
+        allocator.destroy(lm);
+        return null;
+    };
+    std.debug.print("Neural LM: Loaded Qwen3-0.6B (q4f16) — hybrid mode enabled.\n", .{});
+    return lm;
+}
+
 /// Loads a tokenizer configured by explicit vocab specifier ("128k", "256k", "512k", "1m", or path)
 /// or level (0..3). Falls back to standard Qwen tokenizer if not specified.
 fn loadConfiguredTokenizer(allocator: std.mem.Allocator, vocab_spec: ?[]const u8, level: u8) ?bpe.Tokenizer {
@@ -321,6 +348,19 @@ pub fn main() !void {
 
         var agent = agent_mod.Agent.init(allocator, level, fp.ONE);
         defer agent.deinit();
+
+        // Load neural LM backend (ONNX-based Qwen3-0.6B) for hybrid mode
+        // Loaded before corpus to fail fast if ONNX Runtime has issues
+        // NOTE: defer must be at function scope, not inside the if block,
+        // otherwise the LM is freed before generateWithReflection uses it.
+        const nlm = loadNeuralLM(allocator);
+        defer if (nlm) |lm| {
+            lm.deinit();
+            allocator.destroy(lm);
+        };
+        if (nlm) |lm| {
+            agent.attachNeuralLM(lm);
+        }
 
         // Load trained corpus if available
         if (std.fs.cwd().openFile("qstar_corpus.txt", .{})) |file| {
