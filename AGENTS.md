@@ -243,3 +243,51 @@ Every passing state is archived under `archives/`. Existing archives are never d
 - `archives/surface-computation-v2-20260911`
 - `archives/full-e2e-audit-20260912`
 - `archives/bidirectional-integration-fano1-20260911`
+
+## Retrograde development status (QSTAR-LLM)
+
+The `experiments/qstar-llm` project has undergone retrograde development to migrate
+core state paths from f64 to Q128.128 fixed-point arithmetic. The 13-layer sequence:
+
+| Phase | Layer | Status | Changes |
+|---|---|---|---|
+| 0 | Q128.128 Engine Adoption | Done | Added `src/q128.zig` (i256 raw, i512 intermediates) |
+| 1 | Server/API | Done | Added `test-main` artifact, 28 main.zig tests, fixed Q128.128 compilation bugs |
+| 2 | Inference and Response | Done | Migrated `Metacognition` struct in `agent.zig` to Q128.128 |
+| 3 | Lattice Mathematics | Done | Migrated `lattice.zig` PHI constant and `phiCooling` to Q128.128 |
+| 4 | Cognitive Systems | Done (prior) | `metacognition_engine.zig`, `trivium.zig`, `quadrivium.zig` already migrated |
+| 5 | Corpus and Retrieval | Done | Added 13 tests to `corpus_seed.zig` and `corpus_seed_lite.zig` |
+| 6 | Sentience Testing | Done | Migrated `turing_test.zig` JudgeScores to Q128.128 |
+| 7 | Hardware-Framework Ports | Done (prior) | `hw_bridge.zig` already migrated; `shouldSelfCorrectF64` is f64 boundary |
+| 8 | Mathematical Physics | Done (prior) | `octonion_math.zig`, `e8_roots.zig`, `jordan_algebra.zig`, `so10.zig` already integer-only |
+| 9 | Compression | Done (prior) | `compress.zig`, `holo_codec.zig`, `seed_compressor.zig` already integer-only |
+| 10 | Networking and Transport | Done (boundary) | `mesh.zig` uses f64 for geometric routing (Location, PhaseLock, timesync) |
+| 11 | GPU Layers | Done (boundary) | `vulkan_compute.zig` uses f64 for sigmoid table initialization |
+| 12 | Emergent Behavior Test Suite | Done | `test-main` passes 28/28 tests |
+| 13 | Documentation and Final Verification | Done | All commits pushed to GitHub |
+
+### Q128.128 migration scope
+
+The following modules have been migrated to Q128.128 for core state paths:
+- `src/q128.zig` — Q128.128 fixed-point engine (i256 raw, i512 intermediates)
+- `src/agent.zig` — Metacognition struct, scoring functions, Matrix15
+- `src/lattice.zig` — PHI constant, phiCooling function
+- `src/sampling.zig` — Sampling functions, phiCoolingTemperature
+- `src/memory.zig` — Success scores
+- `src/metacognition_engine.zig` — All metacognition state
+- `src/dynamic_routes.zig` — Dynamic routing state
+- `src/trivium.zig` — Trivium logic layer
+- `src/quadrivium.zig` — Quadrivium logic layer
+- `src/turing_test.zig` — JudgeScores, TuringTestConfig, TuringTestSummary
+
+### Legitimate f64 boundaries
+
+The following f64 uses are intentional boundaries, not state paths:
+- `agent.zig` activationsToLogits — f64 logits as sampling sidecar
+- `agent.zig` bigram_model.applyToLogits — f64 logits for bigram model
+- `turing_test.zig` parseScore — f64 for text parsing from Ollama judge
+- `hw_bridge.zig` shouldSelfCorrectF64 — f64 interface for metacognition engine
+- `vulkan_compute.zig` sigmoid table — one-time f64 initialization
+- `mesh.zig` Location/PhaseLock/timesync — f64 for network geometric routing
+- `voice_codec.zig` VQ codebook — f64 audio sidecar for training/IO
+- `metacognition_engine.zig` Shannon entropy — f64 introspection boundary (requires log2)
