@@ -1,0 +1,186 @@
+#version 450
+// lattice_step.comp — E0 firing + propagation for Qstar lattice inference.
+// Emulates i64 Q32.32 fixed-point using 32-bit ops (RX 580 has no shaderInt64).
+// Workgroup: 421 threads (1 per E0 node), single workgroup.
+// Two-pass: pass 1 computes fired values into shared memory, pass 2 pulls neighbor contributions.
+
+layout(local_size_x = 421) in;
+
+layout(set = 0, binding = 0) buffer InAct  { uvec2 in_act[];  };
+layout(set = 0, binding = 1) buffer OutAct { uvec2 out_act[]; };
+layout(set = 0, binding = 2) buffer Params { uint  params[];  };
+
+// Params layout (flat uint): temp(2) | sigmoid_lut(1024) | e_vals(421) | boundary(421) | neighbors(2526)
+const uint TEMP_OFF      = 0u;
+const uint SIGMOID_OFF   = 2u;
+const uint EVALS_OFF     = 1026u;
+const uint BOUNDARY_OFF  = 1447u;
+const uint NEIGHBORS_OFF = 1868u;
+
+const uvec2 ONE         = uvec2(0u, 1u);
+const uvec2 FIB_NORM    = uvec2(0u, 33u);
+const uvec2 TEMP_FLOOR  = uvec2(4294967u, 0u);
+const uvec2 FIRE_THRESH = uvec2(0x80000000u, 0u);
+const uvec2 WEIGHT_08   = uvec2(3435973837u, 0u);
+const uvec2 WEIGHT_03   = uvec2(1288490189u, 0u);
+const uvec2 WEIGHT_015  = uvec2(644245094u, 0u);
+const uvec2 DECAY_07    = uvec2(3006477107u, 0u);
+const uvec2 SIG_RANGE   = uvec2(0u, 8u);
+const uvec2 FIB_W[7] = {
+    uvec2(0u, 1u), uvec2(0u, 1u), uvec2(0u, 2u),
+    uvec2(0u, 3u), uvec2(0u, 5u), uvec2(0u, 8u), uvec2(0u, 13u)
+};
+
+const uint NODE_COUNT = 421u;
+const uint CH_COUNT   = 7u;
+
+shared uvec2 s_fired[421];
+
+// === i64 emulation (two u32 limbs: .x=lo, .y=hi) ===
+
+uvec2 i64_add(uvec2 a, uvec2 b) {
+    uint c; uint lo = uaddCarry(a.x, b.x, c);
+    return uvec2(lo, a.y + b.y + c);
+}
+
+uvec2 i64_sub(uvec2 a, uvec2 b) {
+    uint brr; uint lo = usubBorrow(a.x, b.x, brr);
+    return uvec2(lo, a.y - b.y - brr);
+}
+
+uvec2 i64_neg(uvec2 a) {
+    uint brr; uint lo = usubBorrow(0u, a.x, brr);
+    uint hi = usubBorrow(0u, a.y, brr);
+    return uvec2(lo, hi);
+}
+
+bool u64_lt(uvec2 a, uvec2 b) {
+    if (a.y != b.y) return a.y < b.y;
+    return a.x < b.x;
+}
+bool u64_ge(uvec2 a, uvec2 b) { return !u64_lt(a, b); }
+bool u64_gt(uvec2 a, uvec2 b) { return u64_lt(b, a); }
+
+// Signed comparison via sign-bit flip
+bool i64_lt_s(uvec2 a, uvec2 b) {
+    return u64_lt(uvec2(a.x, a.y ^ 0x80000000u), uvec2(b.x, b.y ^ 0x80000000u));
+}
+bool i64_ge_s(uvec2 a, uvec2 b) { return !i64_lt_s(a, b); }
+
+// Q32.32 mul: (a * b) >> 32, signed
+uvec2 fp_mul(uvec2 a, uvec2 b) {
+    bool neg = false;
+    if ((a.y & 0x80000000u) != 0u) { a = i64_neg(a); neg = !neg; }
+    if ((b.y & 0x80000000u) != 0u) { b = i64_neg(b); neg = !neg; }
+    // (a * b) >> 32: use umulExtended for 32x32->64 partial products
+    uint ll_m, ll_l; umulExtended(a.x, b.x, ll_m, ll_l);
+    uint hl_m, hl_l; umulExtended(a.y, b.x, hl_m, hl_l);
+    uint lh_m, lh_l; umulExtended(a.x, b.y, lh_m, lh_l);
+    uint hh_m, hh_l; umulExtended(a.y, b.y, hh_m, hh_l);
+    uint c1, c2;
+    uint lo = uaddCarry(ll_m, hl_l, c1);
+    lo = uaddCarry(lo, lh_l, c2);
+    uint c3;
+    uint hi = uaddCarry(hl_m, lh_m, c3);
+    hi += hh_l + c1 + c2;
+    uvec2 result = uvec2(lo, hi);
+    if (neg) result = i64_neg(result);
+    return result;
+}
+
+// Q32.32 div: (a << 32) / b, signed. Binary long division, 96 iterations.
+uvec2 fp_div(uvec2 a, uvec2 b) {
+    if (b.x == 0u && b.y == 0u) return uvec2(0u);
+    bool a_neg = (a.y & 0x80000000u) != 0u;
+    bool b_neg = (b.y & 0x80000000u) != 0u;
+    if (a_neg) a = i64_neg(a);
+    if (b_neg) b = i64_neg(b);
+    uvec2 q = uvec2(0u);
+    uvec2 r = uvec2(0u);
+    for (int bit = 95; bit >= 0; bit--) {
+        r = uvec2(r.x << 1, (r.y << 1) | (r.x >> 31));
+        uint dbit;
+        if (bit >= 64)      dbit = (a.y >> (uint(bit) - 64u)) & 1u;
+        else if (bit >= 32) dbit = (a.x >> (uint(bit) - 32u)) & 1u;
+        else                dbit = 0u;
+        r.x |= dbit;
+        if (u64_ge(r, b)) {
+            r = i64_sub(r, b);
+            if (bit < 64) {
+                if (bit >= 32) q.y |= (1u << (uint(bit) - 32u));
+                else           q.x |= (1u << uint(bit));
+            }
+        }
+    }
+    if (a_neg != b_neg) q = i64_neg(q);
+    return q;
+}
+
+// Sigmoid using LUT from params buffer
+uvec2 fp_sigmoid(uvec2 x) {
+    if (i64_ge_s(x, SIG_RANGE)) return ONE;
+    uvec2 neg_range = i64_neg(SIG_RANGE);
+    if (!i64_lt_s(neg_range, x)) return uvec2(0u);  // x <= -range
+    uvec2 offset = i64_add(x, SIG_RANGE);
+    // idx = (offset * 512) / (16 << 32) = (offset.y << 5) | (offset.x >> 27)
+    uint idx = (offset.y << 5) | (offset.x >> 27);
+    idx = clamp(idx, 0u, 511u);
+    return uvec2(params[SIGMOID_OFF + idx * 2u], params[SIGMOID_OFF + idx * 2u + 1u]);
+}
+
+void main() {
+    uint i = gl_LocalInvocationID.x;
+    if (i >= NODE_COUNT) return;
+
+    uvec2 temp = uvec2(params[TEMP_OFF], params[TEMP_OFF + 1u]);
+    if (u64_lt(temp, TEMP_FLOOR)) temp = TEMP_FLOOR;
+
+    uint e_val = params[EVALS_OFF + i];
+    uint is_bnd = params[BOUNDARY_OFF + i];
+
+    // === Pass 1: Fibonacci projection + sigmoid ===
+    uvec2 projection = uvec2(0u);
+    for (uint ch = 0u; ch < CH_COUNT; ch++) {
+        uvec2 act = in_act[i * CH_COUNT + ch];
+        projection = i64_add(projection, fp_mul(FIB_W[ch], act));
+    }
+    projection = fp_div(projection, FIB_NORM);
+    uvec2 scaled = fp_div(projection, temp);
+    uvec2 fired = fp_sigmoid(scaled);
+    s_fired[i] = fired;
+    barrier();
+
+    // === Pass 2: Build new activations ===
+    uvec2 new_act[7];
+    for (uint ch = 0u; ch < CH_COUNT; ch++) new_act[ch] = uvec2(0u);
+
+    // Self-propagation (if I fired)
+    if (u64_gt(fired, FIRE_THRESH)) {
+        uint routed = e_val % CH_COUNT;
+        new_act[routed] = i64_add(new_act[routed], fp_mul(fired, WEIGHT_08));
+        if (is_bnd != 0u) {
+            uint reflected = (CH_COUNT - (e_val % CH_COUNT)) % CH_COUNT;
+            new_act[reflected] = i64_add(new_act[reflected], fp_mul(fired, WEIGHT_03));
+        }
+    }
+
+    // Neighbor contributions (pull model: neighbors that fired pushed to me using MY e_val)
+    uint my_routed = e_val % CH_COUNT;
+    for (uint nb = 0u; nb < 6u; nb++) {
+        uint packed = params[NEIGHBORS_OFF + i * 6u + nb];
+        if ((packed & 0x80000000u) == 0u) continue;
+        uint nidx = packed & 0x7FFu;
+        if (nidx >= NODE_COUNT) continue;
+        uvec2 nb_fired = s_fired[nidx];
+        if (u64_gt(nb_fired, FIRE_THRESH)) {
+            new_act[my_routed] = i64_add(new_act[my_routed], fp_mul(nb_fired, WEIGHT_015));
+        }
+    }
+
+    // Decay existing activations
+    for (uint ch = 0u; ch < CH_COUNT; ch++) {
+        uvec2 old = in_act[i * CH_COUNT + ch];
+        uvec2 decayed = fp_mul(old, DECAY_07);
+        out_act[i * CH_COUNT + ch] = i64_add(new_act[ch], decayed);
+    }
+}

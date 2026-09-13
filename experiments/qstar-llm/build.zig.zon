@@ -1,0 +1,14 @@
+.{
+    .name = "qstar-llm",
+    .version = "0.1.0",
+    .minimum_zig_version = "0.13.0",
+    .dependencies = .{},
+    .paths = .{
+        "src",
+        "prototype",
+        "tests",
+        "examples",
+        "build.zig",
+        "build.zig.zon",
+    },
+}

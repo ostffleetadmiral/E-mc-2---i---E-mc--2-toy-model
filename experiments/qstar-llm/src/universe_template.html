@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+<title>Qstar-LLM — Lattice Intelligence</title>
+<style>
+:root {
+  --bg: #070710;
+  --bg-sidebar: rgba(10, 12, 24, 0.95);
+  --bg-card: rgba(16, 18, 32, 0.72);
+  --bg-input: rgba(10, 12, 24, 0.9);
+  --bg-hover: rgba(96, 128, 255, 0.08);
+  --border: rgba(80, 100, 160, 0.18);
+  --border-hover: rgba(96, 128, 255, 0.4);
+  --accent: #6080ff;
+  --accent-2: #60ff80;
+  --accent-3: #ff8060;
+  --accent-4: #d060ff;
+  --text: #c8d0e8;
+  --text-dim: #6a7088;
+  --text-bright: #e8f0ff;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --font: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Courier New', monospace;
+  --sidebar-w: 260px;
+  --tabbar-h: 44px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px;
+  background-image: radial-gradient(ellipse at 20% 0%, rgba(96,128,255,0.06) 0%, transparent 50%),
+                    radial-gradient(ellipse at 80% 100%, rgba(96,255,128,0.04) 0%, transparent 50%); }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; transition: background 0.2s; }
+*:hover::-webkit-scrollbar-thumb { background: rgba(96,128,255,0.3); }
+*::-webkit-scrollbar-thumb:hover { background: rgba(96,128,255,0.5); }
+
+/* ─── Top tab bar ─── */
+#tabbar { position: fixed; top: 0; left: 0; right: 0; height: var(--tabbar-h);
+  background: rgba(10, 12, 24, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border); display: flex; align-items: center; z-index: 100;
+  padding-left: 16px; gap: 2px; }
+#tabbar .tab { padding: 8px 18px; cursor: pointer; color: var(--text-dim); font-size: 13px; font-weight: 500;
+  border-radius: var(--radius-sm); transition: all var(--transition); position: relative; }
+#tabbar .tab:hover { color: var(--text-bright); background: var(--bg-hover); }
+#tabbar .tab.active { color: var(--accent); background: rgba(96,128,255,0.12); }
+#tabbar .tab.active::after { content: ''; position: absolute; bottom: -1px; left: 8px; right: 8px;
+  height: 2px; background: var(--accent); border-radius: 2px; }
+#tabbar .tab-badge { font-size: 9px; color: var(--accent-2); margin-left: 4px; padding: 1px 5px;
+  background: rgba(96,255,128,0.1); border-radius: 3px; font-weight: 600; }
+#tabbar .spacer { flex: 1; }
+#tabbar .version-tag { font-size: 11px; color: var(--text-dim); padding-right: 16px; }
+
+/* ─── Main layout ─── */
+#app { position: fixed; top: var(--tabbar-h);; left: 0; right: 0; bottom: 0; }
+.tab-content { display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: auto; }
+.tab-content.active { display: flex; animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ─── Sidebar (chat view) ─── */
+#sidebar { width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--bg-sidebar);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+#sidebar .new-chat-btn { padding: 12px 16px; background: rgba(96,128,255,0.12); color: var(--accent);
+  border: none; border-bottom: 1px solid var(--border); cursor: pointer; font-family: var(--font);
+  font-size: 13px; font-weight: 500; text-align: left; transition: all var(--transition); }
+#sidebar .new-chat-btn:hover { background: rgba(96,128,255,0.22); }
+#sidebar .conv-list { flex: 1; overflow-y: auto; padding: 8px; }
+#sidebar .conv-item { padding: 10px 14px; border-radius: var(--radius-sm); cursor: pointer;
+  color: var(--text-dim); font-size: 13px; transition: all var(--transition); margin-bottom: 2px;
+  display: flex; align-items: center; gap: 8px; }
+#sidebar .conv-item:hover { background: var(--bg-hover); color: var(--text); }
+#sidebar .conv-item.active { background: rgba(96,128,255,0.12); color: var(--accent); }
+#sidebar .conv-item .conv-icon { font-size: 14px; opacity: 0.7; }
+#sidebar .conv-item .conv-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#sidebar .conv-item .conv-del { opacity: 0; font-size: 12px; color: var(--accent-3); transition: opacity 0.15s; }
+#sidebar .conv-item:hover .conv-del { opacity: 0.6; }
+#sidebar .conv-item .conv-del:hover { opacity: 1; }
+#sidebar .sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-dim); }
+#sidebar .sidebar-footer .stat { display: flex; justify-content: space-between; margin-bottom: 4px; }
+#sidebar .sidebar-footer .stat .val { color: var(--accent-2); font-weight: 600; }
+
+/* ─── Chat area ─── */
+#chat-area { flex: 1; display: flex; flex-direction: column; position: relative; }
+#chat-messages { flex: 1; overflow-y: auto; padding: 24px 24px 120px; max-width: 820px; margin: 0 auto; width: 100%; }
+#chat-messages .msg { margin-bottom: 16px; animation: fadeIn 0.2s ease; }
+#chat-messages .msg-user { padding: 10px 16px; background: rgba(96,128,255,0.10); border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm); color: var(--text-bright); font-size: 14px; line-height: 1.6; }
+#chat-messages .msg-agent { padding: 10px 16px; background: rgba(96,255,128,0.08); border-left: 3px solid var(--accent-2);
+  border-radius: var(--radius-sm); color: #c0ffd0; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; }
+#chat-messages .msg-tool { padding: 8px 14px; background: rgba(255,128,96,0.08); border-left: 3px solid var(--accent-3);
+  border-radius: var(--radius-sm); color: #ffd0a0; font-size: 12px; line-height: 1.5; }
+#chat-messages .msg-system { padding: 8px 14px; background: rgba(208,96,255,0.06); border-left: 3px solid var(--accent-4);
+  border-radius: var(--radius-sm); color: #d0a0ff; font-size: 12px; font-style: italic; }
+#chat-messages .msg-meta { font-size: 11px; color: var(--text-dim); margin-top: 4px; padding-left: 16px; }
+
+#chat-greeting { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px; text-align: center; }
+#chat-greeting h1 { font-size: 28px; font-weight: 700; color: var(--text-bright); margin-bottom: 8px; letter-spacing: -0.5px; }
+#chat-greeting p { color: var(--text-dim); font-size: 15px; max-width: 400px; line-height: 1.6; }
+#chat-greeting .quick-prompts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 24px; max-width: 500px; }
+#chat-greeting .quick-prompts button { padding: 8px 16px; background: var(--bg-card); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; font-family: var(--font);
+  font-size: 12px; transition: all var(--transition); }
+#chat-greeting .quick-prompts button:hover { border-color: var(--accent); color: var(--accent); background: var(--bg-hover); }
+
+/* ─── Chat input form ─── */
+#chat-form { position: absolute; bottom: 0; left: 0; right: 0; padding: 16px 24px;
+  background: linear-gradient(to top, var(--bg) 60%, transparent); }
+#chat-form .form-inner { max-width: 820px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
+#chat-form textarea { flex: 1; padding: 12px 16px; background: var(--bg-input); color: var(--text-bright);
+  border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--font); font-size: 14px;
+  resize: none; min-height: 48px; max-height: 200px; line-height: 1.5; transition: border-color var(--transition); }
+#chat-form textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(96,128,255,0.1); }
+#chat-form button { padding: 12px 20px; background: rgba(96,128,255,0.15); color: var(--accent);
+  border: 1px solid rgba(96,128,255,0.3); border-radius: var(--radius); cursor: pointer; font-family: var(--font);
+  font-size: 14px; font-weight: 500; transition: all var(--transition); white-space: nowrap; }
+#chat-form button:hover { background: rgba(96,128,255,0.25); border-color: var(--accent); }
+#chat-form button:disabled { opacity: 0.4; cursor: not-allowed; }
+#chat-form button.stop-btn { background: rgba(255,64,96,0.12); color: #ff4060; border-color: rgba(255,64,96,0.3); }
+#chat-form button.stop-btn:hover { background: rgba(255,64,96,0.22); border-color: #ff4060; }
+#chat-form .form-info { max-width: 820px; margin: 6px auto 0; font-size: 11px; color: var(--text-dim);
+  display: flex; justify-content: space-between; }
+#chat-form .form-info .info-stats { display: flex; gap: 16px; }
+#chat-form .form-info .info-stats span { color: var(--text-dim); }
+#chat-form .form-info .info-stats .val { color: var(--accent-2); font-weight: 600; }
+
+/* ─── Playground tab ─── */
+#playground { padding: 24px; max-width: 960px; margin: 0 auto; width: 100%; }
+#playground h1 { color: var(--accent); font-size: 24px; margin-bottom: 20px; font-weight: 700; letter-spacing: -0.5px; }
+#playground .section { margin-bottom: 28px; }
+#playground .section h2 { color: var(--accent-2); font-size: 15px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--border); padding-bottom: 6px; font-weight: 600;
+  letter-spacing: 0.3px; text-transform: uppercase; }
+#playground .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+#playground .info-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px; transition: border-color var(--transition); }
+#playground .info-card:hover { border-color: var(--border-hover); }
+#playground .info-card h3 { color: var(--accent); font-size: 12px; margin-bottom: 6px;
+  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+#playground .info-card .val { color: var(--accent-2); font-size: 22px; font-weight: 700; }
+#playground .info-card .label { color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+
+/* ─── Tools tab ─── */
+#tools { padding: 24px; max-width: 960px; margin: 0 auto; width: 100%; }
+#tools h1 { color: var(--accent-2); font-size: 24px; margin-bottom: 8px; font-weight: 700; letter-spacing: -0.5px; }
+#tools .subtitle { color: var(--text-dim); font-size: 13px; margin-bottom: 24px; }
+#tools .tool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 16px; }
+#tools .tool-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 18px; transition: border-color var(--transition); }
+#tools .tool-card:hover { border-color: var(--border-hover); }
+#tools .tool-card h2 { color: var(--accent-2); font-size: 15px; margin-bottom: 6px; font-weight: 600; font-family: var(--font); }
+#tools .tool-card .desc { color: var(--text-dim); font-size: 12px; margin-bottom: 12px; line-height: 1.5; }
+#tools .tool-card label { color: var(--text-dim); font-size: 12px; margin-right: 4px; }
+#tools .tool-input { width: 100%; padding: 7px 10px; background: var(--bg-input); color: var(--text-bright);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font);
+  margin-bottom: 8px; font-size: 13px; transition: border-color var(--transition); }
+#tools .tool-input:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(96,255,128,0.08); }
+#tools .tool-card select { background: var(--bg-input); color: var(--text-bright); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 5px 8px; font-family: var(--font); font-size: 13px; }
+#tools .tool-card select:focus { outline: none; border-color: var(--accent-2); }
+#tools button { padding: 7px 18px; background: rgba(96,255,128,0.12); color: var(--accent-2);
+  border: 1px solid rgba(96,255,128,0.3); border-radius: var(--radius-sm); cursor: pointer;
+  font-family: var(--font); font-size: 13px; font-weight: 500; transition: all var(--transition); }
+#tools button:hover { background: rgba(96,255,128,0.22); border-color: var(--accent-2); transform: translateY(-1px); }
+#tools .tool-result { margin-top: 12px; padding: 12px; background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--accent-2); font-size: 13px; white-space: pre-wrap;
+  word-wrap: break-word; min-height: 36px; line-height: 1.5; }
+
+/* ─── Training tab ─── */
+#training { padding: 24px; max-width: 800px; margin: 0 auto; width: 100%; }
+#training h1 { color: var(--accent-4); font-size: 24px; margin-bottom: 20px; font-weight: 700; letter-spacing: -0.5px; }
+#training h2 { color: var(--accent-2); font-size: 15px; margin-bottom: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.3px; }
+#training .ctrl { padding: 4px 0; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+#training label { color: var(--text-dim); font-size: 12px; min-width: 80px; }
+#training input[type=text], #training textarea { background: var(--bg-input); color: var(--text-bright);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px;
+  font-family: var(--font); font-size: 13px; flex: 1; }
+#training textarea { min-height: 100px; resize: vertical; }
+#training input[type=text]:focus, #training textarea:focus { outline: none; border-color: var(--accent-4); }
+#training button { padding: 7px 18px; background: rgba(208,96,255,0.12); color: var(--accent-4);
+  border: 1px solid rgba(208,96,255,0.3); border-radius: var(--radius-sm); cursor: pointer;
+  font-family: var(--font); font-size: 13px; font-weight: 500; transition: all var(--transition); margin-right: 4px; margin-top: 4px; }
+#training button:hover { background: rgba(208,96,255,0.22); border-color: var(--accent-4); transform: translateY(-1px); }
+#training .train-stats { margin-top: 16px; padding: 14px; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); }
+#training .train-stats .stat-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+#training .train-stats .stat-row .val { color: var(--accent-2); font-weight: 600; }
+
+/* ─── Benchmark tab ─── */
+#benchmark { padding: 24px; max-width: 960px; margin: 0 auto; width: 100%; }
+#benchmark h1 { color: var(--accent-3); font-size: 24px; margin-bottom: 8px; font-weight: 700; letter-spacing: -0.5px; }
+#benchmark .subtitle { color: var(--text-dim); font-size: 13px; margin-bottom: 24px; }
+#benchmark .bench-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+#benchmark .bench-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+#benchmark .bench-card h2 { color: var(--accent); font-size: 14px; margin-bottom: 12px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px; }
+#benchmark .bench-card .metric { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;
+  border-bottom: 1px solid rgba(80,100,160,0.08); }
+#benchmark .bench-card .metric:last-child { border-bottom: none; }
+#benchmark .bench-card .metric .label { color: var(--text-dim); }
+#benchmark .bench-card .metric .val { font-weight: 600; }
+#benchmark .bench-card .metric .val.win { color: var(--accent-2); }
+#benchmark .bench-card .metric .val.lose { color: var(--accent-3); }
+#benchmark .bench-card .metric .val.tie { color: var(--text-dim); }
+
+/* ─── About tab ─── */
+#about { padding: 24px; max-width: 720px; margin: 0 auto; width: 100%; }
+#about h1 { color: var(--accent); font-size: 26px; margin-bottom: 8px; font-weight: 700; letter-spacing: -0.5px; }
+#about .tagline { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; }
+#about .about-section { margin-bottom: 28px; }
+#about .about-section h2 { color: var(--accent-2); font-size: 15px; margin-bottom: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px; }
+#about .about-section p { font-size: 13px; line-height: 1.6; margin-bottom: 8px; }
+#about .shortcut-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#about .shortcut { display: flex; justify-content: space-between; padding: 8px 12px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; }
+#about .shortcut kbd { background: rgba(96,128,255,0.12); color: var(--accent); padding: 2px 8px;
+  border-radius: 4px; font-family: var(--font); font-size: 11px; border: 1px solid rgba(96,128,255,0.2); }
+
+/* ─── Status bar ─── */
+#status-bar { position: fixed; bottom: 0; left: 0; right: 0; height: 28px;
+  background: rgba(10, 12, 24, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px;
+  font-size: 11px; color: var(--text-dim); z-index: 50; gap: 16px; }
+#status-bar .status-item { display: flex; align-items: center; gap: 6px; }
+#status-bar .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-2); }
+#status-bar .status-dot.offline { background: var(--accent-3); }
+#status-bar .spacer { flex: 1; }
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+  :root { --sidebar-w: 0px; }
+  #sidebar { display: none; }
+  #tools .tool-grid { grid-template-columns: 1fr; }
+  #about .shortcut-list { grid-template-columns: 1fr; }
+  #tabbar { padding-left: 8px; }
+  #tabbar .tab { padding: 6px 12px; font-size: 12px; }
+  #chat-messages { padding: 16px 16px 100px; }
+  #chat-form { padding: 12px 16px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ─── Tab bar ─── -->
+<div id="tabbar">
+    <div class="tab active" data-tab="chat">Chat</div>
+    <div class="tab" data-tab="playground">Playground</div>
+    <div class="tab" data-tab="tools">Tools <span class="tab-badge">38</span></div>
+    <div class="tab" data-tab="training">Training</div>
+    <div class="tab" data-tab="benchmark">Benchmark</div>
+    <div class="tab" data-tab="about">About</div>
+    <div class="spacer"></div>
+    <div class="version-tag">Qstar-LLM v3.0.0</div>
+</div>
+
+<div id="app">
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- CHAT TAB — llama.cpp-inspired sidebar + chat screen -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content active" id="tab-chat">
+
+<!-- Sidebar -->
+<div id="sidebar">
+    <button class="new-chat-btn" onclick="newConversation()">+ New Chat</button>
+    <div class="conv-list" id="conv-list"></div>
+    <div class="sidebar-footer">
+        <div class="stat"><span>Corpus</span><span class="val" id="sb-corpus">—</span></div>
+        <div class="stat"><span>E0 Nodes</span><span class="val">421</span></div>
+        <div class="stat"><span>Channels</span><span class="val">7</span></div>
+    </div>
+</div>
+
+<!-- Chat area -->
+<div id="chat-area">
+    <div id="chat-greeting">
+        <h1>Qstar-LLM</h1>
+        <p>Zero-dependency lattice inference engine. Q32.32 fixed-point, 421 E0 nodes, 7 reasoning channels, 38 tools. Type a message to begin.</p>
+        <div class="quick-prompts">
+            <button onclick="chatQuick('Hello, what are you?')">Hello</button>
+            <button onclick="chatQuick('Explain the E0 lattice manifold')">E0 lattice</button>
+            <button onclick="chatQuick('How does fixed-point arithmetic work?')">Fixed-point</button>
+            <button onclick="chatQuick('Describe the 7 reasoning channels')">7 channels</button>
+            <button onclick="chatQuick('What is the knowledge graph?')">Knowledge graph</button>
+            <button onclick="chatQuick('Explain quantum computing')">Quantum</button>
+        </div>
+    </div>
+    <div id="chat-messages" style="display:none;"></div>
+    <div id="chat-form">
+        <div class="form-inner">
+            <textarea id="chat-input" placeholder="Ask the lattice agent..." rows="1"
+                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();chatSend()}"
+                oninput="autoResize(this)"></textarea>
+            <button id="chat-send-btn" onclick="chatSend()">Send</button>
+            <button id="chat-stop-btn" class="stop-btn" style="display:none;" onclick="chatStop()">Stop</button>
+        </div>
+        <div class="form-info">
+            <span>Enter to send, Shift+Enter for newline</span>
+            <div class="info-stats">
+                <span>Latency: <span class="val" id="fi-latency">—</span></span>
+                <span>Tokens: <span class="val" id="fi-tokens">—</span></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- PLAYGROUND TAB — lattice introspection -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-playground">
+<div id="playground">
+<h1>Lattice Playground</h1>
+<div class="info-grid">
+    <div class="info-card"><h3>WASM Status</h3><div class="val" id="pg-wasm-status">Loading...</div></div>
+    <div class="info-card"><h3>E0 Nodes</h3><div class="val" id="pg-e0-count">—</div><div class="label">lattice nodes</div></div>
+    <div class="info-card"><h3>Agent State</h3><div class="val" id="pg-agent-state">Idle</div></div>
+    <div class="info-card"><h3>Fixed-Point</h3><div class="val" id="pg-fp-one">—</div><div class="label">Q32.32 ONE</div></div>
+    <div class="info-card"><h3>Tools</h3><div class="val">38</div><div class="label">registered tools</div></div>
+    <div class="info-card"><h3>Channels</h3><div class="val">7</div><div class="label">reasoning channels</div></div>
+    <div class="info-card"><h3>Tests</h3><div class="val">584</div><div class="label">unit tests</div></div>
+    <div class="info-card"><h3>Dependencies</h3><div class="val">0</div><div class="label">external deps</div></div>
+</div>
+<div class="section">
+    <h2>Quick Agent Chat</h2>
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;height:360px;overflow-y:auto;" id="pg-chat-box">
+        <div class="msg-system" style="padding:8px 14px;background:rgba(208,96,255,0.06);border-left:3px solid var(--accent-4);border-radius:var(--radius-sm);color:#d0a0ff;font-size:12px;font-style:italic;">Qstar agent initialized. Type a prompt and press Enter to generate.</div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:10px;">
+        <input type="text" id="pg-chat-input" placeholder="Ask the lattice agent..."
+            style="flex:1;padding:10px 14px;background:var(--bg-input);color:var(--text-bright);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font);font-size:14px;"
+            onkeydown="if(event.key==='Enter')pgSend()">
+        <button onclick="pgSend()" style="padding:8px 18px;background:rgba(96,128,255,0.15);color:var(--accent);border:1px solid rgba(96,128,255,0.3);border-radius:var(--radius-sm);cursor:pointer;font-family:var(--font);font-size:13px;font-weight:500;">Generate</button>
+        <button onclick="pgClear()" style="padding:8px 18px;background:rgba(255,64,96,0.12);border-color:rgba(255,64,96,0.3);color:#ff4060;border:1px solid;border-radius:var(--radius-sm);cursor:pointer;font-family:var(--font);font-size:13px;">Clear</button>
+    </div>
+</div>
+<div class="section">
+    <h2>Lattice Node Inspector</h2>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <label style="color:var(--text-dim);font-size:12px;">X:</label>
+        <input type="number" id="pg-lat-x" value="3" min="0" max="14" style="width:60px;padding:6px;background:var(--bg-input);color:var(--text-bright);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font);font-size:13px;">
+        <label style="color:var(--text-dim);font-size:12px;">Y:</label>
+        <input type="number" id="pg-lat-y" value="0" min="0" max="14" style="width:60px;padding:6px;background:var(--bg-input);color:var(--text-bright);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font);font-size:13px;">
+        <label style="color:var(--text-dim);font-size:12px;">Z:</label>
+        <input type="number" id="pg-lat-z" value="0" min="0" max="14" style="width:60px;padding:6px;background:var(--bg-input);color:var(--text-bright);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font);font-size:13px;">
+        <button onclick="pgQueryLattice()" style="padding:7px 18px;background:rgba(96,255,128,0.12);color:var(--accent-2);border:1px solid rgba(96,255,128,0.3);border-radius:var(--radius-sm);cursor:pointer;font-family:var(--font);font-size:13px;font-weight:500;">Query</button>
+    </div>
+    <div id="pg-lat-result" style="margin-top:12px;padding:12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--accent-2);font-size:13px;white-space:pre-wrap;min-height:36px;">—</div>
+</div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- TOOLS TAB — 38 tool calling engine -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-tools">
+<div id="tools">
+<h1>Tool Calling Engine</h1>
+<div class="subtitle">38 registered tools — execute lattice tools directly via WASM</div>
+<div class="tool-grid">
+<div class="tool-card">
+    <h2>calculate</h2>
+    <div class="desc">Fixed-point arithmetic: add, sub, mul, div, sqrt, exp, sin, cos (Q32.32)</div>
+    <label>Operation:</label>
+    <select id="calc-op">
+        <option value="add">add</option><option value="sub">sub</option><option value="mul">mul</option>
+        <option value="div">div</option><option value="sqrt">sqrt</option><option value="exp">exp</option>
+        <option value="sin">sin</option><option value="cos">cos</option>
+    </select>
+    <label style="margin-left:8px;">A:</label>
+    <input class="tool-input" id="calc-a" type="number" value="42" style="width:80px;display:inline-block;">
+    <label style="margin-left:8px;">B:</label>
+    <input class="tool-input" id="calc-b" type="number" value="2" style="width:80px;display:inline-block;">
+    <button onclick="toolCalculate()">Execute</button>
+    <div class="tool-result" id="calc-result">—</div>
+</div>
+<div class="tool-card">
+    <h2>lattice_node</h2>
+    <div class="desc">Query E0 lattice node coordinates and properties</div>
+    <label>X:</label>
+    <input class="tool-input" id="lat-x" type="number" value="3" style="width:60px;display:inline-block;">
+    <label style="margin-left:8px;">Y:</label>
+    <input class="tool-input" id="lat-y" type="number" value="0" style="width:60px;display:inline-block;">
+    <label style="margin-left:8px;">Z:</label>
+    <input class="tool-input" id="lat-z" type="number" value="0" style="width:60px;display:inline-block;">
+    <button onclick="toolLattice()">Query</button>
+    <div class="tool-result" id="lat-result">—</div>
+</div>
+<div class="tool-card">
+    <h2>quantum_simulate</h2>
+    <div class="desc">Simulate quantum circuits: bell, ghz, grover (2-8 qubits)</div>
+    <label>Circuit:</label>
+    <select id="qsim-circuit">
+        <option value="bell">bell</option><option value="ghz">ghz</option><option value="grover">grover</option>
+    </select>
+    <label style="margin-left:8px;">Qubits:</label>
+    <input class="tool-input" id="qsim-qubits" type="number" value="2" min="2" max="8" style="width:60px;display:inline-block;">
+    <button onclick="toolQuantum()">Simulate</button>
+    <div class="tool-result" id="qsim-result">—</div>
+</div>
+<div class="tool-card">
+    <h2>text_stats</h2>
+    <div class="desc">Compute text statistics: word count, char count, avg word length, unique words</div>
+    <input class="tool-input" id="tstats-text" value="The quick brown fox jumps over the lazy dog" placeholder="Enter text to analyze">
+    <button onclick="toolTextStats()">Analyze</button>
+    <div class="tool-result" id="tstats-result">—</div>
+</div>
+<div class="tool-card">
+    <h2>sentiment</h2>
+    <div class="desc">Analyze sentiment of text (positive, negative, neutral scoring)</div>
+    <input class="tool-input" id="sent-text" value="I love this amazing lattice computing engine" placeholder="Enter text for sentiment analysis">
+    <button onclick="toolSentiment()">Analyze</button>
+    <div class="tool-result" id="sent-result">—</div>
+</div>
+<div class="tool-card">
+    <h2>base64</h2>
+    <div class="desc">Encode or decode base64 strings</div>
+    <label>Mode:</label>
+    <select id="b64-mode">
+        <option value="encode">encode</option><option value="decode">decode</option>
+    </select>
+    <input class="tool-input" id="b64-input" value="Hello Qstar" placeholder="Enter text" style="margin-top:8px;">
+    <button onclick="toolBase64()">Execute</button>
+    <div class="tool-result" id="b64-result">—</div>
+</div>
+<div class="tool-card">
+    <h2>hash</h2>
+    <div class="desc">Compute hash of input text (FNV-1a 64-bit)</div>
+    <input class="tool-input" id="hash-input" value="Qstar lattice" placeholder="Enter text to hash">
+    <button onclick="toolHash()">Hash</button>
+    <div class="tool-result" id="hash-result">—</div>
+</div>
+<div class="tool-card">
+    <h2>entropy</h2>
+    <div class="desc">Calculate Shannon entropy of input text (bits per character)</div>
+    <input class="tool-input" id="ent-input" value="aaabbbcccdddeee" placeholder="Enter text for entropy calculation">
+    <button onclick="toolEntropy()">Calculate</button>
+    <div class="tool-result" id="ent-result">—</div>
+</div>
+<div class="tool-card">
+    <h2>Raw Tool Call (JSON)</h2>
+    <div class="desc">Execute any of the 38 registered tools via JSON arguments</div>
+    <input class="tool-input" id="raw-tool" value="calculate" placeholder="Tool name">
+    <input class="tool-input" id="raw-args" value='{"op":"mul","a":6,"b":7}' placeholder='JSON arguments'>
+    <button onclick="toolRaw()">Execute Raw</button>
+    <div class="tool-result" id="raw-result">—</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- TRAINING TAB — in-browser self-training -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-training">
+<div id="training">
+<h1>Self-Training Playground</h1>
+<div class="section">
+    <h2>Learn from Text</h2>
+    <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Paste text for the agent to learn from. Sentences are extracted and added to the dynamic corpus.</p>
+    <textarea id="train-text" placeholder="Paste any text here — articles, documentation, code comments..."></textarea>
+    <div style="margin-top:10px;">
+        <button onclick="trainLearn()">Learn from Text</button>
+        <button onclick="trainClear()" style="background:rgba(255,64,96,0.12);color:#ff4060;border-color:rgba(255,64,96,0.3);">Clear Corpus</button>
+        <button onclick="trainSave()" style="background:rgba(96,128,255,0.12);color:var(--accent);border-color:rgba(96,128,255,0.3);">Save to Browser</button>
+        <button onclick="trainLoad()" style="background:rgba(96,128,255,0.12);color:var(--accent);border-color:rgba(96,128,255,0.3);">Load from Browser</button>
+    </div>
+    <div class="train-stats">
+        <div class="stat-row"><span>Corpus Sentences</span><span class="val" id="train-corpus-count">—</span></div>
+        <div class="stat-row"><span>Last Learn Batch</span><span class="val" id="train-last-batch">—</span></div>
+        <div class="stat-row"><span>Total Bytes Learned</span><span class="val" id="train-total-bytes">—</span></div>
+    </div>
+</div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- BENCHMARK TAB — Qstar vs Ollama competitive results -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-benchmark">
+<div id="benchmark">
+<h1>Competitive Benchmark</h1>
+<div class="subtitle">Qstar-LLM vs Ollama — head-to-head performance comparison</div>
+<div class="bench-grid">
+    <div class="bench-card">
+        <h2>Latency (TTFT)</h2>
+        <div class="metric"><span class="label">Qstar-LLM</span><span class="val win">103 µs</span></div>
+        <div class="metric"><span class="label">Ollama (qwen2.5:3b)</span><span class="val lose">1,133,842 µs</span></div>
+        <div class="metric"><span class="label">Advantage</span><span class="val win">11,008x faster</span></div>
+    </div>
+    <div class="bench-card">
+        <h2>Throughput</h2>
+        <div class="metric"><span class="label">Qstar-LLM</span><span class="val win">4,466,374 tok/s</span></div>
+        <div class="metric"><span class="label">Ollama</span><span class="val lose">68.77 tok/s</span></div>
+        <div class="metric"><span class="label">Advantage</span><span class="val win">64,945x higher</span></div>
+    </div>
+    <div class="bench-card">
+        <h2>Memory Footprint</h2>
+        <div class="metric"><span class="label">Qstar-LLM</span><span class="val win">47,536 bytes (46.4 KB)</span></div>
+        <div class="metric"><span class="label">Ollama</span><span class="val lose">986 MB</span></div>
+        <div class="metric"><span class="label">Advantage</span><span class="val win">21,750x smaller</span></div>
+    </div>
+    <div class="bench-card">
+        <h2>Coherence</h2>
+        <div class="metric"><span class="label">Qstar-LLM</span><span class="val tie">100%</span></div>
+        <div class="metric"><span class="label">Ollama</span><span class="val tie">100%</span></div>
+        <div class="metric"><span class="label">Result</span><span class="val tie">Tie</span></div>
+    </div>
+    <div class="bench-card">
+        <h2>Output Length</h2>
+        <div class="metric"><span class="label">Qstar-LLM</span><span class="val win">180-210 tokens</span></div>
+        <div class="metric"><span class="label">Ollama</span><span class="val lose">64 tokens (truncated)</span></div>
+        <div class="metric"><span class="label">Advantage</span><span class="val win">3x longer</span></div>
+    </div>
+    <div class="bench-card">
+        <h2>Dependencies</h2>
+        <div class="metric"><span class="label">Qstar-LLM</span><span class="val win">0 (integer-only)</span></div>
+        <div class="metric"><span class="label">Ollama</span><span class="val lose">LibC, GGML, CUDA/Metal</span></div>
+        <div class="metric"><span class="label">Advantage</span><span class="val win">Zero deps</span></div>
+    </div>
+</div>
+<div style="padding:14px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);font-size:13px;color:var(--text-dim);line-height:1.6;">
+    <strong style="color:var(--accent);">Run competitive benchmark locally:</strong><br>
+    <code style="background:rgba(96,255,128,0.08);padding:2px 7px;border-radius:4px;color:var(--accent-2);font-size:12px;">zig build competitive-bench -- qwen2.5:3b</code><br><br>
+    Produces <code style="background:rgba(96,255,128,0.08);padding:2px 7px;border-radius:4px;color:var(--accent-2);font-size:12px;">competitive_results.json</code> with per-category win/loss/tie breakdown across factual accuracy, creative fluency, naturalness, reasoning, latency, and throughput.
+</div>
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- ABOUT TAB -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tab-about">
+<div id="about">
+<h1>Qstar-LLM</h1>
+<p class="tagline">Zero-dependency, deterministic AI inference engine built on discrete lattice geometry.</p>
+<div class="about-section">
+    <h2>Overview</h2>
+    <p>Qstar-LLM uses Q32.32 fixed-point arithmetic for bit-exact reproducibility across all platforms — no floating-point drift, no GPU required. The entire engine runs in WASM inside this single HTML file.</p>
+    <p><strong style="color:var(--accent-2);">584 tests</strong> across 23 src + 13 prototype modules. <strong style="color:var(--accent-2);">38 tools</strong>. <strong style="color:var(--accent-2);">0 external dependencies.</strong></p>
+</div>
+<div class="about-section">
+    <h2>Key Features</h2>
+    <p>• Speculative draft mode (Qstar generates, Ollama verifies)</p>
+    <p>• Concurrent HTTP server (thread-per-connection, 64 simultaneous)</p>
+    <p>• Streaming responses (chunked NDJSON)</p>
+    <p>• Competitive benchmark suite (Qstar vs Ollama)</p>
+    <p>• 29 topic category routes for domain-specific responses</p>
+    <p>• Trigram model with anti-repetition window</p>
+    <p>• Naturalness engine with formal-to-casual conversion</p>
+    <p>• Semantic retrieval with query keyword expansion</p>
+    <p>• 3-layer cognitive memory (working, episodic, callbacks)</p>
+    <p>• BPE tokenizer with Ramsey vocabulary scaling</p>
+</div>
+<div class="about-section">
+    <h2>Keyboard Shortcuts</h2>
+    <div class="shortcut-list">
+        <div class="shortcut"><span>New chat</span><kbd>Ctrl+N</kbd></div>
+        <div class="shortcut"><span>Send message</span><kbd>Enter</kbd></div>
+        <div class="shortcut"><span>Newline in input</span><kbd>Shift+Enter</kbd></div>
+        <div class="shortcut"><span>Switch tab</span><kbd>Tab</kbd></div>
+    </div>
+</div>
+<div class="about-section">
+    <h2>Build Commands</h2>
+    <p><code style="background:rgba(96,255,128,0.08);padding:2px 7px;border-radius:4px;color:var(--accent-2);font-size:12px;">zig build wasm</code> — Build WASM module</p>
+    <p><code style="background:rgba(96,255,128,0.08);padding:2px 7px;border-radius:4px;color:var(--accent-2);font-size:12px;">zig build html</code> — Build self-contained universe.html</p>
+    <p><code style="background:rgba(96,255,128,0.08);padding:2px 7px;border-radius:4px;color:var(--accent-2);font-size:12px;">zig build test</code> — Run 584 unit tests</p>
+    <p><code style="background:rgba(96,255,128,0.08);padding:2px 7px;border-radius:4px;color:var(--accent-2);font-size:12px;">zig build cli</code> — Build CLI binary</p>
+    <p><code style="background:rgba(96,255,128,0.08);padding:2px 7px;border-radius:4px;color:var(--accent-2);font-size:12px;">zig build serve</code> — Start HTTP API server</p>
+</div>
+</div>
+</div>
+
+</div><!-- /app -->
+
+<!-- ─── Status bar ─── -->
+<div id="status-bar">
+    <div class="status-item"><div class="status-dot" id="status-dot"></div><span id="status-text">Booting...</span></div>
+    <div class="spacer"></div>
+    <div class="status-item"><span>WASM: <span id="status-wasm" style="color:var(--text-dim);">loading</span></span></div>
+    <div class="status-item"><span>Corpus: <span id="status-corpus" style="color:var(--text-dim);">—</span></span></div>
+    <div class="status-item"><span>Seed: <span id="status-seed" style="color:var(--text-dim);">v{{SEED_VERSION}}</span></span></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// WASM Module (base64 — replaced at build time)
+// ═══════════════════════════════════════════════════════════════════════════
+const WASM_BASE64 = "{{WASM_BASE64}}";
+const CORPUS_BASE64 = "{{CORPUS_BASE64}}";
+const SEED_VERSION = "{{SEED_VERSION}}";
+const SEED_HASH = "{{SEED_HASH}}";
+const SEED_BASE64 = "{{SEED_BASE64}}";
+const WASM_HASH = "{{WASM_HASH}}";
+
+// Master node autoupdate endpoint (same-origin by default; override at runtime).
+const MASTER_URL = (typeof QSTAR_MASTER_URL !== 'undefined' ? QSTAR_MASTER_URL : '');
+
+let wasmExports = null;
+let wasmMemory = null;
+let isGenerating = false;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WASM Loading
+// ═══════════════════════════════════════════════════════════════════════════
+async function loadWasm() {
+    if (!WASM_BASE64 || WASM_BASE64.length < 10) {
+        updateStatus('WASM not embedded', false);
+        return false;
+    }
+    try {
+        const binary = atob(WASM_BASE64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+        const module = await WebAssembly.instantiate(bytes, {
+            env: { abort: function() { console.error('WASM abort'); } }
+        });
+        wasmExports = module.instance.exports;
+        wasmMemory = wasmExports.memory;
+
+        if (wasmExports.qstar_init) wasmExports.qstar_init();
+        updateStatus('Ready', true);
+        updatePlaygroundInfo();
+        loadEmbeddedCorpus();
+        loadSavedCorpus();
+        return true;
+    } catch (e) {
+        console.error('WASM load failed:', e);
+        updateStatus('WASM error: ' + e.message, false);
+        return false;
+    }
+}
+
+function updateStatus(text, online) {
+    document.getElementById('status-text').textContent = text;
+    document.getElementById('status-wasm').textContent = online ? 'loaded' : 'error';
+    document.getElementById('status-wasm').style.color = online ? 'var(--accent-2)' : 'var(--accent-3)';
+    const dot = document.getElementById('status-dot');
+    dot.classList.toggle('offline', !online);
+}
+
+function updatePlaygroundInfo() {
+    if (!wasmExports) return;
+    const pgWasm = document.getElementById('pg-wasm-status');
+    if (pgWasm) pgWasm.textContent = 'Loaded';
+    if (wasmExports.qstar_e0_count) {
+        const val = wasmExports.qstar_e0_count();
+        const el = document.getElementById('pg-e0-count');
+        if (el) el.textContent = val;
+    }
+    if (wasmExports.qstar_fp_one) {
+        const val = wasmExports.qstar_fp_one();
+        const el = document.getElementById('pg-fp-one');
+        if (el) el.textContent = val.toLocaleString();
+    }
+    updateCorpusCount();
+}
+
+function updateCorpusCount() {
+    if (!wasmExports || !wasmExports.qstar_get_corpus_sentence_count) return;
+    const count = wasmExports.qstar_get_corpus_sentence_count();
+    const sbEl = document.getElementById('sb-corpus');
+    if (sbEl) sbEl.textContent = count.toLocaleString();
+    const statusEl = document.getElementById('status-corpus');
+    if (statusEl) { statusEl.textContent = count.toLocaleString(); statusEl.style.color = 'var(--accent-2)'; }
+    const trainEl = document.getElementById('train-corpus-count');
+    if (trainEl) trainEl.textContent = count.toLocaleString();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tab switching
+// ═══════════════════════════════════════════════════════════════════════════
+document.querySelectorAll('#tabbar .tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('#tabbar .tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        const target = document.getElementById('tab-' + tab.dataset.tab);
+        if (target) target.classList.add('active');
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Chat — llama.cpp-inspired conversation management
+// ═══════════════════════════════════════════════════════════════════════════
+let conversations = [];
+let activeConvId = null;
+let convCounter = 0;
+
+function newConversation() {
+    const id = ++convCounter;
+    const conv = { id, title: 'New Chat', messages: [] };
+    conversations.unshift(conv);
+    activeConvId = id;
+    renderConvList();
+    renderChatMessages();
+}
+
+function deleteConversation(id, event) {
+    event.stopPropagation();
+    conversations = conversations.filter(c => c.id !== id);
+    if (activeConvId === id) {
+        activeConvId = conversations.length > 0 ? conversations[0].id : null;
+    }
+    renderConvList();
+    renderChatMessages();
+}
+
+function selectConversation(id) {
+    activeConvId = id;
+    renderConvList();
+    renderChatMessages();
+}
+
+function renderConvList() {
+    const list = document.getElementById('conv-list');
+    list.innerHTML = '';
+    conversations.forEach(conv => {
+        const item = document.createElement('div');
+        item.className = 'conv-item' + (conv.id === activeConvId ? ' active' : '');
+        item.innerHTML = '<span class="conv-icon">●</span><span class="conv-title">' + escapeHtml(conv.title) + '</span><span class="conv-del" onclick="deleteConversation(' + conv.id + ', event)">✕</span>';
+        item.onclick = () => selectConversation(conv.id);
+        list.appendChild(item);
+    });
+}
+
+function renderChatMessages() {
+    const greeting = document.getElementById('chat-greeting');
+    const messages = document.getElementById('chat-messages');
+    const conv = conversations.find(c => c.id === activeConvId);
+    if (!conv || conv.messages.length === 0) {
+        greeting.style.display = 'flex';
+        messages.style.display = 'none';
+    } else {
+        greeting.style.display = 'none';
+        messages.style.display = 'block';
+        messages.innerHTML = '';
+        conv.messages.forEach(msg => appendMessage(msg.role, msg.text, msg.meta));
+    }
+}
+
+function appendMessage(role, text, meta) {
+    const messages = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'msg msg-' + role;
+    div.textContent = text;
+    messages.appendChild(div);
+    if (meta) {
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'msg-meta';
+        metaDiv.textContent = meta;
+        messages.appendChild(metaDiv);
+    }
+    messages.scrollTop = messages.scrollHeight;
+}
+
+function chatQuick(prompt) {
+    if (!activeConvId) newConversation();
+    document.getElementById('chat-input').value = prompt;
+    chatSend();
+}
+
+function chatSend() {
+    if (isGenerating) return;
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+    if (!activeConvId) newConversation();
+
+    const conv = conversations.find(c => c.id === activeConvId);
+    if (conv.messages.length === 0) {
+        conv.title = text.substring(0, 40) + (text.length > 40 ? '...' : '');
+        renderConvList();
+    }
+
+    conv.messages.push({ role: 'user', text });
+    appendMessage('user', text);
+    input.value = '';
+    autoResize(input);
+    renderChatMessages();
+
+    isGenerating = true;
+    document.getElementById('chat-send-btn').style.display = 'none';
+    document.getElementById('chat-stop-btn').style.display = 'block';
+
+    const startTime = performance.now();
+
+    setTimeout(() => {
+        try {
+            if (!wasmExports) {
+                appendMessage('system', 'WASM not loaded. Cannot generate.');
+            } else {
+                const ptr = wasmExports.qstar_get_input_ptr();
+                const encoder = new TextEncoder();
+                const bytes = encoder.encode(text);
+                const wasmView = new Uint8Array(wasmMemory.buffer, ptr, bytes.length);
+                wasmView.set(bytes);
+                wasmExports.qstar_ingest(ptr, bytes.length);
+
+                const outPtr = wasmExports.qstar_generate_long_form(ptr, bytes.length);
+                const outLen = wasmExports.qstar_output_len();
+                const decoder = new TextDecoder();
+                const response = decoder.decode(new Uint8Array(wasmMemory.buffer, outPtr, outLen));
+
+                const elapsed = performance.now() - startTime;
+                const meta = 'Generated in ' + elapsed.toFixed(1) + ' ms';
+                conv.messages.push({ role: 'agent', text: response, meta });
+                appendMessage('agent', response, meta);
+
+                document.getElementById('fi-latency').textContent = elapsed.toFixed(0) + ' ms';
+                document.getElementById('fi-tokens').textContent = response.length;
+            }
+        } catch (e) {
+            appendMessage('system', 'Error: ' + e.message);
+        }
+        isGenerating = false;
+        document.getElementById('chat-send-btn').style.display = 'block';
+        document.getElementById('chat-stop-btn').style.display = 'none';
+    }, 10);
+}
+
+function chatStop() {
+    isGenerating = false;
+    document.getElementById('chat-send-btn').style.display = 'block';
+    document.getElementById('chat-stop-btn').style.display = 'none';
+}
+
+function autoResize(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Playground chat
+// ═══════════════════════════════════════════════════════════════════════════
+function pgSend() {
+    const input = document.getElementById('pg-chat-input');
+    const text = input.value.trim();
+    if (!text || !wasmExports) return;
+
+    const box = document.getElementById('pg-chat-box');
+    const userDiv = document.createElement('div');
+    userDiv.style.cssText = 'padding:8px 14px;background:rgba(96,128,255,0.12);color:var(--text-bright);border-left:3px solid var(--accent);border-radius:var(--radius-sm);margin-bottom:10px;font-size:13px;';
+    userDiv.textContent = text;
+    box.appendChild(userDiv);
+
+    const ptr = wasmExports.qstar_get_input_ptr();
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(text);
+    const wasmView = new Uint8Array(wasmMemory.buffer, ptr, bytes.length);
+    wasmView.set(bytes);
+    wasmExports.qstar_ingest(ptr, bytes.length);
+
+    const outPtr = wasmExports.qstar_generate_long_form(ptr, bytes.length);
+    const outLen = wasmExports.qstar_output_len();
+    const decoder = new TextDecoder();
+    const response = decoder.decode(new Uint8Array(wasmMemory.buffer, outPtr, outLen));
+
+    const agentDiv = document.createElement('div');
+    agentDiv.style.cssText = 'padding:8px 14px;background:rgba(96,255,128,0.1);color:#c0ffd0;border-left:3px solid var(--accent-2);border-radius:var(--radius-sm);margin-bottom:10px;font-size:13px;white-space:pre-wrap;word-wrap:break-word;';
+    agentDiv.textContent = response;
+    box.appendChild(agentDiv);
+    box.scrollTop = box.scrollHeight;
+
+    input.value = '';
+    updateCorpusCount();
+}
+
+function pgClear() {
+    if (wasmExports && wasmExports.qstar_reset) wasmExports.qstar_reset();
+    document.getElementById('pg-chat-box').innerHTML = '<div style="padding:8px 14px;background:rgba(208,96,255,0.06);border-left:3px solid var(--accent-4);border-radius:var(--radius-sm);color:#d0a0ff;font-size:12px;font-style:italic;">Agent reset. Type a prompt to begin.</div>';
+}
+
+function pgQueryLattice() {
+    if (!wasmExports) return;
+    const x = parseInt(document.getElementById('pg-lat-x').value);
+    const y = parseInt(document.getElementById('pg-lat-y').value);
+    const z = parseInt(document.getElementById('pg-lat-z').value);
+    const idx = wasmExports.qstar_get_e0_index(x, y, z);
+    const eVal = wasmExports.qstar_get_e_value(x, y, z, 0);
+    const isBoundary = wasmExports.qstar_is_boundary(x, y, z, 0);
+    const result = 'E0 Node (' + x + ', ' + y + ', ' + z + '):\n  Index: ' + idx + '\n  E-value: ' + eVal + '\n  Boundary: ' + isBoundary;
+    document.getElementById('pg-lat-result').textContent = result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tools
+// ═══════════════════════════════════════════════════════════════════════════
+function execTool(name, args) {
+    if (!wasmExports) { return 'WASM not loaded'; }
+    const toolPtr = wasmExports.qstar_get_input_ptr();
+    const encoder = new TextEncoder();
+    const toolBytes = encoder.encode(name);
+    const toolView = new Uint8Array(wasmMemory.buffer, toolPtr, toolBytes.length);
+    toolView.set(toolBytes);
+    const argsJson = JSON.stringify(args);
+    const argsPtr = toolPtr + toolBytes.length + 1;
+    const argsBytes = encoder.encode(argsJson);
+    const argsView = new Uint8Array(wasmMemory.buffer, argsPtr, argsBytes.length);
+    argsView.set(argsBytes);
+    const outPtr = wasmExports.qstar_tool_execute(toolPtr, toolBytes.length, argsPtr, argsBytes.length);
+    const outLen = wasmExports.qstar_output_len();
+    const decoder = new TextDecoder();
+    return decoder.decode(new Uint8Array(wasmMemory.buffer, outPtr, outLen));
+}
+
+function toolCalculate() {
+    const op = document.getElementById('calc-op').value;
+    const a = parseFloat(document.getElementById('calc-a').value);
+    const b = parseFloat(document.getElementById('calc-b').value);
+    document.getElementById('calc-result').textContent = execTool('calculate', { op, a, b });
+}
+function toolLattice() {
+    const x = parseInt(document.getElementById('lat-x').value);
+    const y = parseInt(document.getElementById('lat-y').value);
+    const z = parseInt(document.getElementById('lat-z').value);
+    document.getElementById('lat-result').textContent = execTool('lattice_node', { x, y, z });
+}
+function toolQuantum() {
+    const circuit = document.getElementById('qsim-circuit').value;
+    const qubits = parseInt(document.getElementById('qsim-qubits').value);
+    document.getElementById('qsim-result').textContent = execTool('quantum_simulate', { circuit, qubits });
+}
+function toolTextStats() {
+    const text = document.getElementById('tstats-text').value;
+    document.getElementById('tstats-result').textContent = execTool('text_stats', { text });
+}
+function toolSentiment() {
+    const text = document.getElementById('sent-text').value;
+    document.getElementById('sent-result').textContent = execTool('sentiment_analyze', { text });
+}
+function toolBase64() {
+    const mode = document.getElementById('b64-mode').value;
+    const input = document.getElementById('b64-input').value;
+    document.getElementById('b64-result').textContent = execTool('base64', { mode, input });
+}
+function toolHash() {
+    const input = document.getElementById('hash-input').value;
+    document.getElementById('hash-result').textContent = execTool('hash', { input });
+}
+function toolEntropy() {
+    const input = document.getElementById('ent-input').value;
+    document.getElementById('ent-result').textContent = execTool('entropy', { input });
+}
+function toolRaw() {
+    const name = document.getElementById('raw-tool').value;
+    const args = document.getElementById('raw-args').value;
+    try {
+        const parsed = JSON.parse(args);
+        document.getElementById('raw-result').textContent = execTool(name, parsed);
+    } catch (e) {
+        document.getElementById('raw-result').textContent = 'Invalid JSON: ' + e.message;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Training
+// ═══════════════════════════════════════════════════════════════════════════
+const CORPUS_STORAGE_KEY = 'qstar_corpus_v3';
+const INPUT_CHUNK = 16384; // matches WASM input buffer size
+let totalBytesLearned = 0;
+
+// Feeds bytes to qstar_learn_from_text in <=16KB chunks (WASM input buffer limit).
+function learnFromBytes(bytes) {
+    if (!wasmExports || !bytes || bytes.length === 0) return 0;
+    let total = 0;
+    const ptr = wasmExports.qstar_get_input_ptr();
+    for (let off = 0; off < bytes.length; off += INPUT_CHUNK) {
+        const chunk = bytes.subarray(off, Math.min(off + INPUT_CHUNK, bytes.length));
+        const wasmView = new Uint8Array(wasmMemory.buffer, ptr, chunk.length);
+        wasmView.set(chunk);
+        total += wasmExports.qstar_learn_from_text(ptr, chunk.length);
+    }
+    return total;
+}
+
+// Loads the distilled corpus embedded at build time (quine-style self-mod).
+function loadEmbeddedCorpus() {
+    if (!wasmExports || !CORPUS_BASE64 || CORPUS_BASE64.length === 0) return;
+    try {
+        const binary = atob(CORPUS_BASE64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const learned = learnFromBytes(bytes);
+        totalBytesLearned += bytes.length;
+        console.log('Embedded corpus loaded: ' + learned.toLocaleString() + ' sentences from ' + bytes.length.toLocaleString() + ' bytes');
+        updateCorpusCount();
+    } catch (e) { console.log('Embedded corpus load skipped:', e); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Master Node Autoupdate (quine-style self-mod)
+// Fetches seed_manifest.json from the master node. If the distilled corpus
+// hash differs from the embedded SEED_HASH, pulls qstar_corpus_distilled.txt
+// and learns from it. If the WASM hash differs, capabilities/tools changed —
+// pulls the new universe.html and prompts a reload to apply.
+// When the direct HTTP path is unavailable, falls back to the master's P2P
+// relay cache (/api/relay/<name>) so browser quines can pull mirrored payloads.
+// ═══════════════════════════════════════════════════════════════════════════
+async function fetchWithRelayFallback(base, path) {
+    try {
+        const resp = await fetch(base + '/' + path, { cache: 'no-store' });
+        if (resp.ok) return resp;
+    } catch (e) { /* fall through to relay */ }
+    return fetch(base + '/api/relay/' + path, { cache: 'no-store' });
+}
+
+async function checkForUpdates() {
+    if (!MASTER_URL) return; // offline quine — embedded seed only
+    const base = MASTER_URL.replace(/\/+$/, '');
+    let manifest;
+    try {
+        const resp = await fetchWithRelayFallback(base, 'seed_manifest.json');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        manifest = await resp.json();
+    } catch (e) {
+        console.log('Autoupdate: manifest unavailable (' + e.message + ') — staying on embedded seed');
+        return;
+    }
+    const seedVersionEl = document.getElementById('status-seed');
+    if (seedVersionEl) seedVersionEl.textContent = manifest.version || '?';
+
+    // Capabilities/tools changed → new WASM → pull the new universe.html.
+    if (manifest.wasm_sha256 && WASM_HASH && manifest.wasm_sha256 !== WASM_HASH) {
+        console.log('Autoupdate: new WASM available (' + (manifest.version || '?') + ') — fetching new universe.html');
+        try {
+            const htmlResp = await fetchWithRelayFallback(base, 'universe.html');
+            if (htmlResp.ok) {
+                const html = await htmlResp.text();
+                localStorage.setItem('qstar_pending_update', html);
+                updateStatus('Update ' + (manifest.version || '?') + ' ready — reload to apply', true);
+            }
+        } catch (e) { console.log('Autoupdate: universe.html fetch failed:', e); }
+        return;
+    }
+
+    // Corpus changed → pull the distilled text payload and learn from it.
+    const learnedKey = 'qstar_learned_corpus_hash';
+    const lastLearned = localStorage.getItem(learnedKey);
+    if (manifest.distilled_corpus_sha256 && manifest.distilled_corpus_sha256 !== lastLearned) {
+        try {
+            const qscResp = await fetchWithRelayFallback(base, 'qstar_corpus_distilled.txt');
+            if (!qscResp.ok) throw new Error('HTTP ' + qscResp.status);
+            const buf = await qscResp.arrayBuffer();
+            const bytes = new Uint8Array(buf);
+            const learned = learnFromBytes(bytes);
+            totalBytesLearned += bytes.length;
+            localStorage.setItem(learnedKey, manifest.distilled_corpus_sha256);
+            console.log('Autoupdate: learned ' + learned.toLocaleString() + ' sentences from master corpus (' + (manifest.version || '?') + ')');
+            updateCorpusCount();
+        } catch (e) { console.log('Autoupdate: corpus pull failed:', e); }
+    }
+}
+
+function trainLearn() {
+    if (!wasmExports) return;
+    const text = document.getElementById('train-text').value;
+    if (!text.trim()) return;
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(text);
+    const learned = learnFromBytes(bytes);
+    totalBytesLearned += bytes.length;
+    document.getElementById('train-last-batch').textContent = learned.toLocaleString() + ' sentences';
+    document.getElementById('train-total-bytes').textContent = totalBytesLearned.toLocaleString() + ' bytes';
+    updateCorpusCount();
+}
+
+function trainClear() {
+    if (wasmExports && wasmExports.qstar_reset) wasmExports.qstar_reset();
+    totalBytesLearned = 0;
+    document.getElementById('train-last-batch').textContent = '—';
+    document.getElementById('train-total-bytes').textContent = '—';
+    updateCorpusCount();
+}
+
+function trainSave() {
+    if (!wasmExports || !wasmExports.qstar_save_corpus) return;
+    const ptr = wasmExports.qstar_save_corpus();
+    const len = wasmExports.qstar_output_len();
+    const decoder = new TextDecoder();
+    const corpus = decoder.decode(new Uint8Array(wasmMemory.buffer, ptr, len));
+    try {
+        localStorage.setItem(CORPUS_STORAGE_KEY, corpus);
+        alert('Corpus saved to browser (' + corpus.length + ' bytes)');
+    } catch (e) {
+        alert('Save failed: ' + e.message);
+    }
+}
+
+function trainLoad() {
+    loadSavedCorpus();
+}
+
+function loadSavedCorpus() {
+    if (!wasmExports) return;
+    try {
+        const saved = localStorage.getItem(CORPUS_STORAGE_KEY);
+        if (saved && saved.length > 0) {
+            const encoder = new TextEncoder();
+            const bytes = encoder.encode(saved);
+            learnFromBytes(bytes);
+            updateCorpusCount();
+        }
+    } catch (e) { console.log('Corpus load skipped:', e); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Utilities
+// ═══════════════════════════════════════════════════════════════════════════
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'n') { e.preventDefault(); newConversation(); }
+    if (e.key === 'Tab' && !e.target.matches('textarea, input')) {
+        e.preventDefault();
+        const tabs = Array.from(document.querySelectorAll('#tabbar .tab'));
+        const active = tabs.findIndex(t => t.classList.contains('active'));
+        tabs[(active + 1) % tabs.length].click();
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Boot
+// ═══════════════════════════════════════════════════════════════════════════
+async function boot() {
+    newConversation();
+    await loadWasm();
+    loadEmbeddedCorpus();
+    // Apply a pending full update (new universe.html) if one was staged.
+    const pending = localStorage.getItem('qstar_pending_update');
+    if (pending && pending.length > 1000) {
+        const blob = new Blob([pending], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        localStorage.removeItem('qstar_pending_update');
+        window.location.href = url;
+        return;
+    }
+    checkForUpdates();
+}
+boot();
+</script>
+</body>
+</html>

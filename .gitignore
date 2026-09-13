@@ -35,4 +35,15 @@ Thumbs.db
 *.swp
 *.swo
 *~
-experiments/
+
+# Experiments directory build artifacts
+experiments/*/.zig-cache/
+experiments/*/zig-cache/
+experiments/*/.zig-out/
+experiments/*/zig-out/
+experiments/*/models/
+experiments/*/data/
+experiments/*/*.bin
+experiments/*/*.so
+experiments/*/*.dll
+experiments/*/*.dylib

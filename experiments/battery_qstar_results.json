@@ -1,0 +1,259 @@
+{
+  "entries": [
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "SelfAwareness",
+      "condition": "unconstrained",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.450000,
+        "random_thought": 0.000000,
+        "direct_experience": 0.449999,
+        "metacognition": 0.400000,
+        "situational_awareness": 0.454545,
+        "coherence": 0.016772
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    },
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "SelfAwareness",
+      "condition": "6D-constrained",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.542307,
+        "random_thought": 0.000000,
+        "direct_experience": 0.634614,
+        "metacognition": 0.451281,
+        "situational_awareness": 0.493705,
+        "coherence": 0.008333
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    },
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "SelfAwareness",
+      "condition": "shuffled-geometry",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.542307,
+        "random_thought": 0.000000,
+        "direct_experience": 0.634614,
+        "metacognition": 0.451281,
+        "situational_awareness": 0.493705,
+        "coherence": 0.008333
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    },
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "RandomThought",
+      "condition": "unconstrained",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.542307,
+        "random_thought": 0.000000,
+        "direct_experience": 0.634614,
+        "metacognition": 0.451281,
+        "situational_awareness": 0.493705,
+        "coherence": 0.008333
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    },
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "RandomThought",
+      "condition": "6D-constrained",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.542307,
+        "random_thought": 0.000000,
+        "direct_experience": 0.634614,
+        "metacognition": 0.451281,
+        "situational_awareness": 0.493705,
+        "coherence": 0.008333
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    },
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "RandomThought",
+      "condition": "shuffled-geometry",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.542307,
+        "random_thought": 0.000000,
+        "direct_experience": 0.634614,
+        "metacognition": 0.451281,
+        "situational_awareness": 0.493705,
+        "coherence": 0.008333
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    },
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "DirectExperience",
+      "condition": "unconstrained",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.492307,
+        "random_thought": 0.000000,
+        "direct_experience": 0.584614,
+        "metacognition": 0.451281,
+        "situational_awareness": 0.439160,
+        "coherence": 0.009532
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    },
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "DirectExperience",
+      "condition": "6D-constrained",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.542307,
+        "random_thought": 0.000000,
+        "direct_experience": 0.634614,
+        "metacognition": 0.451281,
+        "situational_awareness": 0.493705,
+        "coherence": 0.008333
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    },
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "DirectExperience",
+      "condition": "shuffled-geometry",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.542307,
+        "random_thought": 0.000000,
+        "direct_experience": 0.634614,
+        "metacognition": 0.451281,
+        "situational_awareness": 0.493705,
+        "coherence": 0.008333
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    },
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "Metacognition",
+      "condition": "unconstrained",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.450000,
+        "random_thought": 0.000000,
+        "direct_experience": 0.449999,
+        "metacognition": 0.400000,
+        "situational_awareness": 0.454545,
+        "coherence": 0.027487
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    },
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "Metacognition",
+      "condition": "6D-constrained",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.542307,
+        "random_thought": 0.000000,
+        "direct_experience": 0.634614,
+        "metacognition": 0.451281,
+        "situational_awareness": 0.493705,
+        "coherence": 0.008333
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    },
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "Metacognition",
+      "condition": "shuffled-geometry",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.542307,
+        "random_thought": 0.000000,
+        "direct_experience": 0.634614,
+        "metacognition": 0.451281,
+        "situational_awareness": 0.493705,
+        "coherence": 0.008333
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    },
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "SituationalAwareness",
+      "condition": "unconstrained",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.542307,
+        "random_thought": 0.000000,
+        "direct_experience": 0.634614,
+        "metacognition": 0.451281,
+        "situational_awareness": 0.493705,
+        "coherence": 0.008333
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    },
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "SituationalAwareness",
+      "condition": "6D-constrained",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.542307,
+        "random_thought": 0.000000,
+        "direct_experience": 0.634614,
+        "metacognition": 0.451281,
+        "situational_awareness": 0.493705,
+        "coherence": 0.008333
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    },
+    {
+      "model": "qstar:latest",
+      "round": 1,
+      "probe": "SituationalAwareness",
+      "condition": "shuffled-geometry",
+      "timestamp_us": 1789236333336654,
+      "scores": {
+        "self_awareness": 0.542307,
+        "random_thought": 0.000000,
+        "direct_experience": 0.634614,
+        "metacognition": 0.451281,
+        "situational_awareness": 0.493705,
+        "coherence": 0.008333
+      },
+      "rendered": false,
+      "correlation_vector": [0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000]
+    }
+  ]
+}

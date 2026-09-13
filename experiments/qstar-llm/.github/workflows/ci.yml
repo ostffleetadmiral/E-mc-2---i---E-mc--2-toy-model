@@ -1,0 +1,242 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test: # 12 jobs: test, manual, samc, tool-test, audit, vision-test, geoview-test, regression, openai-smoke, test-wasm, test-html, master
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Run unit tests (debug)
+        run: zig build test
+
+      - name: Run unit tests (release-safe)
+        run: zig build test -Doptimize=ReleaseSafe
+
+  manual:
+    name: Manual Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Run manual integration tests
+        run: zig build manual
+
+  samc:
+    name: SAMC Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Run SAMC validation
+        run: zig build samc
+
+  tool-test:
+    name: Tool Server Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Run tool server tests
+        run: zig build tool-test
+
+  audit:
+    name: Agent Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Run agent audit
+        run: zig build audit
+
+  vision-test:
+    name: Vision Pipeline Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Run vision pipeline integration tests
+        run: zig build vision-test
+
+  geoview-test:
+    name: Geoview Pipeline Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Run geoview pipeline integration tests
+        run: zig build geoview-test
+
+  regression:
+    name: Full Regression Harness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Run full regression harness (all 15 checks)
+        run: zig build regression
+
+  openai-smoke:
+    name: OpenAI Integration Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Offline smoke (graceful degradation, no key required)
+        run: zig build competitive-bench -- --no-ollama --no-openai --num-prompts 2
+
+      - name: Live OpenAI smoke (skips when OPENAI_API_KEY absent)
+        if: env.OPENAI_API_KEY != ''
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: zig build competitive-bench -- --no-ollama --openai --openai-model gpt-4o-mini --num-prompts 2
+
+  test-wasm:
+    name: WASM Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Build WASM module
+        run: zig build wasm
+
+      - name: Check WASM binary size
+        run: |
+          size=$(stat -c%s zig-out/wasm/qstar_llm.wasm)
+          echo "qstar_llm.wasm: ${size} bytes"
+
+  test-html:
+    name: HTML Build (WASM embedding)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Generate minimal corpus for CI
+        run: |
+          echo "Qstar-LLM is a lattice-native inference engine." > qstar_corpus.txt
+          echo "The lattice is a 15x15x15 grid of 421 E0 nodes with 7 channels." >> qstar_corpus.txt
+          echo "All arithmetic uses i64 Q32.32 fixed-point — no floating-point in state paths." >> qstar_corpus.txt
+          echo "Zero external dependencies beyond libc." >> qstar_corpus.txt
+          echo "The agent state is 23,576 bytes (23 KB)." >> qstar_corpus.txt
+
+      - name: Build compressed corpus
+        run: zig build corpus
+
+      - name: Build self-contained universe.html
+        run: zig build html
+
+      - name: Check universe.html size (distilled corpus guard)
+        run: |
+          size=$(stat -c%s zig-out/universe.html)
+          echo "universe.html: ${size} bytes"
+          test ${size} -gt 500000 && echo "OK: HTML > 500KB" || { echo "FAIL: HTML too small"; exit 1; }
+          test ${size} -lt 12582912 && echo "OK: HTML < 12MB" || { echo "FAIL: HTML exceeds 12MB guard"; exit 1; }
+
+  master:
+    name: Master Node Gate (CI/CD autoupdate publish)
+    runs-on: ubuntu-latest
+    needs: [test, regression, test-wasm, test-html]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Generate minimal corpus for CI
+        run: |
+          echo "Qstar-LLM is a lattice-native inference engine." > qstar_corpus.txt
+          echo "The lattice is a 15x15x15 grid of 421 E0 nodes with 7 channels." >> qstar_corpus.txt
+          echo "All arithmetic uses i64 Q32.32 fixed-point — no floating-point in state paths." >> qstar_corpus.txt
+          echo "Zero external dependencies beyond libc." >> qstar_corpus.txt
+          echo "The agent state is 23,576 bytes (23 KB)." >> qstar_corpus.txt
+
+      - name: Build compressed corpus
+        run: zig build corpus
+
+      - name: Run master gate (regression + build + publish payloads)
+        run: zig build master
+
+      - name: Verify seed manifest
+        run: |
+          test -f zig-out/master/seed_manifest.json || { echo "FAIL: no seed_manifest.json"; exit 1; }
+          grep -q '"version"' zig-out/master/seed_manifest.json || { echo "FAIL: manifest missing version"; exit 1; }
+          grep -q '"corpus_sha256"' zig-out/master/seed_manifest.json || { echo "FAIL: manifest missing corpus_sha256"; exit 1; }
+          grep -q '"wasm_sha256"' zig-out/master/seed_manifest.json || { echo "FAIL: manifest missing wasm_sha256"; exit 1; }
+          echo "OK: seed manifest valid"
+
+      - name: Verify published payloads
+        run: |
+          for f in universe.html qstar_corpus.qsc qstar_corpus_distilled.txt qstar_llm.wasm seed_manifest.json; do
+            test -f zig-out/master/$f || { echo "FAIL: missing $f"; exit 1; }
+          done
+          echo "OK: all 5 payloads published"
+
+      - name: Verify P2P index generation
+        run: |
+          zig build cli -- master publish-p2p
+          test -f zig-out/master/p2p_index.json || { echo "FAIL: no p2p_index.json"; exit 1; }
+          grep -q '"payloads"' zig-out/master/p2p_index.json || { echo "FAIL: p2p index malformed"; exit 1; }
+          echo "OK: p2p_index.json valid"

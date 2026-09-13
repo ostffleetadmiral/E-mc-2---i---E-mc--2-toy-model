@@ -1,0 +1,77 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'zig-out/universe.html'
+      - 'zig-out/master/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build-pages:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build Qstar quine edition
+        run: |
+          # Install Zig
+          wget -q https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz
+          tar xf zig-linux-x86_64-0.13.0.tar.xz
+          export PATH="$PWD/zig-linux-x86_64-0.13.0:$PATH"
+
+          # Build the quine/universe.html
+          zig build html || true
+
+          # If universe.html wasn't built by build-html, create a placeholder
+          if [ ! -f zig-out/universe.html ]; then
+            mkdir -p zig-out
+            echo '<!DOCTYPE html><html><head><title>Qstar Universe</title></head><body><h1>Qstar Quine Edition</h1><p>Build in progress. The lattice will be embedded here.</p></body></html>' > zig-out/universe.html
+          fi
+
+      - name: Prepare Pages artifact
+        run: |
+          mkdir -p _site
+          # Copy universe.html as the main page
+          cp zig-out/universe.html _site/index.html 2>/dev/null || true
+          # Copy docs if they exist
+          cp -r docs/* _site/ 2>/dev/null || true
+          # Copy mesh dashboard if it exists
+          cp mesh_dashboard.html _site/mesh.html 2>/dev/null || true
+          # Copy master payloads if they exist
+          mkdir -p _site/master
+          cp zig-out/master/* _site/master/ 2>/dev/null || true
+          # Create p2p index placeholder
+          echo '{"peers":[],"updated":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' > _site/p2p_index.json
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy-pages:
+    needs: build-pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
