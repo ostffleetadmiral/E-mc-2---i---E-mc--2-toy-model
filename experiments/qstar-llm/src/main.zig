@@ -596,15 +596,15 @@ fn runTuringTestCmd(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         std.debug.print("Passed: {d}/{d} ({d:.1}%)\n", .{
             summary.passed_count,
             summary.total_prompts,
-            summary.pass_rate * 100.0,
+            q128.toF64(summary.pass_rate) * 100.0,
         });
         std.debug.print("Mean scores:\n", .{});
-        std.debug.print("  Coherence:        {d:.3}\n", .{summary.mean_scores.coherence});
-        std.debug.print("  Relevance:        {d:.3}\n", .{summary.mean_scores.relevance});
-        std.debug.print("  Naturalness:      {d:.3}\n", .{summary.mean_scores.naturalness});
-        std.debug.print("  Informativeness:  {d:.3}\n", .{summary.mean_scores.informativeness});
-        std.debug.print("  Human-likeness:   {d:.3}\n", .{summary.mean_scores.human_likeness});
-        std.debug.print("  Overall:          {d:.3}\n", .{summary.mean_scores.overall});
+        std.debug.print("  Coherence:        {d:.3}\n", .{q128.toF64(summary.mean_scores.coherence)});
+        std.debug.print("  Relevance:        {d:.3}\n", .{q128.toF64(summary.mean_scores.relevance)});
+        std.debug.print("  Naturalness:      {d:.3}\n", .{q128.toF64(summary.mean_scores.naturalness)});
+        std.debug.print("  Informativeness:  {d:.3}\n", .{q128.toF64(summary.mean_scores.informativeness)});
+        std.debug.print("  Human-likeness:   {d:.3}\n", .{q128.toF64(summary.mean_scores.human_likeness)});
+        std.debug.print("  Overall:          {d:.3}\n", .{q128.toF64(summary.mean_scores.overall)});
 
         // Print category breakdown
         std.debug.print("\nCategory breakdown:\n", .{});
@@ -616,7 +616,7 @@ fn runTuringTestCmd(allocator: std.mem.Allocator, args: [][:0]u8) !void {
                 cr.passed,
                 cr.total,
                 if (cr.total > 0) @as(f64, @floatFromInt(cr.passed)) / @as(f64, @floatFromInt(cr.total)) * 100.0 else 0.0,
-                cr.mean_score,
+                q128.toF64(cr.mean_score),
             });
         }
 
@@ -644,15 +644,15 @@ fn runTuringTestCmd(allocator: std.mem.Allocator, args: [][:0]u8) !void {
                 idx + 1,
                 s.passed_count,
                 s.total_prompts,
-                s.pass_rate * 100.0,
-                s.mean_scores.overall,
+                q128.toF64(s.pass_rate) * 100.0,
+                q128.toF64(s.mean_scores.overall),
             });
         }
 
         // Show improvement
         if (summaries.len >= 2) {
-            const first = summaries[0].mean_scores.overall;
-            const last = summaries[summaries.len - 1].mean_scores.overall;
+            const first = q128.toF64(summaries[0].mean_scores.overall);
+            const last = q128.toF64(summaries[summaries.len - 1].mean_scores.overall);
             const delta = last - first;
             std.debug.print("\nImprovement: {d:.3} -> {d:.3} ({s}{d:.3})\n", .{
                 first, last, if (delta >= 0) "+" else "", delta,

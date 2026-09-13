@@ -22,7 +22,7 @@ pub const TuringTestConfig = struct {
     judge_model: []const u8 = "qwen2.5:3b",
     ollama_host: []const u8 = "127.0.0.1",
     ollama_port: u16 = 11434,
-    pass_threshold: f64 = 0.7,
+    pass_threshold: q128.Fp = q128.fromRatio(7, 10),
     save_results: bool = true,
     results_path: []const u8 = "turing_results.json",
     verbose: bool = false,
@@ -45,25 +45,39 @@ fn parseCategory(name: []const u8) ?PromptCategory {
 }
 
 pub const JudgeScores = struct {
-    coherence: f64 = 0.0,
-    relevance: f64 = 0.0,
-    naturalness: f64 = 0.0,
-    informativeness: f64 = 0.0,
-    human_likeness: f64 = 0.0,
-    factual_accuracy: f64 = 0.0,
-    originality: f64 = 0.0,
-    personalization: f64 = 0.0,
-    overall: f64 = 0.0,
+    coherence: q128.Fp = 0,
+    relevance: q128.Fp = 0,
+    naturalness: q128.Fp = 0,
+    informativeness: q128.Fp = 0,
+    human_likeness: q128.Fp = 0,
+    factual_accuracy: q128.Fp = 0,
+    originality: q128.Fp = 0,
+    personalization: q128.Fp = 0,
+    overall: q128.Fp = 0,
 
-    pub fn computeOverall(self: JudgeScores) f64 {
-        return self.coherence * 0.15 +
-            self.relevance * 0.15 +
-            self.naturalness * 0.10 +
-            self.informativeness * 0.15 +
-            self.human_likeness * 0.10 +
-            self.factual_accuracy * 0.15 +
-            self.originality * 0.10 +
-            self.personalization * 0.10;
+    pub fn computeOverall(self: JudgeScores) q128.Fp {
+        return q128.add(
+            q128.add(
+                q128.add(
+                    q128.mul(self.coherence, q128.fromRatio(15, 100)),
+                    q128.mul(self.relevance, q128.fromRatio(15, 100)),
+                ),
+                q128.add(
+                    q128.mul(self.naturalness, q128.fromRatio(10, 100)),
+                    q128.mul(self.informativeness, q128.fromRatio(15, 100)),
+                ),
+            ),
+            q128.add(
+                q128.add(
+                    q128.mul(self.human_likeness, q128.fromRatio(10, 100)),
+                    q128.mul(self.factual_accuracy, q128.fromRatio(15, 100)),
+                ),
+                q128.add(
+                    q128.mul(self.originality, q128.fromRatio(10, 100)),
+                    q128.mul(self.personalization, q128.fromRatio(10, 100)),
+                ),
+            ),
+        );
     }
 };
 
@@ -79,7 +93,7 @@ pub const TuringTestResult = struct {
 pub const TuringTestSummary = struct {
     total_prompts: usize,
     passed_count: usize,
-    pass_rate: f64,
+    pass_rate: q128.Fp,
     mean_scores: JudgeScores,
     category_breakdown: std.StringHashMap(CategoryResult),
     results: std.ArrayList(TuringTestResult),
@@ -104,7 +118,7 @@ pub const TuringTestSummary = struct {
 pub const CategoryResult = struct {
     total: usize,
     passed: usize,
-    mean_score: f64,
+    mean_score: q128.Fp,
     _name_buf: ?[]u8 = null,
 
     pub fn deinit(self: *CategoryResult) void {
@@ -245,14 +259,14 @@ fn buildJudgePrompt(allocator: std.mem.Allocator, test_prompt: []const u8, qstar
 fn parseJudgeScores(text: []const u8) JudgeScores {
     var scores = JudgeScores{};
 
-    scores.coherence = parseScore(text, "Coherence:") orelse 0.5;
-    scores.relevance = parseScore(text, "Relevance:") orelse 0.5;
-    scores.naturalness = parseScore(text, "Naturalness:") orelse 0.5;
-    scores.informativeness = parseScore(text, "Informativeness:") orelse 0.5;
-    scores.human_likeness = parseScore(text, "Human-likeness:") orelse 0.5;
-    scores.factual_accuracy = parseScore(text, "Factual-accuracy:") orelse 0.5;
-    scores.originality = parseScore(text, "Originality:") orelse 0.5;
-    scores.personalization = parseScore(text, "Personalization:") orelse 0.5;
+    scores.coherence = q128.fromF64(parseScore(text, "Coherence:") orelse 0.5);
+    scores.relevance = q128.fromF64(parseScore(text, "Relevance:") orelse 0.5);
+    scores.naturalness = q128.fromF64(parseScore(text, "Naturalness:") orelse 0.5);
+    scores.informativeness = q128.fromF64(parseScore(text, "Informativeness:") orelse 0.5);
+    scores.human_likeness = q128.fromF64(parseScore(text, "Human-likeness:") orelse 0.5);
+    scores.factual_accuracy = q128.fromF64(parseScore(text, "Factual-accuracy:") orelse 0.5);
+    scores.originality = q128.fromF64(parseScore(text, "Originality:") orelse 0.5);
+    scores.personalization = q128.fromF64(parseScore(text, "Personalization:") orelse 0.5);
     scores.overall = scores.computeOverall();
 
     return scores;
@@ -374,13 +388,22 @@ pub fn runTuringTestRound(
             // Use self-evaluation directly (no Ollama dependency)
             const self_eval = agent.evaluateResponse(tp.text, response);
             judge_scores = .{
-                .coherence = q128.toF64(self_eval.coherence()),
-                .relevance = q128.toF64(self_eval.relevance()),
-                .naturalness = q128.toF64(self_eval.naturalness()),
-                .informativeness = q128.toF64(self_eval.specificity()),
+                .coherence = self_eval.coherence(),
+                .relevance = self_eval.relevance(),
+                .naturalness = self_eval.naturalness(),
+                .informativeness = self_eval.specificity(),
                 .human_likeness = blk: {
-                    const mem_consistency: f64 = if (agent_mod.detectCallbackPhrases(response)) 1.0 else if (agent_mod.detectContextualReferences(response)) 0.5 else 0.0;
-                    break :blk q128.toF64(self_eval.coherence()) * 0.30 + q128.toF64(self_eval.naturalness()) * 0.30 + q128.toF64(self_eval.selfAwareness()) * 0.25 + mem_consistency * 0.15;
+                    const mem_consistency: q128.Fp = if (agent_mod.detectCallbackPhrases(response)) q128.ONE else if (agent_mod.detectContextualReferences(response)) q128.fromRatio(1, 2) else 0;
+                    break :blk q128.add(
+                        q128.add(
+                            q128.mul(self_eval.coherence(), q128.fromRatio(30, 100)),
+                            q128.mul(self_eval.naturalness(), q128.fromRatio(30, 100)),
+                        ),
+                        q128.add(
+                            q128.mul(self_eval.selfAwareness(), q128.fromRatio(25, 100)),
+                            q128.mul(mem_consistency, q128.fromRatio(15, 100)),
+                        ),
+                    );
                 },
             };
             judge_scores.overall = judge_scores.computeOverall();
@@ -402,13 +425,22 @@ pub fn runTuringTestRound(
                     // Ollama unavailable — use self-evaluation as fallback
                     const self_eval = agent.evaluateResponse(tp.text, response);
                     judge_scores = .{
-                        .coherence = q128.toF64(self_eval.coherence()),
-                        .relevance = q128.toF64(self_eval.relevance()),
-                        .naturalness = q128.toF64(self_eval.naturalness()),
-                        .informativeness = q128.toF64(self_eval.specificity()),
+                        .coherence = self_eval.coherence(),
+                        .relevance = self_eval.relevance(),
+                        .naturalness = self_eval.naturalness(),
+                        .informativeness = self_eval.specificity(),
                         .human_likeness = blk: {
-                            const mem_consistency: f64 = if (agent_mod.detectCallbackPhrases(response)) 1.0 else if (agent_mod.detectContextualReferences(response)) 0.5 else 0.0;
-                            break :blk q128.toF64(self_eval.coherence()) * 0.30 + q128.toF64(self_eval.naturalness()) * 0.30 + q128.toF64(self_eval.selfAwareness()) * 0.25 + mem_consistency * 0.15;
+                            const mem_consistency: q128.Fp = if (agent_mod.detectCallbackPhrases(response)) q128.ONE else if (agent_mod.detectContextualReferences(response)) q128.fromRatio(1, 2) else 0;
+                            break :blk q128.add(
+                                q128.add(
+                                    q128.mul(self_eval.coherence(), q128.fromRatio(30, 100)),
+                                    q128.mul(self_eval.naturalness(), q128.fromRatio(30, 100)),
+                                ),
+                                q128.add(
+                                    q128.mul(self_eval.selfAwareness(), q128.fromRatio(25, 100)),
+                                    q128.mul(mem_consistency, q128.fromRatio(15, 100)),
+                                ),
+                            );
                         },
                     };
                     judge_scores.overall = judge_scores.computeOverall();
@@ -436,16 +468,16 @@ pub fn runTuringTestRound(
         {
             const eval_result = agent_mod.EvaluationResult{
                 .scores = .{
-                    q128.fromF64(judge_scores.relevance), // DIM_RELEVANCE
-                    q128.fromF64(judge_scores.coherence), // DIM_COHERENCE
-                    q128.fromF64(judge_scores.informativeness), // DIM_SPECIFICITY
-                    q128.fromF64(judge_scores.naturalness), // DIM_NATURALNESS
-                    q128.fromF64(judge_scores.human_likeness), // DIM_SELF_AWARENESS
+                    judge_scores.relevance, // DIM_RELEVANCE
+                    judge_scores.coherence, // DIM_COHERENCE
+                    judge_scores.informativeness, // DIM_SPECIFICITY
+                    judge_scores.naturalness, // DIM_NATURALNESS
+                    judge_scores.human_likeness, // DIM_SELF_AWARENESS
                     q128.fromRatio(1, 2), // DIM_DIRECT_EXPERIENCE
                     q128.fromRatio(1, 2), // DIM_METACOGNITION
                     q128.fromRatio(1, 2), // DIM_SITUATIONAL_AWARENESS
                 },
-                .overall = q128.fromF64(judge_scores.overall),
+                .overall = judge_scores.overall,
                 .passed = passed,
             };
             agent.metacognition.recordEvaluation(eval_result) catch {};
@@ -455,16 +487,16 @@ pub fn runTuringTestRound(
         if (config.use_memory) {
             const eval_for_memory = agent_mod.EvaluationResult{
                 .scores = .{
-                    q128.fromF64(judge_scores.relevance),
-                    q128.fromF64(judge_scores.coherence),
-                    q128.fromF64(judge_scores.informativeness),
-                    q128.fromF64(judge_scores.naturalness),
-                    q128.fromF64(judge_scores.human_likeness),
+                    judge_scores.relevance,
+                    judge_scores.coherence,
+                    judge_scores.informativeness,
+                    judge_scores.naturalness,
+                    judge_scores.human_likeness,
                     q128.fromRatio(1, 2), // DIM_DIRECT_EXPERIENCE
                     q128.fromRatio(1, 2), // DIM_METACOGNITION
                     q128.fromRatio(1, 2), // DIM_SITUATIONAL_AWARENESS
                 },
-                .overall = q128.fromF64(judge_scores.overall),
+                .overall = judge_scores.overall,
                 .passed = passed,
             };
             agent.addToHistoryWithMeta(tp.text, response, cat_name, eval_for_memory) catch {};
@@ -478,54 +510,56 @@ pub fn runTuringTestRound(
         // Update category breakdown
         const cat_entry = try category_breakdown.getOrPut(cat_name);
         if (!cat_entry.found_existing) {
-            cat_entry.value_ptr.* = .{ .total = 0, .passed = 0, .mean_score = 0.0 };
+            cat_entry.value_ptr.* = .{ .total = 0, .passed = 0, .mean_score = 0 };
         }
         cat_entry.value_ptr.total += 1;
         if (passed) cat_entry.value_ptr.passed += 1;
-        // Running mean
-        const n: f64 = @floatFromInt(cat_entry.value_ptr.total);
-        cat_entry.value_ptr.mean_score = cat_entry.value_ptr.mean_score * ((n - 1) / n) + judge_scores.overall * (1.0 / n);
+        // Running mean (Q128.128)
+        const n_q = q128.fromI256(@as(i256, @intCast(cat_entry.value_ptr.total)));
+        const old_part = q128.mul(cat_entry.value_ptr.mean_score, q128.div(q128.sub(n_q, q128.ONE), n_q));
+        const new_part = q128.mul(judge_scores.overall, q128.div(q128.ONE, n_q));
+        cat_entry.value_ptr.mean_score = q128.add(old_part, new_part);
     }
 
     // Compute summary statistics
     var passed_count: usize = 0;
-    var sum_coherence: f64 = 0;
-    var sum_relevance: f64 = 0;
-    var sum_naturalness: f64 = 0;
-    var sum_informativeness: f64 = 0;
-    var sum_human_likeness: f64 = 0;
-    var sum_factual_accuracy: f64 = 0;
-    var sum_originality: f64 = 0;
-    var sum_personalization: f64 = 0;
-    var sum_overall: f64 = 0;
+    var sum_coherence: q128.Fp = 0;
+    var sum_relevance: q128.Fp = 0;
+    var sum_naturalness: q128.Fp = 0;
+    var sum_informativeness: q128.Fp = 0;
+    var sum_human_likeness: q128.Fp = 0;
+    var sum_factual_accuracy: q128.Fp = 0;
+    var sum_originality: q128.Fp = 0;
+    var sum_personalization: q128.Fp = 0;
+    var sum_overall: q128.Fp = 0;
 
     for (results.items) |r| {
         if (r.passed) passed_count += 1;
-        sum_coherence += r.judge_scores.coherence;
-        sum_relevance += r.judge_scores.relevance;
-        sum_naturalness += r.judge_scores.naturalness;
-        sum_informativeness += r.judge_scores.informativeness;
-        sum_human_likeness += r.judge_scores.human_likeness;
-        sum_factual_accuracy += r.judge_scores.factual_accuracy;
-        sum_originality += r.judge_scores.originality;
-        sum_personalization += r.judge_scores.personalization;
-        sum_overall += r.judge_scores.overall;
+        sum_coherence = q128.add(sum_coherence, r.judge_scores.coherence);
+        sum_relevance = q128.add(sum_relevance, r.judge_scores.relevance);
+        sum_naturalness = q128.add(sum_naturalness, r.judge_scores.naturalness);
+        sum_informativeness = q128.add(sum_informativeness, r.judge_scores.informativeness);
+        sum_human_likeness = q128.add(sum_human_likeness, r.judge_scores.human_likeness);
+        sum_factual_accuracy = q128.add(sum_factual_accuracy, r.judge_scores.factual_accuracy);
+        sum_originality = q128.add(sum_originality, r.judge_scores.originality);
+        sum_personalization = q128.add(sum_personalization, r.judge_scores.personalization);
+        sum_overall = q128.add(sum_overall, r.judge_scores.overall);
     }
 
-    const n: f64 = @floatFromInt(results.items.len);
+    const n_q = q128.fromI256(@as(i256, @intCast(results.items.len)));
     const mean_scores = JudgeScores{
-        .coherence = sum_coherence / n,
-        .relevance = sum_relevance / n,
-        .naturalness = sum_naturalness / n,
-        .informativeness = sum_informativeness / n,
-        .human_likeness = sum_human_likeness / n,
-        .factual_accuracy = sum_factual_accuracy / n,
-        .originality = sum_originality / n,
-        .personalization = sum_personalization / n,
-        .overall = sum_overall / n,
+        .coherence = q128.div(sum_coherence, n_q),
+        .relevance = q128.div(sum_relevance, n_q),
+        .naturalness = q128.div(sum_naturalness, n_q),
+        .informativeness = q128.div(sum_informativeness, n_q),
+        .human_likeness = q128.div(sum_human_likeness, n_q),
+        .factual_accuracy = q128.div(sum_factual_accuracy, n_q),
+        .originality = q128.div(sum_originality, n_q),
+        .personalization = q128.div(sum_personalization, n_q),
+        .overall = q128.div(sum_overall, n_q),
     };
 
-    const pass_rate = @as(f64, @floatFromInt(passed_count)) / n;
+    const pass_rate = q128.fromRatio(@as(i256, @intCast(passed_count)), n_q);
 
     // Save results to JSON if configured
     if (config.save_results) {
@@ -573,8 +607,8 @@ pub fn runTuringTestBatch(
             round + 1,
             summary.passed_count,
             summary.total_prompts,
-            summary.pass_rate * 100.0,
-            summary.mean_scores.overall,
+            q128.toF64(summary.pass_rate) * 100.0,
+            q128.toF64(summary.mean_scores.overall),
         });
 
         // Print category breakdown
@@ -586,7 +620,7 @@ pub fn runTuringTestBatch(
                 cr.passed,
                 cr.total,
                 if (cr.total > 0) @as(f64, @floatFromInt(cr.passed)) / @as(f64, @floatFromInt(cr.total)) * 100.0 else 0.0,
-                cr.mean_score,
+                q128.toF64(cr.mean_score),
             });
         }
 
@@ -626,7 +660,7 @@ fn saveResultsToJson(
     path: []const u8,
     results: []const TuringTestResult,
     mean_scores: JudgeScores,
-    pass_rate: f64,
+    pass_rate: q128.Fp,
     round: usize,
     allocator: std.mem.Allocator,
 ) !void {
@@ -634,13 +668,13 @@ fn saveResultsToJson(
     defer buf.deinit();
 
     const writer = buf.writer();
-    try writer.print("{{\n  \"round\": {d},\n  \"pass_rate\": {d:.4},\n  \"mean_scores\": {{\n", .{ round, pass_rate });
-    try writer.print("    \"coherence\": {d:.4},\n", .{mean_scores.coherence});
-    try writer.print("    \"relevance\": {d:.4},\n", .{mean_scores.relevance});
-    try writer.print("    \"naturalness\": {d:.4},\n", .{mean_scores.naturalness});
-    try writer.print("    \"informativeness\": {d:.4},\n", .{mean_scores.informativeness});
-    try writer.print("    \"human_likeness\": {d:.4},\n", .{mean_scores.human_likeness});
-    try writer.print("    \"overall\": {d:.4}\n  }},\n", .{mean_scores.overall});
+    try writer.print("{{\n  \"round\": {d},\n  \"pass_rate\": {d:.4},\n  \"mean_scores\": {{\n", .{ round, q128.toF64(pass_rate) });
+    try writer.print("    \"coherence\": {d:.4},\n", .{q128.toF64(mean_scores.coherence)});
+    try writer.print("    \"relevance\": {d:.4},\n", .{q128.toF64(mean_scores.relevance)});
+    try writer.print("    \"naturalness\": {d:.4},\n", .{q128.toF64(mean_scores.naturalness)});
+    try writer.print("    \"informativeness\": {d:.4},\n", .{q128.toF64(mean_scores.informativeness)});
+    try writer.print("    \"human_likeness\": {d:.4},\n", .{q128.toF64(mean_scores.human_likeness)});
+    try writer.print("    \"overall\": {d:.4}\n  }},\n", .{q128.toF64(mean_scores.overall)});
     try writer.print("  \"results\": [\n", .{});
 
     for (results, 0..) |r, i| {
@@ -650,12 +684,12 @@ fn saveResultsToJson(
         try writer.print("      \"passed\": {s},\n", .{if (r.passed) "true" else "false"});
         try writer.print("      \"response_time_ms\": {d},\n", .{r.response_time_ms});
         try writer.print("      \"scores\": {{\n", .{});
-        try writer.print("        \"coherence\": {d:.4},\n", .{r.judge_scores.coherence});
-        try writer.print("        \"relevance\": {d:.4},\n", .{r.judge_scores.relevance});
-        try writer.print("        \"naturalness\": {d:.4},\n", .{r.judge_scores.naturalness});
-        try writer.print("        \"informativeness\": {d:.4},\n", .{r.judge_scores.informativeness});
-        try writer.print("        \"human_likeness\": {d:.4},\n", .{r.judge_scores.human_likeness});
-        try writer.print("        \"overall\": {d:.4}\n", .{r.judge_scores.overall});
+        try writer.print("        \"coherence\": {d:.4},\n", .{q128.toF64(r.judge_scores.coherence)});
+        try writer.print("        \"relevance\": {d:.4},\n", .{q128.toF64(r.judge_scores.relevance)});
+        try writer.print("        \"naturalness\": {d:.4},\n", .{q128.toF64(r.judge_scores.naturalness)});
+        try writer.print("        \"informativeness\": {d:.4},\n", .{q128.toF64(r.judge_scores.informativeness)});
+        try writer.print("        \"human_likeness\": {d:.4},\n", .{q128.toF64(r.judge_scores.human_likeness)});
+        try writer.print("        \"overall\": {d:.4}\n", .{q128.toF64(r.judge_scores.overall)});
         try writer.print("      }}\n", .{});
         try writer.print("    }}{s}\n", .{if (i < results.len - 1) "," else ""});
     }
@@ -673,19 +707,19 @@ fn saveResultsToJson(
 
 test "turing_test: JudgeScores computeOverall is weighted average" {
     const scores = JudgeScores{
-        .coherence = 0.8,
-        .relevance = 0.9,
-        .naturalness = 0.7,
-        .informativeness = 0.6,
-        .human_likeness = 0.5,
-        .factual_accuracy = 0.8,
-        .originality = 0.7,
-        .personalization = 0.6,
+        .coherence = q128.fromF64(0.8),
+        .relevance = q128.fromF64(0.9),
+        .naturalness = q128.fromF64(0.7),
+        .informativeness = q128.fromF64(0.6),
+        .human_likeness = q128.fromF64(0.5),
+        .factual_accuracy = q128.fromF64(0.8),
+        .originality = q128.fromF64(0.7),
+        .personalization = q128.fromF64(0.6),
     };
     const overall = scores.computeOverall();
     // 0.8*0.15 + 0.9*0.15 + 0.7*0.10 + 0.6*0.15 + 0.5*0.10 + 0.8*0.15 + 0.7*0.10 + 0.6*0.10
     // = 0.12 + 0.135 + 0.07 + 0.09 + 0.05 + 0.12 + 0.07 + 0.06 = 0.715
-    try std.testing.expectApproxEqAbs(@as(f64, 0.715), overall, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.715), q128.toF64(overall), 0.01);
 }
 
 test "turing_test: parseJudgeScores extracts values from text" {
@@ -700,22 +734,22 @@ test "turing_test: parseJudgeScores extracts values from text" {
         \\Personalization: 0.60
     ;
     const scores = parseJudgeScores(judge_text);
-    try std.testing.expectApproxEqAbs(@as(f64, 0.85), scores.coherence, 0.001);
-    try std.testing.expectApproxEqAbs(@as(f64, 0.90), scores.relevance, 0.001);
-    try std.testing.expectApproxEqAbs(@as(f64, 0.75), scores.naturalness, 0.001);
-    try std.testing.expectApproxEqAbs(@as(f64, 0.80), scores.informativeness, 0.001);
-    try std.testing.expectApproxEqAbs(@as(f64, 0.65), scores.human_likeness, 0.001);
-    try std.testing.expectApproxEqAbs(@as(f64, 0.90), scores.factual_accuracy, 0.001);
-    try std.testing.expectApproxEqAbs(@as(f64, 0.70), scores.originality, 0.001);
-    try std.testing.expectApproxEqAbs(@as(f64, 0.60), scores.personalization, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.85), q128.toF64(scores.coherence), 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.90), q128.toF64(scores.relevance), 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.75), q128.toF64(scores.naturalness), 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.80), q128.toF64(scores.informativeness), 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.65), q128.toF64(scores.human_likeness), 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.90), q128.toF64(scores.factual_accuracy), 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.70), q128.toF64(scores.originality), 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.60), q128.toF64(scores.personalization), 0.001);
 }
 
 test "turing_test: parseJudgeScores handles missing values with defaults" {
     const judge_text = "Some random text without scores.";
     const scores = parseJudgeScores(judge_text);
     // All should default to 0.5
-    try std.testing.expectApproxEqAbs(@as(f64, 0.5), scores.coherence, 0.001);
-    try std.testing.expectApproxEqAbs(@as(f64, 0.5), scores.relevance, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.5), q128.toF64(scores.coherence), 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.5), q128.toF64(scores.relevance), 0.001);
 }
 
 test "turing_test: TEST_PROMPTS covers all 7 categories" {
