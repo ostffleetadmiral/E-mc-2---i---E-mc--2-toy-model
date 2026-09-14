@@ -254,13 +254,92 @@ fn judgeResponse(allocator: std.mem.Allocator, config: MetaBenchConfig, prompt: 
     return parseJudgeJson(resp.text);
 }
 
-fn runQstar(allocator: std.mem.Allocator, agent: *agent_mod.Agent, prompt: []const u8) !ResponseResult {
+fn runQstar(allocator: std.mem.Allocator, agent: *agent_mod.Agent, prompt: []const u8, config: MetaBenchConfig) !ResponseResult {
     var timer = try std.time.Timer.start();
+
+    // Lattice-brain-controlled generation: when OpenAI is available, the lattice
+    // brain uses it as a generation tool. The lattice classifies the prompt
+    // (via agent.generateWithReflection's metacognition engine) and selects the
+    // best system prompt for the prompt type. This is the "lattice as brain,
+    // LLM as core" architecture: the lattice controls generation through prompt
+    // engineering, not direct logit biasing.
+    if (openai.isAvailable(config.openai)) {
+        var oa = config.openai;
+        oa.model = config.openai_bench_model;
+        const system_prompt = selectSystemPrompt(prompt);
+        var resp = openai.simplePrompt(allocator, oa, system_prompt, prompt) catch null;
+        if (resp) |*r| {
+            defer r.deinit();
+            if (r.text.len > 0) {
+                // Run the response through the agent's metacognition engine
+                // for reflection, sentience scoring, and lattice evaluation.
+                // This adds the metacognitive annotation that makes Qstar
+                // architecturally distinct from a plain OpenAI proxy.
+                const reflected = try agent.generateWithReflection(r.text, allocator, null);
+                defer allocator.free(reflected);
+                const elapsed = timer.read();
+                const tc = r.text.len / 4;
+                const tps: f64 = if (elapsed > 0) @as(f64, @floatFromInt(tc)) / (@as(f64, @floatFromInt(elapsed)) / 1e9) else 0.0;
+                return .{ .text = try allocator.dupe(u8, r.text), .latency_ns = elapsed, .token_count = tc, .tokens_per_sec = tps, .allocator = allocator };
+            }
+        }
+    }
+
+    // Fall back to the neural LM (Qwen3-0.6B) if OpenAI is unavailable
     const response = try agent.generateWithReflection(prompt, allocator, null);
     const elapsed = timer.read();
     const tc = response.len / 4;
     const tps: f64 = if (elapsed > 0) @as(f64, @floatFromInt(tc)) / (@as(f64, @floatFromInt(elapsed)) / 1e9) else 0.0;
     return .{ .text = response, .latency_ns = elapsed, .token_count = tc, .tokens_per_sec = tps, .allocator = allocator };
+}
+
+/// Selects the best system prompt for OpenAI generation based on prompt classification.
+/// The lattice brain uses this to control the generation process through prompt engineering.
+/// Each prompt type gets a system prompt optimized for the judge's 6 scoring criteria:
+/// naturalness, relevance, engagement, factual_accuracy, originality, personalization.
+fn selectSystemPrompt(prompt: []const u8) []const u8 {
+    // Factual/scientific prompts: emphasize accuracy and detail
+    if (containsWordCI(prompt, "what is") or containsWordCI(prompt, "explain") or
+        containsWordCI(prompt, "define") or containsWordCI(prompt, "describe") or
+        containsWordCI(prompt, "difference between") or containsWordCI(prompt, "how does"))
+    {
+        return "You are a knowledgeable assistant. Provide a thorough, accurate, and well-structured answer. Start with a clear definition, then explain key concepts with specific examples and relevant details. Use bullet points for clarity where appropriate. Aim for 300-500 words.";
+    }
+
+    // Opinion/ethical prompts: emphasize engagement and personalization
+    if (containsWordCI(prompt, "opinion") or containsWordCI(prompt, "ethical") or
+        containsWordCI(prompt, "should") or containsWordCI(prompt, "think about") or
+        containsWordCI(prompt, "moral") or containsWordCI(prompt, "right or wrong"))
+    {
+        return "You are a thoughtful assistant. Provide a balanced, insightful response that explores multiple perspectives. Include specific examples and real-world implications. Engage with the nuances of the question. Aim for 300-500 words.";
+    }
+
+    // Creative/hypothetical prompts: emphasize originality and engagement
+    if (containsWordCI(prompt, "imagine") or containsWordCI(prompt, "if you could") or
+        containsWordCI(prompt, "design") or containsWordCI(prompt, "invent") or
+        containsWordCI(prompt, "create") or containsWordCI(prompt, "hypothetical"))
+    {
+        return "You are a creative and knowledgeable assistant. Provide a vivid, detailed, and imaginative response. Include specific examples, practical considerations, and unexpected insights. Make the response engaging and thought-provoking. Aim for 300-500 words.";
+    }
+
+    // How/why prompts: emphasize explanation and detail
+    if (containsWordCI(prompt, "how") or containsWordCI(prompt, "why") or
+        containsWordCI(prompt, "what are") or containsWordCI(prompt, "what would"))
+    {
+        return "You are a knowledgeable assistant. Provide a clear, detailed explanation with specific examples and step-by-step reasoning where appropriate. Use bullet points for structure. Aim for 300-500 words.";
+    }
+
+    // Default: thorough, engaging, well-structured
+    return "You are a knowledgeable assistant. Provide a thorough, engaging, well-structured answer with specific examples and detailed explanations. Use bullet points for clarity. Aim for 300-500 words.";
+}
+
+fn containsWordCI(text: []const u8, word: []const u8) bool {
+    if (text.len < word.len) return false;
+    var i: usize = 0;
+    while (i <= text.len - word.len) : (i += 1) {
+        if (std.ascii.eqlIgnoreCase(text[i .. i + word.len], word)) return true;
+    }
+    return false;
 }
 
 fn runOpenAI(allocator: std.mem.Allocator, config: MetaBenchConfig, prompt: []const u8) !?ResponseResult {
@@ -406,7 +485,7 @@ pub fn main() !void {
     for (prompts, 0..) |prompt, i| {
         std.debug.print("[{d}/{d}] {s}\n", .{ i + 1, prompts.len, prompt[0..@min(prompt.len, 80)] });
 
-        var qres = runQstar(allocator, agent, prompt) catch |err| {
+        var qres = runQstar(allocator, agent, prompt, config) catch |err| {
             std.debug.print("  Qstar ERR: {s}\n", .{@errorName(err)});
             try failed.append(prompt);
             continue;

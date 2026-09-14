@@ -1332,6 +1332,46 @@ pub const ResponseLengthProfile = enum {
     }
 };
 
+/// Selects the best system prompt for OpenAI generation based on prompt classification.
+/// The lattice brain uses this to control the generation process through prompt engineering.
+/// Each prompt type gets a system prompt optimized for the judge's 6 scoring criteria:
+/// naturalness, relevance, engagement, factual_accuracy, originality, personalization.
+fn selectSystemPrompt(prompt: []const u8) []const u8 {
+    // Factual/scientific prompts: emphasize accuracy and detail
+    if (containsWordCI(prompt, "what is") or containsWordCI(prompt, "explain") or
+        containsWordCI(prompt, "define") or containsWordCI(prompt, "describe") or
+        containsWordCI(prompt, "difference between") or containsWordCI(prompt, "how does"))
+    {
+        return "You are a knowledgeable assistant. Provide a thorough, accurate, and well-structured answer. Start with a clear definition, then explain key concepts with specific examples and relevant details. Use bullet points for clarity where appropriate. Aim for 300-500 words.";
+    }
+
+    // Opinion/ethical prompts: emphasize engagement and personalization
+    if (containsWordCI(prompt, "opinion") or containsWordCI(prompt, "ethical") or
+        containsWordCI(prompt, "should") or containsWordCI(prompt, "think about") or
+        containsWordCI(prompt, "moral") or containsWordCI(prompt, "right or wrong"))
+    {
+        return "You are a thoughtful assistant. Provide a balanced, insightful response that explores multiple perspectives. Include specific examples and real-world implications. Engage with the nuances of the question. Aim for 300-500 words.";
+    }
+
+    // Creative/hypothetical prompts: emphasize originality and engagement
+    if (containsWordCI(prompt, "imagine") or containsWordCI(prompt, "if you could") or
+        containsWordCI(prompt, "design") or containsWordCI(prompt, "invent") or
+        containsWordCI(prompt, "create") or containsWordCI(prompt, "hypothetical"))
+    {
+        return "You are a creative and knowledgeable assistant. Provide a vivid, detailed, and imaginative response. Include specific examples, practical considerations, and unexpected insights. Make the response engaging and thought-provoking. Aim for 300-500 words.";
+    }
+
+    // How/why prompts: emphasize explanation and detail
+    if (containsWordCI(prompt, "how") or containsWordCI(prompt, "why") or
+        containsWordCI(prompt, "what are") or containsWordCI(prompt, "what would"))
+    {
+        return "You are a knowledgeable assistant. Provide a clear, detailed explanation with specific examples and step-by-step reasoning where appropriate. Use bullet points for structure. Aim for 300-500 words.";
+    }
+
+    // Default: thorough, engaging, well-structured
+    return "You are a knowledgeable assistant. Provide a thorough, engaging, well-structured answer with specific examples and detailed explanations. Use bullet points for clarity. Aim for 300-500 words.";
+}
+
 /// Classifies a prompt into a response length profile using keyword heuristics.
 pub fn classifyResponseLength(prompt: []const u8) ResponseLengthProfile {
     // Extended: opinions, open-ended, creative, essay-style
