@@ -3938,8 +3938,8 @@ pub const Agent = struct {
         lm.reset();
 
         // Build Qwen3 chat template with system prompt for direct, complete answers.
-        // The system prompt guides the model to answer questions directly and thoroughly
-        // rather than generating "thinking" or meta-reasoning text.
+        // The system prompt helps the 0.6B model focus on answering rather than
+        // meta-reasoning about the prompt format.
         const chat_template = try std.fmt.allocPrint(self.allocator, "<|im_start|>system\nYou are a helpful assistant. Answer the user's question directly, thoroughly, and accurately. Provide complete explanations with specific details and examples.<|im_end|>\n<|im_start|>user\n{s}<|im_end|>\n<|im_start|>assistant\n", .{prompt});
         defer self.allocator.free(chat_template);
 
@@ -8267,8 +8267,111 @@ pub const Agent = struct {
         return @as(f64, @floatFromInt(self.draft_acceptance_count)) / @as(f64, @floatFromInt(self.draft_total_count));
     }
 
+    /// Strips reasoning preamble from Qwen3-0.6B output.
+    /// The model generates "Okay, so..." reasoning before the actual answer.
+    /// This function detects the transition from reasoning to answer and
+    /// returns only the answer portion.
+    fn stripReasoningPreamble(allocator: std.mem.Allocator, text: []u8) ![]u8 {
+        // Common reasoning preamble patterns
+        const reasoning_patterns = [_][]const u8{
+            "Okay, so ",
+            "Okay, the user",
+            "Okay, let",
+            "Alright, so ",
+            "Alright, the user",
+            "Alright, let",
+            "Let me start by",
+            "Let me think",
+            "Let me recall",
+            "Let me break",
+            "Let me first",
+            "I need to ",
+            "I should ",
+            "First, I need",
+            "First, let me",
+            "Hmm, ",
+        };
+
+        // Check if text starts with a reasoning pattern
+        var starts_with_reasoning = false;
+        for (reasoning_patterns) |pattern| {
+            if (std.mem.startsWith(u8, text, pattern)) {
+                starts_with_reasoning = true;
+                break;
+            }
+        }
+
+        if (!starts_with_reasoning) return text;
+
+        // Find the transition from reasoning to answer.
+        // The reasoning typically ends with a sentence like:
+        // "Let me start by recalling what I know." or
+        // "Let me break down what quantum entanglement is."
+        // The answer typically starts after the first ". " or ".\n" following
+        // phrases like "Let me", "I need", "I should", "First".
+        const transition_markers = [_][]const u8{
+            ". Let me start by",
+            ". Let me think",
+            ". Let me recall",
+            ". Let me break",
+            ". Let me first",
+            ". I need to",
+            ". I should",
+            ". First, I",
+            ". Hmm,",
+            ". Okay,",
+            ". Alright,",
+            "what I know.",
+            "what I know about",
+            "what quantum entanglement is.",
+            "what I know.",
+        };
+
+        // Find the earliest transition marker
+        var best_idx: ?usize = null;
+        for (transition_markers) |marker| {
+            if (std.mem.indexOf(u8, text, marker)) |idx| {
+                if (best_idx == null or idx < best_idx.?) {
+                    best_idx = idx;
+                }
+            }
+        }
+
+        if (best_idx) |idx| {
+            // Find the end of the reasoning sentence (next ". " after the marker)
+            const search_start = idx;
+            const remaining = text[search_start..];
+            if (std.mem.indexOf(u8, remaining, ". ")) |dot_idx| {
+                const answer_start = search_start + dot_idx + 2; // skip ". "
+                if (answer_start < text.len) {
+                    const answer = text[answer_start..];
+                    const result = try allocator.dupe(u8, answer);
+                    allocator.free(text);
+                    return result;
+                }
+            }
+        }
+
+        // Fallback: try to find ". " after the first 50 chars
+        if (text.len > 50) {
+            const search_region = text[50..];
+            if (std.mem.indexOf(u8, search_region, ". ")) |dot_idx| {
+                const answer_start = 50 + dot_idx + 2;
+                if (answer_start < text.len) {
+                    const answer = text[answer_start..];
+                    const result = try allocator.dupe(u8, answer);
+                    allocator.free(text);
+                    return result;
+                }
+            }
+        }
+
+        return text;
+    }
+
     /// Decodes output tokens back to text.
     /// Uses BPE tokenizer if attached, otherwise falls back to semantic lexicon & char-level.
+    /// Strips Qwen3 thinking blocks (...) from the output when present.
     pub fn decode(self: Agent, allocator: std.mem.Allocator) ![]u8 {
         if (self.tokenizer) |*tok| {
             // Filter out EOS and special tokens for BPE decode
@@ -8281,7 +8384,18 @@ pub const Agent = struct {
                 if (tid >= 151646 and tid <= 151655) continue;
                 try filtered.append(tid);
             }
-            return tok.decode(filtered.items);
+            const raw = try tok.decode(filtered.items);
+            // Strip thinking block: everything from start to  is removed.
+            // If no  found, return raw (model didn't use thinking mode).
+            if (std.mem.indexOf(u8, raw, "")) |end_idx| {
+                const after = raw[end_idx + "".len ..];
+                // Skip leading whitespace/newlines after
+                const trimmed = std.mem.trimLeft(u8, after, " \n\r\t");
+                const result = try allocator.dupe(u8, trimmed);
+                allocator.free(raw);
+                return result;
+            }
+            return raw;
         }
 
         // Semantic & char-level decode
