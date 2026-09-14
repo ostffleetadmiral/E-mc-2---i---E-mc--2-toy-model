@@ -293,6 +293,17 @@ Copyright (c) 2026 Open Sentience Technology Foundation. Licensed under [CC BY-N
 
 ## Citation
 
+Details
+
+DOI
+    10.5281/zenodo.22715355
+
+Resource type
+    Preprint
+Publisher
+    Zenodo
+
+
 ```bibtex
 @misc{emc2i_emc2_2026,
   title        = {E=mc²-i-E=mc⁻² (toy-model): "play on the seriousness of the framework"},
