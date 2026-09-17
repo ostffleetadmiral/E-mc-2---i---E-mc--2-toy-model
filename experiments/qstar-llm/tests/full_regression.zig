@@ -72,7 +72,7 @@ pub fn main() !void {
         defer ag.deinit();
         const state_bytes = ag.stateSizeBytes();
         std.debug.print("  state size: {d} bytes\n", .{state_bytes});
-        check(state_bytes == 23576, "state size = 23,576 bytes (421 × 7 × 8)");
+        check(state_bytes == 53888, "state size = 53,888 bytes (421 × 8 × 16)");
     }
 
     // =========================================================================

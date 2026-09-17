@@ -14,17 +14,17 @@ pub fn main() !void {
     defer ag.deinit();
     const state_bytes = ag.stateSizeBytes();
     std.debug.print("  state size: {d} bytes = {d:.2} KB\n", .{ state_bytes, @as(f64, @floatFromInt(state_bytes)) / 1024.0 });
-    std.debug.print("  expected:   {d} bytes = {d:.2} KB\n", .{ 421 * 7 * 8, @as(f64, @floatFromInt(421 * 7 * 8)) / 1024.0 });
+    std.debug.print("  expected:   {d} bytes = {d:.2} KB\n", .{ 421 * 8 * 16, @as(f64, @floatFromInt(421 * 8 * 16)) / 1024.0 });
     std.debug.print("  Qwen1.5-0.5B: 75,000,000 bytes = 75 MB\n", .{});
-    std.debug.print("  reduction: {d:.0}x\n", .{ 75_000_000 / state_bytes });
-    if (state_bytes != 421 * 7 * 8) {
+    std.debug.print("  reduction: {d:.0}x\n", .{75_000_000 / state_bytes});
+    if (state_bytes != 421 * 8 * 16) {
         std.debug.print("  FAIL: state size incorrect\n", .{});
         ok = false;
     } else if (state_bytes >= 75_000_000) {
         std.debug.print("  FAIL: state should be << 75 MB\n", .{});
         ok = false;
     } else {
-        std.debug.print("  PASS: 23 KB (not 75 MB) — 3,243x reduction\n", .{});
+        std.debug.print("  PASS: 53 KB (not 75 MB) — 1,392x reduction\n", .{});
     }
     std.debug.print("\n", .{});
 

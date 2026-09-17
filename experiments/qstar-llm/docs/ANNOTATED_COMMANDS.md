@@ -29,6 +29,20 @@ All commands are invoked via `zig build cli -- <command> [options]` (the `qstar`
 19. [competitive-bench (build target)](#19-competitive-bench)
 20. [training-heartbeat (build target)](#20-training-heartbeat)
 21. [Build-only targets](#21-build-only-targets)
+22. [train-all](#22-train-all)
+23. [convert-corpus](#23-convert-corpus)
+24. [train-metacog](#24-train-metacog)
+25. [diagnose](#25-diagnose)
+26. [list / models](#26-list--models)
+27. [pull](#27-pull)
+28. [push](#28-push)
+29. [mesh](#29-mesh)
+30. [transport](#30-transport)
+31. [quine](#31-quine)
+32. [collapse](#32-collapse)
+33. [framework-audit](#33-framework-audit)
+33b. [quantum](#33b-quantum)
+34. [dns-update](#34-dns-update)
 
 ---
 
@@ -53,6 +67,7 @@ zig build cli -- serve 8080
 - Exposes OpenAI-compatible endpoints: `/v1/chat/completions`, `/v1/completions`, `/v1/models`, `/v1/embeddings`
 - Exposes vision endpoints: `/api/vision`, `/api/vision/tools`
 - Exposes geoview endpoints: `/api/geoview`, `/api/geoview/tools`
+- Loads `qstar_corpus_full.qsc` by default (all pages streamed on demand); falls back to `qstar_corpus.txt`
 - Supports concurrent request handling (thread-per-connection, up to 64 simultaneous)
 - Each connection gets its own agent instance for isolated lattice state
 - Streaming responses supported via `Transfer-Encoding: chunked` + `Content-Type: application/x-ndjson`
@@ -82,7 +97,7 @@ zig build cli -- run "Describe AI" --vocab 256k --autoscale
 |------|---------|-------------|
 | `"<prompt>"` | required | The prompt text (positional, must be quoted) |
 | `--model <name>` | `qwen2.5:3b` | Ollama model for comparison/augmentation |
-| `--corpus <path>` | `qstar_corpus.txt` | Corpus file to load before generation |
+| `--corpus <path>` | `qstar_corpus_full.qsc` | Corpus file to load (.qsc streams all pages) |
 | `--vocab <spec>` | auto | Ramsey vocab specifier: `128k`, `256k`, `512k`, `1m`, or path |
 | `--level <N>` | 0 | Lattice scale level (0-7) |
 | `--autoscale` | off | Enable dynamic lattice auto-tuning based on corpus size |
@@ -92,7 +107,7 @@ zig build cli -- run "Describe AI" --vocab 256k --autoscale
 | `--draft-model <name>` | `qwen2.5:3b` | Verifier model for draft mode |
 
 **Annotations:**
-- Loads `qstar_corpus.txt` if present in the working directory
+- Loads `qstar_corpus_full.qsc` (compressed, all pages) if present; falls back to `qstar_corpus.txt`
 - Loads `qstar_kg.bin` knowledge graph if present
 - Extracts knowledge triplets from the prompt and adds them to the KG
 - Ingests the system prompt then the user prompt into the lattice
@@ -136,6 +151,8 @@ Interactive multi-turn terminal chat with the agent.
 zig build cli -- chat
 zig build cli -- chat "Hello, what are you?"
 zig build cli -- chat --memory --memory-file qstar_memory.json
+zig build cli -- chat --qsc qstar_corpus_full.qsc --max-pages 100
+zig build cli -- chat --txt qstar_corpus.txt
 ```
 
 **Arguments:**
@@ -144,7 +161,10 @@ zig build cli -- chat --memory --memory-file qstar_memory.json
 |------|---------|-------------|
 | `[opening]` | none | Optional opening message (positional) |
 | `--model <name>` | `qwen2.5:3b` | Ollama model |
-| `--corpus <path>` | `qstar_corpus.txt` | Corpus file to load |
+| `--qsc <path>` | `qstar_corpus_full.qsc` | Compressed .qsc corpus (streams all pages) |
+| `--txt <path>` | — | Raw text corpus (overrides --qsc) |
+| `--corpus <path>` | `qstar_corpus_full.qsc` | Corpus file (alias for --qsc/--txt) |
+| `--max-pages <N>` | 0 (all) | Limit .qsc pages loaded |
 | `--vocab <spec>` | auto | Ramsey vocab specifier |
 | `--level <N>` | 0 | Lattice level |
 | `--autoscale` | off | Dynamic lattice auto-tuning |
@@ -203,6 +223,7 @@ Self-training using Ollama or OpenAI as teacher.
 zig build cli -- train --model qwen2.5:3b --corpus qstar_corpus.txt
 zig build cli -- train --teacher openai --openai-model gpt-4o --limit 3
 zig build cli -- train --teacher auto --verbose
+zig build cli -- train --hybrid --corpus qstar_corpus.txt
 ```
 
 **Arguments:**
@@ -217,12 +238,15 @@ zig build cli -- train --teacher auto --verbose
 | `--teacher <name>` | `auto` | Teacher: `ollama`, `openai`, or `auto` (OpenAI if key present, else Ollama) |
 | `--openai-model <name>` | `gpt-4o` | OpenAI teacher model |
 | `--openai-key <key>` | `.env` | OpenAI API key (overrides `OPENAI_API_KEY` from `.env`) |
+| `--hybrid` | off | Hybrid: OpenAI semantic for factual/technical, Ollama for creative/chitchat |
 
 **Annotations:**
-- Uses 140 built-in default prompts covering diverse topics
+- Uses 300 built-in default prompts across 30 categories (10 each)
 - With `--teacher auto`: checks for `OPENAI_API_KEY` in environment and `.env` file; uses OpenAI if found, falls back to Ollama
+- With `--hybrid`: routes factual/technical prompts to OpenAI semantic training (corpus + KG + routes), creative/chitchat prompts to Ollama corpus training; if Ollama is unavailable and OpenAI is configured, those prompts fall back to OpenAI rather than being skipped
 - Each prompt: sends to teacher model, receives response, agent learns from the response via `learnFromText()`
-- Appends learned content to the corpus file
+- **Delta-append persistence:** only the session-learned delta is appended — the existing corpus file is never truncated. When `--corpus` names a `.qsc` container, the delta goes to a `<base>.learned.txt` sidecar (auto-loaded by `chat`/`run`/`serve`); the container itself is never modified
+- The in-memory corpus is a bounded window (~10 MB tail); reporting distinguishes file-level sentence counts from retained window counts
 - With `--limit N`: processes only the first N prompts (useful for smoke testing)
 
 ---
@@ -243,14 +267,14 @@ zig build cli -- train-internet --limit 10 --verbose
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--model <name>` | `qwen2.5:3b` | Ollama model for augmentation |
-| `--corpus <path>` | `qstar_corpus.txt` | Corpus file |
+| `--corpus <path>` | `qstar_corpus_full.qsc` | Corpus file |
 | `--offset <N>` | 0 | Skip first N articles (resumable) |
 | `--limit <N>` | all | Only fetch N articles |
 | `--no-ollama` | off | Disable Ollama augmentation (use when Ollama is unavailable) |
 
 **Annotations:**
 - Fetches Wikipedia article extracts via the Wikipedia API
-- 1,155 article titles across 7 batches are built-in
+- 1,345 article titles are built into `WIKIPEDIA_ARTICLES` (`src/training.zig`)
 - With `--no-ollama`: learns directly from Wikipedia text without Ollama enrichment
 - With Ollama: sends Wikipedia text to Ollama for summarization/enrichment, then learns from the enriched version
 - `--offset` enables resuming from a specific article index (useful for interrupted runs)
@@ -325,7 +349,7 @@ zig build cli -- train-corpus --ingest-dir datasets/Gov --enrich-dir datasets/Ad
 | `--ingest-dir <path>` | required | Directory for direct ingestion |
 | `--enrich-dir <path>` | required | Directory for Ollama enrichment |
 | `--model <name>` | `qwen2.5:3b` | Ollama model |
-| `--corpus <path>` | `qstar_corpus.txt` | Corpus file |
+| `--corpus <path>` | `qstar_corpus_full.qsc` | Corpus file |
 
 **Annotations:**
 - Phase 1: Directly ingests all documents from `--ingest-dir` (no Ollama)
@@ -345,6 +369,7 @@ zig build cli -- corpus build qstar_corpus.txt qstar_corpus.qsc --page-size 6553
 zig build cli -- corpus verify qstar_corpus.qsc
 zig build cli -- corpus info qstar_corpus.qsc
 zig build cli -- corpus stream qstar_corpus.qsc --limit 10
+zig build cli -- corpus stream qstar_corpus_full.qsc --out rebuilt_corpus.txt
 ```
 
 **Subcommands:**
@@ -354,7 +379,7 @@ zig build cli -- corpus stream qstar_corpus.qsc --limit 10
 | `build <raw.txt> <out.qsc> [--page-size N]` | Build .qsc container (gzip pages + CRC32 + page table) |
 | `verify <corpus.qsc>` | Read every page, validate checksums + decompression |
 | `info <corpus.qsc>` | Show magic, version, sizes, compression ratio, checksum status |
-| `stream <corpus.qsc> [--limit N]` | Stream lines with on-demand page decompression |
+| `stream <corpus.qsc> [--limit N] [--out path]` | Stream lines with on-demand page decompression; `--out` writes to a file (rebuilds a raw corpus from the container) |
 
 **Annotations:**
 - The `.qsc` container stores the corpus as gzip-compressed pages with a self-describing header (magic `QSC1`, version, page table)
@@ -620,7 +645,8 @@ zig build cli -- --version
 
 **Example output:**
 ```
-Qstar v3.0.0 (Pure Zig, Q32.32 Fixed-Point, 421 E0 Nodes, 7 Channels)
+Qstar v0.0.2.0 (Pure Zig, Q128.128 Fixed-Point, 421 E0 Nodes, 8 Channels)
+Framework: E=mc²-i-E=mc⁻² (toy-model) | C=2 | 1/8 aperture | 7-defect
 ```
 
 ---
@@ -707,7 +733,7 @@ zig build training-heartbeat -- --interval 77 --verbose
 | `--ollama-host <host>` | `127.0.0.1` | Ollama host for prompt generation |
 | `--ollama-port <port>` | `11434` | Ollama port for prompt generation |
 | `--ollama-model <name>` | `qwen2.5:3b` | Ollama model for prompt generation |
-| `--corpus <path>` | `qstar_corpus.txt` | Corpus file path |
+| `--corpus <path>` | `qstar_corpus_full.qsc` | Corpus file path |
 
 **Annotations:**
 - Single cycle steps: load corpus, learn from memory, learn from benchmark results, learn from Turing test results, optionally generate prompts via Ollama, save corpus and knowledge graph
@@ -725,19 +751,27 @@ These targets are invoked via `zig build <target>` and do not take CLI arguments
 | Target | Description |
 |--------|-------------|
 | `zig build` | Compile all modules + CLI + WASM |
-| `zig build test` | Run all 1,268 unit tests |
-| `zig build tool-test` | Run tool calling + server integration tests (44) |
+| `zig build test` | Run all unit tests (~2,610 declarations; slow — prefer focused suites) |
+| `zig build test-agent` | Run agent module tests (173) |
+| `zig build test-turing` | Run Turing test suite |
+| `zig build test-main` | Run main.zig module tests (29) |
+| `zig build tool-test` | Run tool calling + server integration tests |
 | `zig build vision-test` | Run vision pipeline tests (25) |
 | `zig build geoview-test` | Run geoview pipeline tests (30) |
-| `zig build regression` | Run full regression harness (61 checks) |
-| `zig build manual` | Run 4 manual integration test suites |
-| `zig build audit` | Run agent dual-mode audit (12 tests) |
-| `zig build samc` | Run SAMC validation (5 tests) |
+| `zig build regression` | Run full regression harness |
+| `zig build manual` | Run manual integration test suites |
+| `zig build audit` | Run agent dual-mode audit |
+| `zig build samc` | Run SAMC validation |
 | `zig build ollama-bench` | Run head-to-head benchmark vs Ollama |
 | `zig build qstar-bench` | Run Qstar internal benchmark suite |
+| `zig build cognitive-metabench` | Run cognitive metacognition benchmark |
+| `zig build meta-bench` | Run meta-benchmark suite |
 | `zig build maple-bench` | Run Maple protocol benchmark |
 | `zig build maple-standard-bench` | Run Maple standard benchmark |
 | `zig build vulkan-bench` | Run Vulkan compute benchmark |
+| `zig build semantic-train` | Run semantic corpus training |
+| `zig build competitive-train` | Run competitive training harness |
+| `zig build seed` | Run seed corpus generator |
 | `zig build shaders` | Build Vulkan shaders |
 | `zig build wasm` | Build WASM module for browser embedding |
 | `zig build html` | Build self-contained universe.html with embedded WASM |
@@ -746,6 +780,310 @@ These targets are invoked via `zig build <target>` and do not take CLI arguments
 | `zig build run` | Run example application |
 | `zig build cli` | Run CLI binary |
 | `zig build serve` | Run HTTP API server |
+
+---
+
+## 22. train-all
+
+Train on `datasets/` then the entire hardware directory tree (`../`).
+
+**Usage:**
+```bash
+zig build cli -- train-all
+zig build cli -- train-all --corpus-file qstar_corpus.txt --level 0 --autoscale
+zig build cli -- train-all --skip-corpus-load
+```
+
+**Arguments:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--corpus-file <path>` | `qstar_corpus.txt` | Corpus file to load/save |
+| `--level <0..7>` | 0 | Lattice level |
+| `--autoscale` | off | Autoscale lattice level to corpus size |
+| `--skip-corpus-load` | off | Skip loading existing corpus |
+
+**Annotations:**
+- Phase 1 ingests `datasets/`; Phase 2 walks the hardware root (`../`)
+- The walker skips excluded dirs: `bin`, `obj`, `.zig-cache`, `zig-out`, `vendor`, `data`, `deps`, `models`, `.devin`, `.foundations`, `.codeium`, `.venv`, `__pycache__`, `node_modules`, `.git`, `target`, `build`, `dist`, `.cache`, `publish`
+- Archives are included per policy
+- Saves the corpus after each phase (crash-safe)
+
+---
+
+## 23. convert-corpus
+
+Convert a raw corpus `.txt` file into a compressed `.qsc` container.
+
+**Usage:**
+```bash
+zig build cli -- convert-corpus
+zig build cli -- convert-corpus qstar_corpus_large.txt qstar_corpus_full.qsc
+```
+
+**Arguments:**
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `[input.txt]` | `qstar_corpus.txt` | Raw text corpus input |
+| `[output.qsc]` | `qstar_corpus.qsc` | Compressed container output |
+
+**Annotations:**
+- The `.qsc` container uses gzip-compressed pages with an LRU cache, enabling streaming ingestion with bounded memory (holo VFS pattern)
+- Prints page count and compression ratio on completion
+- Stream the result via `qstar run`, `qstar chat --qsc`, or `qstar corpus stream`
+
+---
+
+## 24. train-metacog
+
+Train the metacognitive layer with an OpenAI teacher over a corpus directory.
+
+**Usage:**
+```bash
+zig build cli -- train-metacog
+zig build cli -- train-metacog --corpus-dir datasets --corpus-file qstar_corpus.txt --openai-model gpt-4o-mini
+```
+
+**Arguments:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--corpus-dir <path>` | `.` | Directory to scan for training text |
+| `--corpus-file <path>` | `qstar_corpus.txt` | Corpus file to load/save |
+| `--openai-model <name>` | `.env` `OPENAI_MODEL` or `gpt-4o-mini` | OpenAI teacher model |
+| `--level <0..7>` | 0 | Lattice level |
+| `--skip-corpus-load` | off | Skip loading existing corpus |
+
+**Annotations:**
+- Requires `OPENAI_API_KEY` (in `.env` or environment)
+- Default excludes: `zig-out`, `qstar_corpus.txt`, `qstar_corpus_full.txt`, `.zig-cache`, `.git`
+- Teaches through the metacognition engine (Q128.128 evaluation scoring)
+
+---
+
+## 25. diagnose
+
+Run a deterministic lattice diagnostic on a prompt.
+
+**Usage:**
+```bash
+zig build cli -- diagnose
+zig build cli -- diagnose "What is the E0 lattice?" --level 0 --cycles 64
+```
+
+**Arguments:**
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `[prompt]` | `What is the E0 lattice?` | Diagnostic prompt (positional) |
+| `--level <0..7>` | 0 | Lattice level |
+| `--cycles <N>` | 64 | Inference cycles |
+
+**Annotations:**
+- Uses `Agent.initDeterministic` with seed 42 — fully reproducible
+- Loads the Qwen3-0.6B tokenizer if present, builds the bigram model, and reports token/transition counts
+
+---
+
+## 26. list / models
+
+List available models (Ollama-compatible).
+
+**Usage:**
+```bash
+zig build cli -- list
+zig build cli -- models
+```
+
+**Annotations:**
+- Prints `qstar latest` — the lattice IS the model; there are no external weights to list
+
+---
+
+## 27. pull
+
+Pull a model (Ollama-compatible no-op).
+
+**Usage:**
+```bash
+zig build cli -- pull <model>
+```
+
+**Annotations:**
+- Qstar is self-contained — the lattice (421 E0 nodes × 8 channels) is built-in
+- Exists for Ollama CLI compatibility; always succeeds without network access
+
+---
+
+## 28. push
+
+Push the quine edition to a target URL or peer.
+
+**Usage:**
+```bash
+zig build cli -- push <target_url_or_peer>
+```
+
+**Annotations:**
+- Expects `zig-out/universe.html` to exist — run `qstar quine build` (or `zig build html`) first
+- Currently virtual mode: verifies the payload exists and reports the push without a network transfer
+
+---
+
+## 29. mesh
+
+Operate the virtual P2P mesh node.
+
+**Usage:**
+```bash
+zig build cli -- mesh start [port]
+zig build cli -- mesh join <host:port>
+zig build cli -- mesh status
+zig build cli -- mesh broadcast <message>
+zig build cli -- mesh relay <peer_id> <message>
+```
+
+**Subcommands:**
+
+| Subcommand | Description |
+|------------|-------------|
+| `start [port]` | Start a `VirtualMeshNode` (default port 9000) |
+| `join <host:port>` | Join an existing mesh |
+| `status` | Show node status |
+| `broadcast <message>` | Broadcast to all peers |
+| `relay <peer_id> <message>` | Relay a message to a specific peer |
+
+---
+
+## 30. transport
+
+List, send, or receive over the 12 virtual transport modes.
+
+**Usage:**
+```bash
+zig build cli -- transport list
+zig build cli -- transport send <mode> <file>
+zig build cli -- transport recv
+```
+
+**Subcommands:**
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | Show all 12 transport modes with status and the currently selected fallback level |
+| `send <mode> <file>` | Encode a file through a transport mode |
+| `recv` | Listen for incoming transport payloads |
+
+**Transport modes:** `qr`, `video`, `polyglot`, `audio`, `paper`, `cassette`, `wifi`, `p2p`, `stega`, `quine`, `optar`, `paperback`
+
+**Annotations:**
+- Digital transports: qr, video, polyglot, audio, wifi, p2p, stega, optar
+- Analog/physical fallbacks: paper, cassette, paperback, quine
+- The router auto-selects the best available transport (fallback level 0–11)
+
+---
+
+## 31. quine
+
+Build or publish the self-referential HTML edition.
+
+**Usage:**
+```bash
+zig build cli -- quine build
+zig build cli -- quine publish
+```
+
+**Subcommands:**
+
+| Subcommand | Description |
+|------------|-------------|
+| `build` | Build `zig-out/universe.html` — self-contained HTML with embedded lattice + distilled corpus (requires `src/universe_template.html`; `zig build html` is the full pipeline) |
+| `publish` | Publish the quine edition (requires `zig-out/universe.html` to exist) |
+
+---
+
+## 32. collapse
+
+Simulate civilization-collapse transport fallback.
+
+**Usage:**
+```bash
+zig build cli -- collapse simulate
+zig build cli -- collapse status
+zig build cli -- collapse recover
+zig build cli -- collapse persist <file>
+```
+
+**Subcommands:**
+
+| Subcommand | Description |
+|------------|-------------|
+| `simulate` | Deactivate all digital transports; retain analog fallbacks (paper, paperback, cassette, quine) |
+| `status` | Show per-transport status, selected transport, fallback level (0–11), collapse flag |
+| `recover` | Reactivate all transport modes |
+| `persist <file>` | Run the knowledge-preservation pipeline on a file: Reed-Solomon shards → Shamir secret shares → QR portal atomization → nested QR tree → physical-media requirement estimate. Reports shard/share/portal counts and integrity |
+
+---
+
+---
+
+## 33. framework-audit
+
+Run the E=mc²-i-E=mc⁻² toy-model verification checks.
+
+**Usage:**
+```bash
+zig build cli -- framework-audit
+```
+
+**Annotations:**
+- Runs `hw_bridge.verifyAllFrameworkPredictions()` (lattice alignment, 7-defect, consciousness aperture, 421 identity, 3/8 parameter, shell transition, surface computation, digit sum, C=2 signature)
+- Runs `lattice.verifyAllFramework()` (6 checks)
+- Runs 13 checks across the `hw_*` proof-port modules: E8 root count, scaling (7-defect, 421 identity, shell transition), octonion Fano triples, surface computation (framework match + 16+20 claim split), Jordan algebra (J3(O)=27, F4=52), electric charges (quantization, anomaly cancellation), consciousness audit split, literature review counts
+- Prints framework constants (421 E0 nodes, 8 channels, base edge 15, shell edge 16, 240 E8 roots, 721 shell difference, g coupling)
+- Prints the generative chain, scaling chain, and 36-claim classification (16 PROVEN, 10 INTERPRETATION, 3 NUMEROLOGY, 4 CONSTRUCTION, 3 UNVERIFIED)
+
+---
+
+## 33b. quantum
+
+Quantum gate model demo on the lattice (Q64.64 amplitudes, integer-only).
+
+**Usage:**
+```bash
+zig build cli -- quantum [--shots N]
+```
+
+**Annotations:**
+- Builds a 2-qubit `QuantumState`, runs a Bell-pair circuit (H on q0, CNOT q0→q1) through `Circuit.run` with a `StateChain` audit trail
+- Prints basis-state probabilities (expect ~50% |00>, ~50% |11>), per-shot measurement statistics over `--shots` (default 1000), Bell correlation, and chain height/tip-hash verification
+- Exercises the full quantum engine: gates, measurement collapse, state-chain hashing
+
+---
+
+## 34. dns-update
+
+Update dynamic DNS with retry.
+
+**Usage:**
+```bash
+zig build cli -- dns-update
+zig build cli -- dns-update --url https://... --timeout 5000 --retries 3 --delay 1000
+```
+
+**Arguments:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--url <url>` | `.env` DDNS config | Update URL |
+| `--timeout <ms>` | `.env` | Request timeout |
+| `--retries <N>` | `.env` | Retry count |
+| `--delay <ms>` | `.env` | Delay between retries |
+
+**Annotations:**
+- Config loads from `.env` via `DynamicDnsConfig.fromEnv`, then CLI flags override
+- Uses `dynamic_dns.updateWithRetry` and prints the result
 
 ---
 
@@ -764,9 +1102,17 @@ JUDGE_HOST=127.0.0.1
 JUDGE_PORT=11434
 MAPLE_HOST=192.168.4.1
 MAPLE_PORT=80
+LLAMA_SERVER_HOST=127.0.0.1
+LLAMA_SERVER_PORT=8080
+QSTAR_CORPUS_QSC=qstar_corpus_full.qsc
+QSTAR_CORPUS_MAX_PAGES=0
+DYNAMIC_DNS_URL=https://...
+DYNAMIC_DNS_TIMEOUT_MS=5000
+DYNAMIC_DNS_RETRY_COUNT=3
+DYNAMIC_DNS_RETRY_DELAY_MS=1000
 ```
 
-The loader checks real environment variables first, then `.env` entries. `JUDGE_HOST`/`JUDGE_PORT` direct judge traffic to a separate Ollama instance (avoids model-swap clashing in competitive benchmarks).
+The loader checks real environment variables first, then `.env` entries. `JUDGE_HOST`/`JUDGE_PORT` direct judge traffic to a separate Ollama instance (avoids model-swap clashing in competitive benchmarks). `LLAMA_SERVER_HOST`/`PORT` configure the llama-server fallback provider. `QSTAR_CORPUS_QSC`/`QSTAR_CORPUS_MAX_PAGES` override the corpus streamed by `run`/`serve` (0 = all pages).
 
 ---
 
@@ -775,7 +1121,8 @@ The loader checks real environment variables first, then `.env` entries. `JUDGE_
 ```bash
 # Build & test
 zig build                    # compile everything
-zig build test               # 1,268 unit tests
+zig build test               # all unit tests (~2,610 declarations; slow)
+zig build test-agent         # agent suite (173 tests, fast)
 
 # Generate text
 zig build cli -- run "prompt"                    # single-shot

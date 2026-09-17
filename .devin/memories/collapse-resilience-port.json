@@ -1,0 +1,75 @@
+{
+  "id": "collapse-resilience-port",
+  "title": "Collapse Resilience Framework Port",
+  "date": "2026-09-15",
+  "source": "SFTP Qstar → hardware qstar-llm",
+  "status": "COMPLETE",
+  "summary": "Ported entangle.zig, merge.zig, sybil.zig from SFTP Qstar into hardware qstar-llm. Created collapse_resilience.zig orchestrator that ties together collapse, entangle, qr_nest, and seed_compressor into a full persist/recover pipeline.",
+  "components": {
+    "entangle.zig": {
+      "lines": 1253,
+      "tests": 33,
+      "contents": [
+        "GF(256) Galois Field arithmetic (exp/log tables, mul/div/pow/inv)",
+        "Reed-Solomon error correction (rsEncode, rsReconstruct, freeShards)",
+        "Shamir secret sharing (shamirSplit, shamirRecover, Share, ShareList)",
+        "DLCZ entanglement protocol (DLCZNode, DLCZConfig, dlczEntangle)",
+        "Kleinberg small-world routing (RoutingNode, KleinbergNetwork, greedyRoute)",
+        "Steganographic LSB hiding (stegaEmbed, stegaExtract, stegaCheckCapacity)"
+      ]
+    },
+    "merge.zig": {
+      "lines": 575,
+      "tests": 14,
+      "contents": [
+        "CellEdit struct for concurrent lattice cell edits",
+        "Conflict detection (same cell, different peers)",
+        "MergeStrategy enum (last_write_wins, e_value_priority, mobius_twist, average)",
+        "MergeResult with winning peer and strategy",
+        "Mobius twist: boundary cells use reversed comparison",
+        "Batch merge for multiple edits"
+      ]
+    },
+    "sybil.zig": {
+      "lines": 574,
+      "tests": 14,
+      "contents": [
+        "Proof-of-Lattice-Work (PoLW) using E0 node hash + octonion routing",
+        "Challenge/Proof structures (32-byte seed, difficulty, nonce)",
+        "latticeHash function (SHA-256 with lattice-specific mixing)",
+        "solveChallenge (nonce search up to MAX_NONCE=10M)",
+        "verifyProof (cheap verification)",
+        "PeerIdentity with registered proof",
+        "PeerRegistry for identity management",
+        "ReputationTracker for peer reputation scoring"
+      ]
+    },
+    "collapse_resilience.zig": {
+      "lines": 402,
+      "tests": 8,
+      "contents": [
+        "CollapseResilience orchestrator struct",
+        "Persist pipeline: compress → RS encode → Shamir split → atomize → nest → distribute",
+        "Recover pipeline: reassemble → Shamir recover → RS reconstruct → decompress",
+        "CollapsePhase enum tracking pipeline state",
+        "CollapseStatus with portal/shard/share counts and data_integrity",
+        "CollapsePersistResult with full pipeline metrics",
+        "Default config: RS(4,2) + Shamir(3,5) = 33% data loss tolerance"
+      ]
+    }
+  },
+  "build_integration": {
+    "modules_added": ["entangle", "merge", "sybil", "collapse_resilience"],
+    "build_zig_changes": "Made sybil/merge/entangle always-available (not just full_deps). Added collapse_resilience_mod after seed_compressor_mod.",
+    "bug_fix": "Fixed QRPortal atomizeCell to always call setPayload even for empty faces (was causing data_integrity=0 for small data)"
+  },
+  "test_results": {
+    "entangle": "33/33 passed",
+    "merge": "14/14 passed",
+    "sybil": "14/14 passed",
+    "collapse_resilience": "8/8 passed",
+    "collapse_regression": "39/39 passed (no regression)",
+    "total": "108 tests passed"
+  },
+  "floating_point_note": "DLCZ and Kleinberg modules use f64 for simulation/transport (sidecar). GF(256), Reed-Solomon, Shamir, PoLW are all integer-only (u8/u32/u64). CellEdit.activation uses f64 but is a transport/sidecar field."
+}

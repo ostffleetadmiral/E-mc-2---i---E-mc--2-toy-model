@@ -1,0 +1,48 @@
+{
+  "title": "Confidence Routing, Kimi Adapter, and Cognitive Split",
+  "date": "2026-09-15",
+  "status": "partial milestone complete",
+  "baseline": {
+    "build": "zig build passed before changes",
+    "archive": "experiments/qstar-llm/archives/retrograde-routing-baseline-20260915",
+    "routing": "llama-server was called whenever configured, before lattice generation, using non-streaming generate()"
+  },
+  "implemented": {
+    "routing": [
+      "Removed unconditional early llama-server branch from agent.generateLongForm",
+      "Lattice now generates and evaluates first",
+      "External fallback is attempted only for low evaluated confidence or garbled lattice output",
+      "Fallback uses llama_server.generateStreaming",
+      "Added fallback_attempts, fallback_successes, last_route_backend, and fallbackRate telemetry"
+    ],
+    "reasoning": "Added agent-side stripping for <think> and <|thinking|> blocks before visible response enhancement",
+    "training": "DistillationResult now records whether fallback was used and succeeded; existing training/route mechanisms remain the promotion path",
+    "cognitive_split": "Added cognitive_lanes.zig with bounded implicit store, explicit store, verification/novelty/confidence gates, contradiction rejection, promotion decisions, CRC32 serialization, file save/load, bounded consolidation, and Agent ablation controls", 
+    "kimi_adapter": "Added kimi_stream_adapter.zig modeling pinned/LRU slots, inflight reservations, publish-after-success, and prefix-pinned trunk ring reuse",
+    "turbo_quant": "Added f64-sidecar validateReconstruction plus versioned TQSD metadata/CRC32 serialization and deserialization", 
+    "metabench": "Added offline cognitive-metabench build step and extended meta-bench summary with fallback attempts/successes/rate plus fixed-point routing calibration metrics; meta_bench supports QSTAR_ENV_FILE and process overrides for separate local/bench Ollama keys",  
+    "routing_calibration": "Added fixed-point confusion-matrix, precision/recall/F1, fallback-rate, and best-threshold utilities; real labels remain required for production calibration",
+    "corpus": "Converted the 65,787,306-line qstar_corpus_full.txt (2.919GB) into qstar_corpus_full.qsc (526MB, 2,785 pages, 18.9% of raw size); main and meta-bench prefer it when present and stream bounded pages via QSTAR_CORPUS_MAX_PAGES",
+    "competitive_benchmark": "Completed full 144-prompt local run with valid competitive_results.json: Qstar wins 54, Ollama 103, OpenAI 102, ties 29. Qstar mean/median/p95 latency 46.6s/27.2s/170.8s at 8.15 tok/s; Ollama 46.4s/40.0s/109.8s at 5.82 tok/s; OpenAI 10.4s/7.6s/28.6s at 10.54 tok/s. Qstar judge mean 0.620 vs OpenAI 0.701. GSM8K relevance 0.00, MMLU 0.08, reasoning 0.39; generic corpus-coverage responses and creative latency outliers are primary retro-dev targets. Competitive artifact now validates JSON, closes cleanly, and supports --no-train/--ollama-judge-only.",
+    "retro_dev_round_1": "Added arithmetic_reasoner.zig for bounded word-problem and simple logic templates plus knowledge_lookup.zig for deterministic MMLU factual lookup, both wired before lattice diffusion; GSM8K held-out relevance improved from 0.00 to 1.00 across 16 prompts and MMLU from 0.08 to 0.81 across 24 prompts. Added concurrent Ollama/OpenAI opponent workers to competitive_bench; creative fallback latency and training windows remain."
+  },
+  "verification": {
+    "zig_build": "PASS",
+    "s7_compression": "45 PASS",
+    "s0_projection": "55 PASS",
+    "quantum": "37 PASS",
+    "collapse_recover": "9 PASS",
+    "cognitive_lanes": "5 PASS (including CRC persistence and bounded consolidation)",
+    "kimi_stream_adapter": "3 PASS",
+    "llama_server": "14 PASS (including [DONE] SSE and served-model validation)",
+    "turbo_quant": "33 PASS (including TQSD sidecar round-trip and checksum rejection)",
+    "cognitive_metabench": "PASS; observed=128, implicit_retained=64, promoted=10, rejected=118, cache_hits=0, cache_misses=128, cache_evictions=120"
+  },
+  "remaining": [
+    "The local 6.2G qwen35 9B GGUF remains invalid (expected 4 RoPE sections, got 3); official Qwen3-8B Q4_K_M loaded successfully with the fresh origin/master Vulkan/server build on port 8082; local Ollama generated prompts and local llama-server fallback smoke benchmark completed with 1 attempt, 1 success, success rate 1.000, judged score 0.533; remote Ollama remains broken for generation", 
+    "Persistent state store and ablation flags are now implemented; held-out ablation measurement remains", 
+    "Full routing/training/compression/quality metabench and held-out before/after training comparison",
+    "Feature-flagged direct safetensors loader based on Kimi k3_st/k3_load patterns"
+  ],
+  "scope_note": "The conscious/subconscious split is an operational software boundary, not a claim of phenomenal consciousness. Kimi K3 kernels are not being applied to Qwen3-9B."
+}

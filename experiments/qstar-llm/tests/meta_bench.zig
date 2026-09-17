@@ -35,6 +35,8 @@ const MetaBenchConfig = struct {
     corpus_path: []const u8 = "qstar_corpus.txt",
     no_corpus: bool = false,
     corpus_limit_mb: usize = 0,
+    pure_lattice: bool = false,
+    no_neural: bool = false,
     output_file: []const u8 = "bench_meta_results.txt",
     training_output: []const u8 = "bench_meta_training.json",
 };
@@ -109,22 +111,31 @@ const TrainingEntry = struct {
 fn loadConfig(allocator: std.mem.Allocator) MetaBenchConfig {
     var loader = env_loader.EnvLoader.init(allocator);
     defer loader.deinit();
-    loader.loadFile(".env") catch {};
+    const env_path = std.posix.getenv("QSTAR_ENV_FILE") orelse ".env";
+    loader.loadFile(env_path) catch {};
     var config = MetaBenchConfig{};
     const page = std.heap.page_allocator;
     if (loader.get("OPENAI_API_KEY")) |k| config.openai.api_key = page.dupe(u8, k) catch "";
     if (loader.get("OPENAI_BENCH_API_KEY")) |k| config.openai.api_key = page.dupe(u8, k) catch config.openai.api_key;
     if (loader.get("OPENAI_MODEL")) |m| config.openai.model = page.dupe(u8, m) catch "gpt-5";
     if (loader.get("OPENAI_BENCH_MODEL")) |m| config.openai_bench_model = page.dupe(u8, m) catch "gpt-5";
-    if (loader.get("OLLAMA_MODEL")) |m| {
-        config.local_ollama.model = page.dupe(u8, m) catch "qwen2.5:3b";
-        config.remote_ollama.model = page.dupe(u8, m) catch "qwen2.5:3b";
-    }
-    // Remote Ollama for judging and training — uses OLLAMA_HOST
-    if (loader.get("OLLAMA_HOST")) |h| config.remote_ollama.host = page.dupe(u8, h) catch "192.168.12.211";
-    if (loader.get("OLLAMA_PORT")) |p| config.remote_ollama.port = std.fmt.parseInt(u16, p, 10) catch 11434;
-    // JUDGE_MODEL can override the model used for judging
+    // Self-contained Ollama mapping: local Ollama generates prompts, while
+    // the bench Ollama endpoint judges responses when configured.
+    if (loader.get("OLLAMA_HOST")) |h| config.local_ollama.host = page.dupe(u8, h) catch config.local_ollama.host;
+    if (loader.get("OLLAMA_PORT")) |p| config.local_ollama.port = std.fmt.parseInt(u16, p, 10) catch config.local_ollama.port;
+    if (loader.get("OLLAMA_MODEL")) |m| config.local_ollama.model = page.dupe(u8, m) catch config.local_ollama.model;
+    if (loader.get("OLLAMA_BENCH_HOST")) |h| config.remote_ollama.host = page.dupe(u8, h) catch config.remote_ollama.host;
+    if (loader.get("OLLAMA_BENCH_PORT")) |p| config.remote_ollama.port = std.fmt.parseInt(u16, p, 10) catch config.remote_ollama.port;
+    if (loader.get("OLLAMA_BENCH_MODEL")) |m| config.remote_ollama.model = page.dupe(u8, m) catch config.remote_ollama.model;
     if (loader.get("JUDGE_MODEL")) |m| config.remote_ollama.model = page.dupe(u8, m) catch config.remote_ollama.model;
+    // Process environment overrides allow a caller to map a remote Ollama
+    // endpoint without copying or exposing dotenv contents.
+    if (std.posix.getenv("OLLAMA_HOST")) |h| config.local_ollama.host = h;
+    if (std.posix.getenv("OLLAMA_PORT")) |p| config.local_ollama.port = std.fmt.parseInt(u16, p, 10) catch config.local_ollama.port;
+    if (std.posix.getenv("OLLAMA_MODEL")) |m| config.local_ollama.model = m;
+    if (std.posix.getenv("OLLAMA_BENCH_HOST")) |h| config.remote_ollama.host = h;
+    if (std.posix.getenv("OLLAMA_BENCH_PORT")) |p| config.remote_ollama.port = std.fmt.parseInt(u16, p, 10) catch config.remote_ollama.port;
+    if (std.posix.getenv("OLLAMA_BENCH_MODEL")) |m| config.remote_ollama.model = m;
     return config;
 }
 
@@ -141,6 +152,10 @@ fn parseArgs(config: *MetaBenchConfig) void {
             config.verbose = false;
         } else if (std.mem.eql(u8, arg, "--no-corpus")) {
             config.no_corpus = true;
+        } else if (std.mem.eql(u8, arg, "--pure-lattice")) {
+            config.pure_lattice = true;
+        } else if (std.mem.eql(u8, arg, "--no-neural")) {
+            config.no_neural = true;
         } else if (std.mem.eql(u8, arg, "--corpus-limit-mb") and i + 1 < std.os.argv.len) {
             i += 1;
             config.corpus_limit_mb = std.fmt.parseInt(usize, std.mem.sliceTo(std.os.argv[i], 0), 10) catch 0;
@@ -168,6 +183,27 @@ const TOPIC_CATEGORIES = [_][]const u8{
     "interdisciplinary connections between fields",
 };
 
+fn generateTeacherText(allocator: std.mem.Allocator, config: MetaBenchConfig, system: []const u8, prompt: []const u8) ![]u8 {
+    const ollama_config: ?ollama.OllamaConfig = if (ollama.isAvailable(config.local_ollama))
+        config.local_ollama
+    else if (ollama.isAvailable(config.remote_ollama))
+        config.remote_ollama
+    else
+        null;
+    if (ollama_config) |selected| {
+        const full_prompt = try std.fmt.allocPrint(allocator, "{s}\n\n{s}", .{ system, prompt });
+        defer allocator.free(full_prompt);
+        var response = try ollama.generate(allocator, selected, full_prompt);
+        defer response.deinit();
+        return try allocator.dupe(u8, response.text);
+    }
+    var oa_cfg = config.openai;
+    oa_cfg.model = config.prompt_gen_model;
+    var response = try openai.simplePrompt(allocator, oa_cfg, system, prompt);
+    defer response.deinit();
+    return try allocator.dupe(u8, response.text);
+}
+
 fn generateDiversePrompts(allocator: std.mem.Allocator, config: MetaBenchConfig) ![][]const u8 {
     var all = std.ArrayList([]const u8).init(allocator);
     errdefer {
@@ -176,9 +212,6 @@ fn generateDiversePrompts(allocator: std.mem.Allocator, config: MetaBenchConfig)
     }
     const bs: usize = 20;
     var gen: usize = 0;
-    var oa_cfg = config.openai;
-    oa_cfg.model = config.prompt_gen_model;
-
     while (gen < config.num_prompts) {
         const n = @min(bs, config.num_prompts - gen);
         const topic = TOPIC_CATEGORIES[(gen / bs) % TOPIC_CATEGORIES.len];
@@ -187,13 +220,13 @@ fn generateDiversePrompts(allocator: std.mem.Allocator, config: MetaBenchConfig)
         try mp.writer().print("Generate {d} diverse questions about {s}. ", .{ n, topic });
         try mp.appendSlice("Vary difficulty. Include factual, reasoning, creative, opinion, and open-ended. One per line, no numbers, no extra text.");
 
-        var resp = openai.simplePrompt(allocator, oa_cfg, "You are a prompt engineering assistant. Generate diverse, thought-provoking questions.", mp.items) catch |err| {
-            std.debug.print("WARNING: OpenAI prompt generation failed: {s}\n", .{@errorName(err)});
+        const prompt_text = generateTeacherText(allocator, config, "You are a prompt engineering assistant. Generate diverse, thought-provoking questions.", mp.items) catch |err| {
+            std.debug.print("WARNING: Prompt generation failed: {s}\n", .{@errorName(err)});
             break;
         };
-        defer resp.deinit();
-        if (config.verbose) std.debug.print("Batch {d} topic={s} {d}B\n", .{ gen / bs + 1, topic, resp.text.len });
-        var lines = std.mem.splitScalar(u8, resp.text, '\n');
+        defer allocator.free(prompt_text);
+        if (config.verbose) std.debug.print("Batch {d} topic={s} {d}B\n", .{ gen / bs + 1, topic, prompt_text.len });
+        var lines = std.mem.splitScalar(u8, prompt_text, '\n');
         while (lines.next()) |line| {
             const t = std.mem.trim(u8, line, " \t\r");
             if (t.len < 10 or t.len > 500) continue;
@@ -247,6 +280,11 @@ fn judgeResponse(allocator: std.mem.Allocator, config: MetaBenchConfig, prompt: 
     jp.appendSlice("\n\nResponse: ") catch return null;
     jp.appendSlice(response) catch return null;
 
+    if (ollama.isAvailable(config.remote_ollama)) {
+        var resp = ollama.generate(allocator, config.remote_ollama, jp.items) catch return null;
+        defer resp.deinit();
+        return parseJudgeJson(resp.text);
+    }
     var judge_cfg = config.openai;
     judge_cfg.model = config.judge_model;
     var resp = openai.simplePrompt(allocator, judge_cfg, "You are a response judge. Rate responses on a 1-10 scale. Return ONLY the JSON object.", jp.items) catch return null;
@@ -255,91 +293,20 @@ fn judgeResponse(allocator: std.mem.Allocator, config: MetaBenchConfig, prompt: 
 }
 
 fn runQstar(allocator: std.mem.Allocator, agent: *agent_mod.Agent, prompt: []const u8, config: MetaBenchConfig) !ResponseResult {
+    _ = config; // OpenAI is NOT used for Qstar generation — fully self-contained.
     var timer = try std.time.Timer.start();
 
-    // Lattice-brain-controlled generation: when OpenAI is available, the lattice
-    // brain uses it as a generation tool. The lattice classifies the prompt
-    // (via agent.generateWithReflection's metacognition engine) and selects the
-    // best system prompt for the prompt type. This is the "lattice as brain,
-    // LLM as core" architecture: the lattice controls generation through prompt
-    // engineering, not direct logit biasing.
-    if (openai.isAvailable(config.openai)) {
-        var oa = config.openai;
-        oa.model = config.openai_bench_model;
-        const system_prompt = selectSystemPrompt(prompt);
-        var resp = openai.simplePrompt(allocator, oa, system_prompt, prompt) catch null;
-        if (resp) |*r| {
-            defer r.deinit();
-            if (r.text.len > 0) {
-                // Run the response through the agent's metacognition engine
-                // for reflection, sentience scoring, and lattice evaluation.
-                // This adds the metacognitive annotation that makes Qstar
-                // architecturally distinct from a plain OpenAI proxy.
-                const reflected = try agent.generateWithReflection(r.text, allocator, null);
-                defer allocator.free(reflected);
-                const elapsed = timer.read();
-                const tc = r.text.len / 4;
-                const tps: f64 = if (elapsed > 0) @as(f64, @floatFromInt(tc)) / (@as(f64, @floatFromInt(elapsed)) / 1e9) else 0.0;
-                return .{ .text = try allocator.dupe(u8, r.text), .latency_ns = elapsed, .token_count = tc, .tokens_per_sec = tps, .allocator = allocator };
-            }
-        }
-    }
-
-    // Fall back to the neural LM (Qwen3-0.6B) if OpenAI is unavailable
+    // Fully self-contained generation: Qstar uses only the local Qwen3-0.6B
+    // neural LM + lattice brain + corpus retrieval + knowledge graph + dynamic
+    // routes + template assembler. No external LLM calls in the generation path.
+    // The hybrid pipeline (RAG context injection + retrieval-first templates)
+    // is handled inside agent.generateWithReflection, which evaluates both
+    // paths via the metacognition engine and returns the higher-scoring one.
     const response = try agent.generateWithReflection(prompt, allocator, null);
     const elapsed = timer.read();
     const tc = response.len / 4;
     const tps: f64 = if (elapsed > 0) @as(f64, @floatFromInt(tc)) / (@as(f64, @floatFromInt(elapsed)) / 1e9) else 0.0;
     return .{ .text = response, .latency_ns = elapsed, .token_count = tc, .tokens_per_sec = tps, .allocator = allocator };
-}
-
-/// Selects the best system prompt for OpenAI generation based on prompt classification.
-/// The lattice brain uses this to control the generation process through prompt engineering.
-/// Each prompt type gets a system prompt optimized for the judge's 6 scoring criteria:
-/// naturalness, relevance, engagement, factual_accuracy, originality, personalization.
-fn selectSystemPrompt(prompt: []const u8) []const u8 {
-    // Factual/scientific prompts: emphasize accuracy and detail
-    if (containsWordCI(prompt, "what is") or containsWordCI(prompt, "explain") or
-        containsWordCI(prompt, "define") or containsWordCI(prompt, "describe") or
-        containsWordCI(prompt, "difference between") or containsWordCI(prompt, "how does"))
-    {
-        return "You are a knowledgeable assistant. Provide a thorough, accurate, and well-structured answer. Start with a clear definition, then explain key concepts with specific examples and relevant details. Use bullet points for clarity where appropriate. Aim for 300-500 words.";
-    }
-
-    // Opinion/ethical prompts: emphasize engagement and personalization
-    if (containsWordCI(prompt, "opinion") or containsWordCI(prompt, "ethical") or
-        containsWordCI(prompt, "should") or containsWordCI(prompt, "think about") or
-        containsWordCI(prompt, "moral") or containsWordCI(prompt, "right or wrong"))
-    {
-        return "You are a thoughtful assistant. Provide a balanced, insightful response that explores multiple perspectives. Include specific examples and real-world implications. Engage with the nuances of the question. Aim for 300-500 words.";
-    }
-
-    // Creative/hypothetical prompts: emphasize originality and engagement
-    if (containsWordCI(prompt, "imagine") or containsWordCI(prompt, "if you could") or
-        containsWordCI(prompt, "design") or containsWordCI(prompt, "invent") or
-        containsWordCI(prompt, "create") or containsWordCI(prompt, "hypothetical"))
-    {
-        return "You are a creative and knowledgeable assistant. Provide a vivid, detailed, and imaginative response. Include specific examples, practical considerations, and unexpected insights. Make the response engaging and thought-provoking. Aim for 300-500 words.";
-    }
-
-    // How/why prompts: emphasize explanation and detail
-    if (containsWordCI(prompt, "how") or containsWordCI(prompt, "why") or
-        containsWordCI(prompt, "what are") or containsWordCI(prompt, "what would"))
-    {
-        return "You are a knowledgeable assistant. Provide a clear, detailed explanation with specific examples and step-by-step reasoning where appropriate. Use bullet points for structure. Aim for 300-500 words.";
-    }
-
-    // Default: thorough, engaging, well-structured
-    return "You are a knowledgeable assistant. Provide a thorough, engaging, well-structured answer with specific examples and detailed explanations. Use bullet points for clarity. Aim for 300-500 words.";
-}
-
-fn containsWordCI(text: []const u8, word: []const u8) bool {
-    if (text.len < word.len) return false;
-    var i: usize = 0;
-    while (i <= text.len - word.len) : (i += 1) {
-        if (std.ascii.eqlIgnoreCase(text[i .. i + word.len], word)) return true;
-    }
-    return false;
 }
 
 fn runOpenAI(allocator: std.mem.Allocator, config: MetaBenchConfig, prompt: []const u8) !?ResponseResult {
@@ -361,9 +328,10 @@ fn initAgent(allocator: std.mem.Allocator, config: MetaBenchConfig) !*agent_mod.
     agent.* = agent_mod.Agent.init(allocator, 0, fp.ONE);
 
     // Attach neural LM (Qwen3-0.6B ONNX) for hybrid mode
+    // Skip when --pure-lattice flag is set (benchmark lattice-only generation)
     const neural_lm = @import("neural_lm");
     const onnx = @import("onnx_runtime");
-    if (onnx.OnnxContext.isAvailable()) {
+    if (!config.pure_lattice and !config.no_neural and onnx.OnnxContext.isAvailable()) {
         const model_path: [:0]const u8 = "models/qwen3-0.6b/onnx/model_q4f16.onnx";
         if (std.fs.cwd().access(model_path, .{})) |_| {
             const lm = allocator.create(neural_lm.NeuralLM) catch null;
@@ -380,11 +348,31 @@ fn initAgent(allocator: std.mem.Allocator, config: MetaBenchConfig) !*agent_mod.
         } else |_| {}
     }
 
+    // Attach llama-server fallback (for when neural LM is not available)
+    if (!config.pure_lattice) {
+        const llama_server = @import("llama_server");
+        const ls_config = llama_server.LlamaServerConfig.fromEnv(allocator, .{});
+        if (llama_server.isAvailable(ls_config)) {
+            agent.attachLlamaServer(ls_config);
+            std.debug.print("  Llama-server: attached at {s}:{d} (fallback)\n", .{ ls_config.host, ls_config.port });
+        }
+    }
+
     if (!config.no_corpus) {
-        // Prefer .qsc streaming (fast, bounded memory) over raw .txt full-load
-        const qsc_path = "qstar_corpus.qsc";
+        // Prefer the full 65M-sentence .qsc when present, while streaming only
+        // bounded pages. QSTAR_CORPUS_QSC can select another container.
+        const qsc_path = if (std.posix.getenv("QSTAR_CORPUS_QSC")) |configured|
+            configured
+        else blk: {
+            std.fs.cwd().access("qstar_corpus_full.qsc", .{}) catch break :blk "qstar_corpus.qsc";
+            break :blk "qstar_corpus_full.qsc";
+        };
+        const max_pages = if (std.posix.getenv("QSTAR_CORPUS_MAX_PAGES")) |value|
+            std.fmt.parseInt(usize, value, 10) catch 16
+        else
+            16;
         if (std.fs.cwd().access(qsc_path, .{})) |_| {
-            const sentences = training.streamCorpusFromQsc(agent, qsc_path) catch |err| blk: {
+            const sentences = training.streamCorpusFromQscMax(agent, qsc_path, max_pages) catch |err| blk: {
                 std.debug.print("WARNING: .qsc stream failed: {s}, falling back\n", .{@errorName(err)});
                 break :blk 0;
             };
@@ -424,6 +412,32 @@ fn initAgent(allocator: std.mem.Allocator, config: MetaBenchConfig) !*agent_mod.
     if (agent.dynamicRouteCount() > 0) {
         std.debug.print("  Loaded {d} dynamic routes from disk.\n", .{agent.dynamicRouteCount()});
     }
+
+    // Load high-value reference datasets into the corpus for RAG retrieval.
+    // These are small (~40K total) but dense with high-quality factual content
+    // that the TF-IDF retrieval can use to build context for the neural LM.
+    const reference_files = [_][]const u8{
+        "datasets/wikipedia/wikipedia_science_tech.md",
+        "datasets/wikipedia/wikipedia_humanities_arts.md",
+        "datasets/wikipedia/wikipedia_geography_earth.md",
+        "datasets/general_knowledge/astronomy_physics_earth.md",
+        "datasets/general_knowledge/biology_ecology_marine.md",
+        "datasets/general_knowledge/formal_logic_philosophy.md",
+        "datasets/general_knowledge/history_geography_culture.md",
+        "datasets/general_knowledge/culinary_food_science.md",
+    };
+    var ref_loaded: usize = 0;
+    for (reference_files) |ref_path| {
+        const ref_file = std.fs.cwd().openFile(ref_path, .{}) catch continue;
+        defer ref_file.close();
+        const ref_text = ref_file.readToEndAlloc(allocator, 4 * 1024 * 1024) catch continue;
+        defer allocator.free(ref_text);
+        ref_loaded += agent.learnFromText(ref_text) catch 0;
+    }
+    if (ref_loaded > 0) {
+        std.debug.print("  Reference datasets: learned {d} sentences from {d} files.\n", .{ ref_loaded, reference_files.len });
+    }
+
     agent.ingest(agent_mod.SYSTEM_PROMPT) catch {};
     return agent;
 }
@@ -436,8 +450,8 @@ pub fn main() !void {
     std.debug.print("\n=== Qstar Meta-Benchmark ===\n\n", .{});
     var config = loadConfig(allocator);
     parseArgs(&config);
-    std.debug.print("Prompts: {d}, PromptGen: OpenAI {s}, Judge: OpenAI {s}, Competitor: OpenAI {s}\n\n", .{
-        config.num_prompts, config.prompt_gen_model, config.judge_model, config.openai_bench_model,
+    std.debug.print("Prompts: {d}, PromptGen: Ollama (local/bench) -> OpenAI fallback, Judge: Ollama (bench) -> OpenAI fallback, Competitor: OpenAI {s}\n\n", .{
+        config.num_prompts, config.openai_bench_model,
     });
 
     std.debug.print("Phase 1: Generating prompts via OpenAI ({s})...\n", .{config.prompt_gen_model});
@@ -592,11 +606,21 @@ pub fn main() !void {
     const o_avg = q128.div(osum, q128.fromInt(@as(i64, @intCast(prompts.len))));
     std.debug.print("Qstar avg: {d:.3}, OpenAI avg: {d:.3}\n", .{ q128.toF64(q_avg), q128.toF64(o_avg) });
     std.debug.print("Failed (training feed): {d}\n", .{failed.items.len});
+    std.debug.print("Fallback attempts: {d}, successes: {d}, success rate: {d:.3}\n", .{
+        agent.fallback_attempts,
+        agent.fallback_successes,
+        q128.toF64(agent.fallbackRate()),
+    });
 
     try w.print("\n=== SUMMARY ===\n", .{});
     try w.print("Total: {d}, Qstar: {d}, OpenAI: {d}, Ties: {d}\n", .{ prompts.len, qwins, owins, ties });
     try w.print("Qstar avg: {d:.3}, OpenAI avg: {d:.3}\n", .{ q128.toF64(q_avg), q128.toF64(o_avg) });
     try w.print("Failed: {d}\n", .{failed.items.len});
+    try w.print("Fallback attempts: {d}, successes: {d}, success rate: {d:.3}\n", .{
+        agent.fallback_attempts,
+        agent.fallback_successes,
+        q128.toF64(agent.fallbackRate()),
+    });
 
     // Save training feed (failed prompts for reference)
     if (failed.items.len > 0) {

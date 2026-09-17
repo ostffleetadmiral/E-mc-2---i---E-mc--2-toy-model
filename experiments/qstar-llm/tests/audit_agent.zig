@@ -22,20 +22,20 @@ pub fn main() !void {
         defer ag.deinit();
 
         const state_bytes = ag.stateSizeBytes();
-        const expected = 421 * 7 * @sizeOf(i64); // E0_NODE_COUNT * CHANNEL_COUNT * i64
+        const expected = 421 * 8 * @sizeOf(i128); // E0_NODE_COUNT * CHANNEL_COUNT * i128
         std.debug.print("  state size: {d} bytes (expected {d})\n", .{ state_bytes, expected });
         if (state_bytes == expected) {
-            std.debug.print("  PASS: state size matches E0_NODE_COUNT * CHANNEL_COUNT * i64\n", .{});
+            std.debug.print("  PASS: state size matches E0_NODE_COUNT * CHANNEL_COUNT * i128\n", .{});
         } else {
             std.debug.print("  FAIL: state size mismatch\n", .{});
             ok = false;
         }
 
-        // Verify state is 23,576 bytes (421 * 7 * 8)
-        if (state_bytes == 23576) {
-            std.debug.print("  PASS: state size = 23,576 bytes (fits in L1 cache)\n", .{});
+        // Verify state is 53,888 bytes (421 * 8 * 16)
+        if (state_bytes == 53888) {
+            std.debug.print("  PASS: state size = 53,888 bytes\n", .{});
         } else {
-            std.debug.print("  FAIL: state size should be 23,576 bytes\n", .{});
+            std.debug.print("  FAIL: state size should be 53,888 bytes\n", .{});
             ok = false;
         }
     }
@@ -373,7 +373,10 @@ pub fn main() !void {
         var any_nonzero = false;
         for (acts) |node| {
             for (node) |ch| {
-                if (ch != 0) { any_nonzero = true; break; }
+                if (ch != 0) {
+                    any_nonzero = true;
+                    break;
+                }
             }
             if (any_nonzero) break;
         }
@@ -465,7 +468,10 @@ pub fn main() !void {
         for (acts) |node| {
             var node_active = false;
             for (node) |ch| {
-                if (ch != 0) { node_active = true; break; }
+                if (ch != 0) {
+                    node_active = true;
+                    break;
+                }
             }
             if (node_active) active_nodes += 1;
         }

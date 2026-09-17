@@ -47,12 +47,17 @@ Interactive multi-turn chat with the agent.
 ```bash
 zig build cli -- chat
 zig build cli -- chat "Hello, what are you?"
+zig build cli -- chat --qsc qstar_corpus_full.qsc --max-pages 100
+zig build cli -- chat --txt qstar_corpus.txt
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--model <name>` | `qwen2.5:3b` | Ollama model |
-| `--corpus <path>` | `qstar_corpus.txt` | Corpus file to load |
+| `--qsc <path>` | `qstar_corpus_full.qsc` | Compressed corpus to stream (all pages by default) |
+| `--txt <path>` | — | Raw text corpus (overrides `--qsc`) |
+| `--max-pages <N>` | 0 (all) | Limit .qsc pages loaded |
+| `--corpus <path>` | `qstar_corpus_full.qsc` | Corpus file (alias for `--qsc`/`--txt`) |
 | `--vocab <spec>` | auto | Ramsey vocab specifier |
 | `--level <N>` | 0 | Lattice level |
 | `--autoscale` | off | Dynamic lattice auto-tuning |
@@ -79,6 +84,7 @@ Self-training using Ollama or OpenAI as teacher.
 ```bash
 zig build cli -- train --model qwen2.5:3b --corpus qstar_corpus.txt
 zig build cli -- train --teacher openai --openai-model gpt-4o --limit 3
+zig build cli -- train --hybrid --corpus qstar_corpus.txt
 ```
 
 | Flag | Default | Description |
@@ -91,6 +97,7 @@ zig build cli -- train --teacher openai --openai-model gpt-4o --limit 3
 | `--teacher <name>` | `auto` | Teacher: `ollama`, `openai`, or `auto` (OpenAI if key present, else Ollama) |
 | `--openai-model <name>` | `gpt-4o` | OpenAI teacher model |
 | `--openai-key <key>` | `.env` | OpenAI API key (overrides `OPENAI_API_KEY` from `.env`) |
+| `--hybrid` | off | Hybrid training: OpenAI semantic for factual/technical, Ollama for creative/chitchat |
 
 #### `.env` Setup
 
@@ -180,6 +187,7 @@ zig build cli -- corpus build qstar_corpus.txt qstar_corpus.qsc --page-size 6553
 zig build cli -- corpus verify qstar_corpus.qsc
 zig build cli -- corpus info qstar_corpus.qsc
 zig build cli -- corpus stream qstar_corpus.qsc --limit 10
+zig build cli -- corpus stream qstar_corpus_full.qsc --out rebuilt_corpus.txt
 ```
 
 | Subcommand | Description |
@@ -187,9 +195,11 @@ zig build cli -- corpus stream qstar_corpus.qsc --limit 10
 | `build <raw.txt> <out.qsc> [--page-size N]` | Build .qsc container (gzip pages + CRC32 + page table) |
 | `verify <corpus.qsc>` | Read every page, validate checksums + decompression |
 | `info <corpus.qsc>` | Show magic, version, sizes, compression ratio, checksum status |
-| `stream <corpus.qsc> [--limit N]` | Stream lines with on-demand page decompression |
+| `stream <corpus.qsc> [--limit N] [--out path]` | Stream lines with on-demand page decompression; `--out` writes to a file |
 
 The `.qsc` container stores the corpus as gzip-compressed pages with a self-describing header (magic `QSC1`, version, page table). Runtime decompresses pages on demand through an LRU cache, allowing a larger effective corpus within the 500 MB raw `learnFromText` cap. `loadCorpusFromFile` auto-detects `.qsc` containers by magic and streams pages lazily; raw `.txt` files load as before.
+
+**Persistence note:** all corpus saves are delta-appends — session-learned sentences are appended to the `.txt` corpus (or to a `<base>.learned.txt` sidecar when the corpus is a `.qsc` container). The sidecar is auto-loaded by `chat`/`run`/`serve`. The on-disk corpus is never truncated.
 
 ### `turing-test`
 
@@ -298,7 +308,11 @@ Display version information.
 zig build cli -- version
 ```
 
-Output: `Qstar v3.5.0 (Pure Zig, Q64.64 Fixed-Point, 421 E0 Nodes, 7 Channels)`
+Output:
+```
+Qstar v0.0.2.0 (Pure Zig, Q128.128 Fixed-Point, 421 E0 Nodes, 8 Channels)
+Framework: E=mc²-i-E=mc⁻² (toy-model) | C=2 | 1/8 aperture | 7-defect
+```
 
 ### `competitive-bench`
 
@@ -339,6 +353,76 @@ zig build competitive-bench -- qwen2.5:3b --judge-host 127.0.0.1 --judge-port 11
 
 # Fast mode (no judge, no opponents, 10 prompts)
 zig build competitive-bench -- --fast --no-ollama
+```
+
+---
+
+## Additional CLI Commands
+
+### `train-all`
+
+Train on `datasets/` then the entire hardware directory tree (`../`); walker skips build/vendor/dep dirs, archives included per policy.
+
+```bash
+zig build cli -- train-all [--corpus-file path] [--level 0..7] [--autoscale] [--skip-corpus-load]
+```
+
+### `convert-corpus`
+
+Convert a raw `.txt` corpus into a compressed `.qsc` container (gzip pages, LRU-cached streaming).
+
+```bash
+zig build cli -- convert-corpus [input.txt] [output.qsc]
+# defaults: qstar_corpus.txt → qstar_corpus.qsc
+```
+
+### `train-metacog`
+
+Metacognitive corpus training with an OpenAI teacher. Requires `OPENAI_API_KEY` in `.env`.
+
+```bash
+zig build cli -- train-metacog [--corpus-dir .] [--corpus-file qstar_corpus.txt] [--openai-model gpt-4o-mini] [--level 0..7] [--skip-corpus-load]
+```
+
+### `diagnose`
+
+Deterministic lattice diagnostic (seed 42): loads tokenizer, builds bigram model, reports state.
+
+```bash
+zig build cli -- diagnose [prompt] [--level 0..7] [--cycles 64]
+```
+
+### `list` / `models`
+
+Ollama-compatible model listing. Prints `qstar latest` — the lattice is the model.
+
+```bash
+zig build cli -- list
+zig build cli -- models
+```
+
+### `pull`
+
+Ollama-compatible pull. Self-contained — always succeeds without network access.
+
+```bash
+zig build cli -- pull <model>
+```
+
+### `push`
+
+Push the quine edition (`zig-out/universe.html`) to a target URL or peer. Virtual mode — verifies the payload exists.
+
+```bash
+zig build cli -- push <target_url_or_peer>
+```
+
+### `framework-audit`
+
+Run E=mc²-i-E=mc⁻² toy-model verification: `hw_bridge.verifyAllFrameworkPredictions()` (9 predictions) + `lattice.verifyAllFramework()` (6 checks), then prints framework constants, generative chain, scaling chain, and the 36-claim classification.
+
+```bash
+zig build cli -- framework-audit
 ```
 
 ---

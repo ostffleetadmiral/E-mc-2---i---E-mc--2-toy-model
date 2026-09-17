@@ -1,68 +1,33 @@
 Qstar Meta-Benchmark Results
 ===
 
-[1] What is the difference between mass and weight?
-  Q(144ch,0.483): 
-Okay, so I was just listening to someone explaining about mass and weight. Let me try to recall what that difference is.
+[1] What is the law of conservation of mass, and how does it apply to chemical reactions?
+  Q(774ch,0.750): - Law: In a closed system, mass is neither created nor destroyed during physical or chemical changes. The total mass remains constant.
 
-Hmm... right! Mass is
+- In chemical reactions:
+  - Atoms are rearranged, not created o
   O(0.000)
 
-[2] How does Newton's second law of motion relate to everyday activities, like driving a car?
-  Q(151ch,0.617): 
-Okay, so I need to figure out how Newton's second law of motion relates everyday things like driving a car. Let me start by recalling what exactly the
+[2] How does the concept of time differ in classical physics compared to relativity?
+  Q(3160ch,0.550): If genuine time travel (especially to the past) were possible, several pillars of physics would need rethinking:
+
+- Causality and special relativity: Standard relativity forbids causal loops via super
   O(0.000)
 
-[3] If you could design an experiment to test the theory of relativity, what would it entail?
-  Q(152ch,0.517): 
-Okay, so I need to figure out how an experiment could test the theory of relativity. Let me start by recalling what we know about relativistic theories
+[3] Imagine if gravity was significantly weaker on Earth; how would our daily lives and the structure of our society change?
+  Q(2629ch,0.750): Short answer: everything that’s held together or on track by gravity stops being so, instantly. Locally you’d feel weightless; globally all orbits turn into straight‑line fly‑offs, and self‑
   O(0.000)
 
-[4] Why is the concept of entropy important in understanding the direction of time?
-  Q(164ch,0.417): 
-Okay, so the user is asking about why entropy matters in understanding time's direction. Let me start by recalling what I know.
-
-Entropy relates to the measurement
+[4] In your opinion, which scientific discovery has had the most profound impact on human civilization, and why?
+  Q(4037ch,0.483): The Hellenistic era (after Alexander the Great, c. 323–30 BCE) created a connected, cosmopolitan zone from the Mediterranean to Central Asia. Its impact was broad but uneven, blending Greek elements
   O(0.000)
 
-[5] What are the implications of quantum entanglement for our understanding of information and communication?
-  Q(167ch,0.367): 
-Okay, so people are talking about how quantum entanglement affects information and communication. Let me get this straight.
-
-First off the basics: Entangled particles
-  O(0.000)
-
-[6] In your opinion, how could advancements in physics change our approach to climate change?
-  Q(162ch,0.417): 
-Okay, so I need to figure out how physics advancements could change our approach to climate change. Let me start by recalling what we know about climate science.
-  O(0.000)
-
-[7] What are the similarities and differences between classical mechanics and quantum mechanics?
-  Q(177ch,0.550): 
-Okay, so I need to compare the similarities and differences between classical mechanics and quantum mechanics. Let me start by recalling what each of these theories is about.
-
-
-  O(0.000)
-
-[8] How does dark matter influence the structure of the universe?
-  Q(140ch,0.350): 
-Okay, so I need to figure out how dark matter influences the structure of the universe. Hmm... first, what's darkness? Well,-dark matter is
-  O(0.000)
-
-[9] If you could communicate with an alien civilization that used a different understanding of physics, what questions would you ask them?
-  Q(155ch,0.600): 
-Okay, so I need to imagine what questions a civilization using different physics might ask. Let me start by thinking about the types of science we do now:
-  O(0.000)
-
-[10] In what ways do you think the concept of space-time challenges our traditional views of the universe?
-  Q(150ch,0.550): 
-Okay, so the user is asking how space-time challenges our traditional views of the universe. Let me break this down.
-
-First, I should address that we
+[5] If you could create a new fundamental force of nature, what would it be, and how would it interact with existing forces?
+  Q(466ch,0.300): Regarding could and create and fundamental: this is an area where my current training corpus has limited depth. My lattice reasoning engine can process the question, but without sufficient domain-spec
   O(0.000)
 
 
 === SUMMARY ===
-Total: 10, Qstar: 0, OpenAI: 0, Ties: 0
-Qstar avg: 0.487, OpenAI avg: 0.000
+Total: 5, Qstar: 0, OpenAI: 0, Ties: 0
+Qstar avg: 0.567, OpenAI avg: 0.000
 Failed: 0

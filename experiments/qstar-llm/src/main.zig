@@ -82,7 +82,7 @@ const SEED_CORPUS =
     \\Neighbor propagation spreads activation along lattice edges with weighted connections.
     \\
     \\Fixed-point arithmetic eliminates floating-point rounding drift across different hardware.
-    \\The Q32.32 format represents values as 64-bit integers with 32 fractional bits.
+    \\The Q128.128 format represents values as 256-bit integers with 128 fractional bits.
     \\Integer-only computation guarantees deterministic execution on any processor architecture.
     \\Fixed-point multiplication requires careful shifting to maintain precision.
     \\The golden ratio appears in nature art and architecture as a proportion of harmony.
@@ -362,18 +362,40 @@ pub fn main() !void {
             agent.attachNeuralLM(lm);
         }
 
+        // Load llama-server fallback (for when neural LM is not available)
+        // Checks LLAMA_SERVER_HOST/PORT env vars, defaults to localhost:8080
+        const llama_server = @import("llama_server");
+        const ls_config = llama_server.LlamaServerConfig.fromEnv(allocator, .{});
+        if (llama_server.isAvailable(ls_config)) {
+            agent.attachLlamaServer(ls_config);
+            std.debug.print("Llama-server: attached at {s}:{d} (fallback mode)\n", .{ ls_config.host, ls_config.port });
+        }
+
         // Load trained corpus — prefer .qsc streaming (holo VFS) for speed
         // .qsc: compressed pages, streamed through learnFromText with bounded memory
         // .txt: legacy full-load (slow, 178MB into memory)
-        const qsc_path = "qstar_corpus.qsc";
+        const qsc_path = if (std.posix.getenv("QSTAR_CORPUS_QSC")) |configured|
+            configured
+        else blk: {
+            std.fs.cwd().access("qstar_corpus_full.qsc", .{}) catch break :blk "qstar_corpus.qsc";
+            break :blk "qstar_corpus_full.qsc";
+        };
+        const max_pages = if (std.posix.getenv("QSTAR_CORPUS_MAX_PAGES")) |value|
+            std.fmt.parseInt(usize, value, 10) catch 0
+        else
+            0;
         const txt_path = "qstar_corpus.txt";
         const t0 = std.time.milliTimestamp();
         const loaded = blk: {
             if (std.fs.cwd().access(qsc_path, .{})) |_| {
                 // .qsc exists — stream it (fast, bounded memory)
-                const sentences = training.streamCorpusFromQsc(&agent, qsc_path) catch 0;
+                const sentences = training.streamCorpusFromQscMax(&agent, qsc_path, max_pages) catch 0;
+                const sidecar_bytes = training.loadCorpusSidecar(&agent, qsc_path) catch 0;
                 const t1 = std.time.milliTimestamp();
                 std.debug.print("Corpus: streamed {d} sentences from {s} in {d}ms\n", .{ sentences, qsc_path, t1 - t0 });
+                if (sidecar_bytes > 0) {
+                    std.debug.print("Corpus: +{d} learned bytes from sidecar\n", .{sidecar_bytes});
+                }
                 break :blk sentences;
             } else |_| {
                 // No .qsc — try raw .txt (legacy full-load)
@@ -573,10 +595,12 @@ pub fn main() !void {
         try runQuineCommand(allocator, args);
     } else if (std.mem.eql(u8, cmd, "collapse")) {
         try runCollapseCommand(allocator, args);
+    } else if (std.mem.eql(u8, cmd, "quantum")) {
+        try runQuantumCmd(allocator, args);
     } else if (std.mem.eql(u8, cmd, "framework-audit")) {
         try runFrameworkAuditCmd(allocator, args);
     } else if (std.mem.eql(u8, cmd, "version") or std.mem.eql(u8, cmd, "-v") or std.mem.eql(u8, cmd, "--version")) {
-        std.debug.print("Qstar v3.1.0 (Pure Zig, Q128.128 Fixed-Point, 421 E0 Nodes, 8 Channels)\n", .{});
+        std.debug.print("Qstar v0.0.2.0 (Pure Zig, Q128.128 Fixed-Point, 421 E0 Nodes, 8 Channels)\n", .{});
         std.debug.print("Framework: E=mc²-i-E=mc⁻² (toy-model) | C=2 | 1/8 aperture | 7-defect\n", .{});
     } else {
         printHelp();
@@ -766,6 +790,9 @@ fn runInteractiveChat(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     var vocab_spec: ?[]const u8 = null;
     var autoscale: bool = false;
     var use_reflection: bool = true;
+    var corpus_file: []const u8 = "qstar_corpus_full.qsc";
+    var use_qsc: bool = true;
+    var max_pages: usize = 0;
 
     var arg_i: usize = 2;
     while (arg_i < args.len) : (arg_i += 1) {
@@ -779,6 +806,21 @@ fn runInteractiveChat(allocator: std.mem.Allocator, args: [][:0]u8) !void {
             autoscale = true;
         } else if (std.mem.eql(u8, args[arg_i], "--no-reflection")) {
             use_reflection = false;
+        } else if (std.mem.eql(u8, args[arg_i], "--corpus") and arg_i + 1 < args.len) {
+            corpus_file = args[arg_i + 1];
+            use_qsc = false;
+            arg_i += 1;
+        } else if (std.mem.eql(u8, args[arg_i], "--txt") and arg_i + 1 < args.len) {
+            corpus_file = args[arg_i + 1];
+            use_qsc = false;
+            arg_i += 1;
+        } else if (std.mem.eql(u8, args[arg_i], "--qsc") and arg_i + 1 < args.len) {
+            corpus_file = args[arg_i + 1];
+            use_qsc = true;
+            arg_i += 1;
+        } else if (std.mem.eql(u8, args[arg_i], "--max-pages") and arg_i + 1 < args.len) {
+            max_pages = std.fmt.parseInt(usize, args[arg_i + 1], 10) catch 0;
+            arg_i += 1;
         }
     }
 
@@ -786,19 +828,37 @@ fn runInteractiveChat(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     defer agent.deinit();
 
     // Load trained corpus if available
-    if (std.fs.cwd().openFile("qstar_corpus.txt", .{})) |file| {
-        file.close();
-        const loaded = training.loadCorpusFromFile(&agent, "qstar_corpus.txt") catch 0;
-        if (autoscale and loaded > 0) {
-            var scaler = agent_mod.Autoscaler.init(level, .{});
-            const recommended = scaler.simulateCorpus(agent.getCorpusSentenceCount() * 15, loaded);
-            if (recommended != level) {
-                level = recommended;
-                agent.setLevel(level);
-                try stdout.print("[Autoscaler] Scaled lattice to s={d} ({s})\n", .{ level, scaler.currentVocab().name });
-            }
+    var loaded: usize = 0;
+    if (use_qsc) {
+        // Stream .qsc compressed corpus with bounded memory
+        const sentences = training.streamCorpusFromQscMax(&agent, corpus_file, max_pages) catch 0;
+        loaded = sentences;
+        if (sentences > 0) {
+            try stdout.print("[Corpus] Streamed {d} sentences from {s}\n", .{ sentences, corpus_file });
         }
-    } else |_| {}
+        const sidecar_bytes = training.loadCorpusSidecar(&agent, corpus_file) catch 0;
+        if (sidecar_bytes > 0) {
+            try stdout.print("[Corpus] +{d} learned bytes from sidecar\n", .{sidecar_bytes});
+        }
+    } else if (std.fs.cwd().openFile(corpus_file, .{})) |file| {
+        file.close();
+        loaded = training.loadCorpusFromFile(&agent, corpus_file) catch 0;
+        if (loaded > 0) {
+            try stdout.print("[Corpus] Loaded {d} bytes from {s}\n", .{ loaded, corpus_file });
+        }
+    } else |_| {
+        try stdout.print("[Corpus] No corpus file found at {s}\n", .{corpus_file});
+    }
+
+    if (autoscale and loaded > 0) {
+        var scaler = agent_mod.Autoscaler.init(level, .{});
+        const recommended = scaler.simulateCorpus(agent.getCorpusSentenceCount() * 15, loaded);
+        if (recommended != level) {
+            level = recommended;
+            agent.setLevel(level);
+            try stdout.print("[Autoscaler] Scaled lattice to s={d} ({s})\n", .{ level, scaler.currentVocab().name });
+        }
+    }
 
     if (loadConfiguredTokenizer(allocator, vocab_spec, level)) |tok| {
         agent.attachTokenizer(tok);
@@ -808,13 +868,16 @@ fn runInteractiveChat(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     _ = agent.loadKnowledgeGraph("qstar_kg.bin") catch 0;
     _ = agent.loadDynamicRoutes("datasets/dynamic_routes.bin") catch 0;
 
-    // Start background corpus learning — streams the full corpus, extracts
+    // Start background corpus learning — streams the corpus, extracts
     // word definitions, and builds logical routes via trivium + quadrivium
-    agent.startCorpusLearning("qstar_corpus.txt") catch |err| {
-        try stdout.print("  [CorpusLearner] Failed to start: {s}\n", .{@errorName(err)});
-    };
-    if (agent.corpus_learner != null) {
-        try stdout.print("  [CorpusLearner] Background learning active — scanning corpus for definitions\n", .{});
+    // Skip for .qsc files since they're already loaded via streaming
+    if (!use_qsc) {
+        agent.startCorpusLearning(corpus_file) catch |err| {
+            try stdout.print("  [CorpusLearner] Failed to start: {s}\n", .{@errorName(err)});
+        };
+        if (agent.corpus_learner != null) {
+            try stdout.print("  [CorpusLearner] Background learning active — scanning corpus for definitions\n", .{});
+        }
     }
 
     // Attach tool registry so agent can autonomously invoke tools during inference
@@ -1485,14 +1548,16 @@ fn printHelp() void {
         \\  qstar collapse simulate         Simulate civilization collapse (degrade transports)
         \\  qstar collapse status           Show current transport fallback level
         \\  qstar collapse recover          Restore all transport modes from collapse
+        \\  qstar collapse persist <file>   Run preservation pipeline: RS shards + Shamir shares + QR portals
         \\
         \\Training & Knowledge Commands:
-        \\  qstar train [options]           Self-train using Ollama as teacher
+        \\  qstar train [options]           Self-train using Ollama or OpenAI as teacher (--teacher, --hybrid)
         \\  qstar train-internet [options]  Train by fetching Wikipedia articles + Ollama augmentation
         \\  qstar ingest-corpus <dir>       Directly ingest .md/.txt/.tex documents into corpus
         \\  qstar enrich-corpus <dir>       Ollama-enriched corpus from documents
         \\  qstar train-corpus [options]    Full pipeline: ingest + Ollama enrich + OpenAI reinforce
         \\  qstar train-all [options]        Ingest from datasets/ + entire hardware dir (skips build artifacts)
+        \\  qstar train-metacog [options]    Metacog corpus training with OpenAI teacher (needs OPENAI_API_KEY)
         \\  qstar convert-corpus [in] [out]  Convert raw .txt corpus to compressed .qsc (streaming, bounded memory)
         \\  qstar kg query <entity>         Query knowledge graph for entity neighbors
         \\  qstar kg dump                   Dump all knowledge graph triplets
@@ -1500,25 +1565,37 @@ fn printHelp() void {
         \\  qstar turing-test [options]     Run automated Turing test with Ollama judge
         \\  qstar experiment [options]      Run control experiment (baseline vs constrained)
         \\  qstar geoview <subcmd> [args]   Geospatial tools (distance, convert, mgrs, bearing, destination)
+        \\  qstar diagnose [prompt] [opts]  Deterministic lattice diagnostic (--level, --cycles)
         \\  qstar dns-update [options]      Update ClouDNS dynamic DNS record (--url, --timeout, --retries, --delay)
         \\  qstar framework-audit           Run E=mc²-i-E=mc⁻² framework verification checks
+        \\  qstar quantum [--shots N]       Quantum gate model: Bell pair, measurement stats, state chain
         \\
         \\Scaling & Vocab Options (run, chat, ingest-corpus):
         \\  --level <0..7>                  Lattice scale level (s=0..7, default: 0)
         \\  --vocab <128k|256k|512k|1m|path> Ramsey vocabulary to attach
         \\  --autoscale                     Dynamically scale level & vocab based on corpus
         \\  --no-reflect                    Disable metacognitive reflection (on by default)
+        \\  --corpus <path>                 Corpus file: .txt raw or .qsc compressed (chat only)
+        \\  --txt <path>                    Raw text corpus (overrides .qsc default)
+        \\  --qsc <path>                    Compressed .qsc corpus (chat/run/serve default: qstar_corpus_full.qsc)
+        \\  --max-pages <n>                 Max .qsc pages to stream (default: 0 = all)
         \\  --draft-mode                    Speculative draft mode: Qstar generates, Ollama verifies
         \\  --draft-model <name>            Verifier model for draft mode (default: from .env OLLAMA_MODEL)
         \\
         \\Training Options (train, enrich-corpus, train-corpus):
         \\  --model <name>                  Ollama model name (default: from .env OLLAMA_MODEL)
-        \\  --corpus <path>                 Corpus file path (default: qstar_corpus.txt)
+        \\  --teacher <ollama|openai>       Teacher backend for train (default: auto from LLM_PROVIDER)
+        \\  --corpus <path>                 Corpus file path (default: qstar_corpus.txt); learned
+        \\                                sentences are delta-appended (never truncated); .qsc
+        \\                                inputs write to a "<base>.learned.txt" sidecar
         \\  --corpus-file <path>            Corpus save/load file path
         \\  --prompts <path>                Custom prompts file
         \\  --ingest-dir <dir>              Directory to ingest documents from
         \\  --enrich-dir <dir>              Directory to enrich documents from
         \\  --limit <n>                     Limit prompts (train) or files (enrich/train-corpus)
+        \\  --hybrid                        Hybrid training: OpenAI semantic + Ollama corpus
+        \\                                (Ollama-only categories fall back to OpenAI when
+        \\                                Ollama is unavailable and OPENAI_API_KEY is set)
         \\  --offset <n>                    Skip first N files (default: 0)
         \\  --reinforce                     Enable OpenAI internet reinforcement (train-corpus)
         \\  --openai-model <name>           OpenAI model for reinforcement (default: gpt-5)
@@ -1551,6 +1628,7 @@ fn runTraining(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     var limit: ?usize = null;
     var teacher: training.Teacher = .auto;
     var skip_corpus_load: bool = false;
+    var hybrid: bool = false;
     _ = &skip_corpus_load;
 
     // Load unified LLM config from .env
@@ -1571,6 +1649,8 @@ fn runTraining(allocator: std.mem.Allocator, args: [][:0]u8) !void {
             i += 1;
         } else if (std.mem.eql(u8, args[i], "--skip-corpus-load")) {
             skip_corpus_load = true;
+        } else if (std.mem.eql(u8, args[i], "--hybrid")) {
+            hybrid = true;
         } else if (std.mem.eql(u8, args[i], "--prompts") and i + 1 < args.len) {
             custom_prompts = args[i + 1];
             i += 1;
@@ -1629,8 +1709,14 @@ fn runTraining(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     } else if (std.fs.cwd().openFile(corpus_file, .{})) |file| {
         file.close();
         const loaded = training.loadCorpusFromFile(&agent, corpus_file) catch 0;
-        std.debug.print("Loaded existing corpus: {d} bytes\n", .{loaded});
-        std.debug.print("Corpus before training: {d} sentences\n\n", .{agent.getCorpusSentenceCount()});
+        if (std.mem.endsWith(u8, corpus_file, ".qsc")) {
+            std.debug.print("Streamed existing corpus: {d} sentences (bounded window)\n", .{loaded});
+        } else {
+            std.debug.print("Loaded existing corpus: {d} bytes\n", .{loaded});
+            const file_sentences = training.countSentencesInFile(corpus_file) catch 0;
+            std.debug.print("Corpus file before training: {d} sentences\n", .{file_sentences});
+        }
+        std.debug.print("Corpus window: {d} sentences retained in memory\n\n", .{agent.getCorpusSentenceCount()});
     } else |_| {
         std.debug.print("No existing corpus file found. Starting fresh.\n", .{});
         std.debug.print("Corpus before training: 0 sentences\n\n", .{});
@@ -1643,48 +1729,72 @@ fn runTraining(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         .verbose = true,
     };
 
-    var result: training.TrainingResult = undefined;
-    if (custom_prompts) |prompts_path| {
-        // Load custom prompts from file (one per line)
-        const file = try std.fs.cwd().openFile(prompts_path, .{});
-        defer file.close();
-        const content = try file.readToEndAlloc(allocator, 1024 * 1024);
-        defer allocator.free(content);
-
-        var prompt_list = std.ArrayList([]const u8).init(allocator);
-        defer prompt_list.deinit();
-        var line_it = std.mem.splitScalar(u8, content, '\n');
-        while (line_it.next()) |line| {
-            const trimmed = std.mem.trim(u8, line, " \r\t");
-            if (trimmed.len > 0) try prompt_list.append(trimmed);
-        }
-        const prompts = if (limit) |n| prompt_list.items[0..@min(n, prompt_list.items.len)] else prompt_list.items;
-        result = try training.trainBatch(&agent, prompts, train_config, allocator);
+    if (hybrid) {
+        std.debug.print("Mode: hybrid (OpenAI semantic + Ollama corpus)\n\n", .{});
+        const h_result = try training.trainBatchHybrid(&agent, train_config, allocator);
+        std.debug.print("\n=== Hybrid Training Complete ===\n", .{});
+        std.debug.print("Prompts processed: {d}\n", .{h_result.prompts_processed});
+        std.debug.print("Sentences learned: {d}\n", .{h_result.sentences_learned});
+        std.debug.print("OpenAI prompts: {d} (failed: {d})\n", .{ h_result.openai_prompts, h_result.openai_failed });
+        std.debug.print("Ollama prompts: {d} (failed: {d})\n", .{ h_result.ollama_prompts, h_result.ollama_failed });
+        std.debug.print("Corpus window before: {d} sentences\n", .{h_result.corpus_size_before});
+        std.debug.print("Corpus window after: {d} sentences\n", .{h_result.corpus_size_after});
     } else {
-        const default_prompts = &training.DEFAULT_PROMPTS;
-        const prompts = if (limit) |n| default_prompts[0..@min(n, default_prompts.len)] else default_prompts;
-        result = try training.trainBatch(&agent, prompts, train_config, allocator);
+        var result: training.TrainingResult = undefined;
+        if (custom_prompts) |prompts_path| {
+            // Load custom prompts from file (one per line)
+            const file = try std.fs.cwd().openFile(prompts_path, .{});
+            defer file.close();
+            const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+            defer allocator.free(content);
+
+            var prompt_list = std.ArrayList([]const u8).init(allocator);
+            defer prompt_list.deinit();
+            var line_it = std.mem.splitScalar(u8, content, '\n');
+            while (line_it.next()) |line| {
+                const trimmed = std.mem.trim(u8, line, " \r\t");
+                if (trimmed.len > 0) try prompt_list.append(trimmed);
+            }
+            const prompts = if (limit) |n| prompt_list.items[0..@min(n, prompt_list.items.len)] else prompt_list.items;
+            result = try training.trainBatch(&agent, prompts, train_config, allocator);
+        } else {
+            const default_prompts = &training.DEFAULT_PROMPTS;
+            const prompts = if (limit) |n| default_prompts[0..@min(n, default_prompts.len)] else default_prompts;
+            result = try training.trainBatch(&agent, prompts, train_config, allocator);
+        }
+
+        std.debug.print("\n=== Training Complete ===\n", .{});
+        std.debug.print("Prompts processed: {d}\n", .{result.prompts_processed});
+        std.debug.print("Sentences learned: {d}\n", .{result.sentences_learned});
+        std.debug.print("Corpus window before: {d} sentences\n", .{result.corpus_size_before});
+        std.debug.print("Corpus window after: {d} sentences\n", .{result.corpus_size_after});
     }
 
-    std.debug.print("\n=== Training Complete ===\n", .{});
-    std.debug.print("Prompts processed: {d}\n", .{result.prompts_processed});
-    std.debug.print("Sentences learned: {d}\n", .{result.sentences_learned});
-    std.debug.print("Corpus before: {d} sentences\n", .{result.corpus_size_before});
-    std.debug.print("Corpus after: {d} sentences\n", .{result.corpus_size_after});
-
-    // Save corpus (append if skip-corpus-load was used, otherwise overwrite)
-    if (skip_corpus_load) {
-        if (std.fs.cwd().openFile(corpus_file, .{})) |file| {
-            file.close();
-            try training.appendCorpusToFile(&agent, corpus_file);
-            std.debug.print("Corpus appended to: {s}\n", .{corpus_file});
-        } else |_| {
-            try training.saveCorpusToFile(&agent, corpus_file);
-            std.debug.print("Corpus saved to: {s}\n", .{corpus_file});
-        }
+    // Persist session-learned sentences: delta-append — the existing corpus
+    // is never truncated; .qsc inputs write to a ".learned.txt" sidecar.
+    var delta_buf: [4096]u8 = undefined;
+    const delta_path = training.resolveCorpusDeltaPath(corpus_file, &delta_buf);
+    const flushed = try training.saveCorpusToFile(&agent, corpus_file);
+    if (std.mem.eql(u8, delta_path, corpus_file)) {
+        std.debug.print("Corpus appended: +{d} sentences ({d} bytes) -> {s}\n", .{ flushed.sentences, flushed.bytes, delta_path });
+        if (training.countSentencesInFile(delta_path)) |n| {
+            std.debug.print("Corpus file after training: {d} sentences\n", .{n});
+        } else |_| {}
     } else {
-        try training.saveCorpusToFile(&agent, corpus_file);
-        std.debug.print("Corpus saved to: {s}\n", .{corpus_file});
+        std.debug.print("Corpus appended: +{d} sentences ({d} bytes) -> sidecar {s}\n", .{ flushed.sentences, flushed.bytes, delta_path });
+    }
+}
+
+/// Persists the agent's session-learned sentences via delta-append.
+/// Never truncates the corpus; .qsc targets resolve to a sidecar file.
+fn persistCorpusDelta(agent: *agent_mod.Agent, corpus_file: []const u8) !void {
+    var delta_buf: [4096]u8 = undefined;
+    const delta_path = training.resolveCorpusDeltaPath(corpus_file, &delta_buf);
+    const flushed = try training.saveCorpusToFile(agent, corpus_file);
+    if (std.mem.eql(u8, delta_path, corpus_file)) {
+        std.debug.print("Corpus appended: +{d} sentences ({d} bytes) -> {s}\n", .{ flushed.sentences, flushed.bytes, delta_path });
+    } else {
+        std.debug.print("Corpus appended: +{d} sentences ({d} bytes) -> sidecar {s}\n", .{ flushed.sentences, flushed.bytes, delta_path });
     }
 }
 
@@ -1794,23 +1904,11 @@ fn runTrainInternet(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     std.debug.print("Articles failed: {d}\n", .{result.articles_failed});
     std.debug.print("Sentences learned: {d}\n", .{result.sentences_learned});
     std.debug.print("Bytes fetched: {d}\n", .{result.bytes_fetched});
-    std.debug.print("Corpus before: {d} sentences\n", .{result.corpus_size_before});
-    std.debug.print("Corpus after: {d} sentences\n", .{result.corpus_size_after});
+    std.debug.print("Corpus window before: {d} sentences\n", .{result.corpus_size_before});
+    std.debug.print("Corpus window after: {d} sentences\n", .{result.corpus_size_after});
 
-    // Save corpus (append if skip-corpus-load was used, otherwise overwrite)
-    if (skip_corpus_load) {
-        if (std.fs.cwd().openFile(corpus_file, .{})) |file| {
-            file.close();
-            try training.appendCorpusToFile(&agent, corpus_file);
-            std.debug.print("Corpus appended to: {s}\n", .{corpus_file});
-        } else |_| {
-            try training.saveCorpusToFile(&agent, corpus_file);
-            std.debug.print("Corpus saved to: {s}\n", .{corpus_file});
-        }
-    } else {
-        try training.saveCorpusToFile(&agent, corpus_file);
-        std.debug.print("Corpus saved to: {s}\n", .{corpus_file});
-    }
+    // Delta-append session-learned sentences (never truncates the corpus).
+    try persistCorpusDelta(&agent, corpus_file);
 }
 
 fn runIngestCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
@@ -1885,22 +1983,11 @@ fn runIngestCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     std.debug.print("Files read: {d}\n", .{result.files_read});
     std.debug.print("Sentences learned: {d}\n", .{result.sentences_learned});
     std.debug.print("Bytes processed: {d}\n", .{result.bytes_processed});
-    std.debug.print("Corpus before: {d} sentences\n", .{result.corpus_size_before});
-    std.debug.print("Corpus after: {d} sentences\n", .{result.corpus_size_after});
+    std.debug.print("Corpus window before: {d} sentences\n", .{result.corpus_size_before});
+    std.debug.print("Corpus window after: {d} sentences\n", .{result.corpus_size_after});
 
-    if (skip_corpus_load) {
-        if (std.fs.cwd().openFile(corpus_file, .{})) |file| {
-            file.close();
-            try training.appendCorpusToFile(&agent, corpus_file);
-            std.debug.print("Corpus appended to: {s}\n", .{corpus_file});
-        } else |_| {
-            try training.saveCorpusToFile(&agent, corpus_file);
-            std.debug.print("Corpus saved to: {s}\n", .{corpus_file});
-        }
-    } else {
-        try training.saveCorpusToFile(&agent, corpus_file);
-        std.debug.print("Corpus saved to: {s}\n", .{corpus_file});
-    }
+    // Delta-append session-learned sentences (never truncates the corpus).
+    try persistCorpusDelta(&agent, corpus_file);
 }
 
 fn runEnrichCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
@@ -1979,11 +2066,10 @@ fn runEnrichCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     std.debug.print("Files scanned: {d}\n", .{result.files_scanned});
     std.debug.print("Files read: {d}\n", .{result.files_read});
     std.debug.print("Sentences learned: {d}\n", .{result.sentences_learned});
-    std.debug.print("Corpus before: {d} sentences\n", .{result.corpus_size_before});
-    std.debug.print("Corpus after: {d} sentences\n", .{result.corpus_size_after});
+    std.debug.print("Corpus window before: {d} sentences\n", .{result.corpus_size_before});
+    std.debug.print("Corpus window after: {d} sentences\n", .{result.corpus_size_after});
 
-    try training.saveCorpusToFile(&agent, corpus_file);
-    std.debug.print("Corpus saved to: {s}\n", .{corpus_file});
+    try persistCorpusDelta(&agent, corpus_file);
 }
 
 fn runCorpusCommand(allocator: std.mem.Allocator, args: [][:0]u8) !void {
@@ -1991,7 +2077,7 @@ fn runCorpusCommand(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         std.debug.print("Usage: qstar corpus <build|verify|stream|info> [options]\n", .{});
         std.debug.print("  qstar corpus build <raw.txt> <out.qsc> [--page-size N]\n", .{});
         std.debug.print("  qstar corpus verify <corpus.qsc>\n", .{});
-        std.debug.print("  qstar corpus stream <corpus.qsc> [--limit N]\n", .{});
+        std.debug.print("  qstar corpus stream <corpus.qsc> [--limit N] [--out path]\n", .{});
         std.debug.print("  qstar corpus info <corpus.qsc>\n", .{});
         return;
     }
@@ -2034,7 +2120,7 @@ fn runCorpusCommand(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         std.debug.print("Decompressed {d} bytes across {d} pages — all checksums valid\n", .{ total_bytes, store.pageCount() });
     } else if (std.mem.eql(u8, sub, "stream")) {
         if (args.len < 4) {
-            std.debug.print("Usage: qstar corpus stream <corpus.qsc> [--limit N]\n", .{});
+            std.debug.print("Usage: qstar corpus stream <corpus.qsc> [--limit N] [--out path]\n", .{});
             return;
         }
         var limit: ?usize = null;
@@ -2045,22 +2131,38 @@ fn runCorpusCommand(allocator: std.mem.Allocator, args: [][:0]u8) !void {
                 i += 1;
             }
         }
+        var out_file: ?std.fs.File = null;
+        defer if (out_file) |f| f.close();
+        var arg_j: usize = 4;
+        while (arg_j < args.len) : (arg_j += 1) {
+            if (std.mem.eql(u8, args[arg_j], "--out") and arg_j + 1 < args.len) {
+                out_file = try std.fs.cwd().createFile(args[arg_j + 1], .{});
+                arg_j += 1;
+            }
+        }
         var store = try corpus_store.CorpusStore.init(allocator, args[3]);
         defer store.deinit();
         var count: usize = 0;
         const StreamCtx = struct {
             limit: ?usize,
             count: *usize,
+            out: ?std.fs.File,
         };
-        try store.streamLines(&StreamCtx{ .limit = limit, .count = &count }, struct {
+        try store.streamLines(&StreamCtx{ .limit = limit, .count = &count, .out = out_file }, struct {
             fn cb(ctx: *const StreamCtx, line: []const u8) void {
                 if (ctx.limit) |l| {
                     if (ctx.count.* >= l) return;
                 }
-                std.debug.print("{s}\n", .{line});
+                if (ctx.out) |f| {
+                    f.writeAll(line) catch {};
+                    f.writeAll("\n") catch {};
+                } else {
+                    std.debug.print("{s}\n", .{line});
+                }
                 ctx.count.* += 1;
             }
         }.cb);
+        if (out_file) |f| try f.sync();
         std.debug.print("Streamed {d} lines from {s}\n", .{ count, args[3] });
     } else if (std.mem.eql(u8, sub, "info")) {
         if (args.len < 4) {
@@ -2162,9 +2264,8 @@ fn runTrainCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     std.debug.print("\nPhase 1 Results:\n", .{});
     std.debug.print("  Files: {d}/{d}, Sentences: {d}, Corpus: {d} sentences\n\n", .{ ingest_result.files_read, ingest_result.files_scanned, ingest_result.sentences_learned, ingest_result.corpus_size_after });
 
-    // Save intermediate corpus
-    try training.saveCorpusToFile(&agent, corpus_file);
-    std.debug.print("Intermediate corpus saved.\n\n", .{});
+    // Save intermediate corpus (delta-append)
+    try persistCorpusDelta(&agent, corpus_file);
 
     // Phase 2: Ollama enrichment
     const config = ollama.OllamaConfig{ .model = model, .host = ollama_host, .port = ollama_port };
@@ -2182,8 +2283,7 @@ fn runTrainCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         std.debug.print("\nPhase 2 Results:\n", .{});
         std.debug.print("  Files: {d}/{d}, Sentences: {d}, Corpus: {d} sentences\n\n", .{ enrich_result.files_read, enrich_result.files_scanned, enrich_result.sentences_learned, enrich_result.corpus_size_after });
 
-        try training.saveCorpusToFile(&agent, corpus_file);
-        std.debug.print("Corpus saved after enrichment.\n\n", .{});
+        try persistCorpusDelta(&agent, corpus_file);
     }
 
     // Phase 3: OpenAI internet reinforcement
@@ -2200,15 +2300,14 @@ fn runTrainCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         std.debug.print("  Topics processed: {d}, Failed: {d}, Sentences: {d}\n", .{ reinforce_result.topics_processed, reinforce_result.topics_failed, reinforce_result.sentences_learned });
         std.debug.print("  Corpus: {d} sentences\n\n", .{reinforce_result.corpus_size_after});
 
-        try training.saveCorpusToFile(&agent, corpus_file);
-        std.debug.print("Corpus saved after reinforcement.\n\n", .{});
+        try persistCorpusDelta(&agent, corpus_file);
     } else if (do_reinforce) {
         std.debug.print("Warning: --reinforce requested but no OPENAI_API_KEY found. Skipping Phase 3.\n\n", .{});
     }
 
     std.debug.print("=== Training Pipeline Complete ===\n", .{});
-    std.debug.print("Total corpus: {d} sentences\n", .{agent.getCorpusSentenceCount()});
-    std.debug.print("Final corpus saved to: {s}\n", .{corpus_file});
+    std.debug.print("Total corpus window: {d} sentences\n", .{agent.getCorpusSentenceCount()});
+    std.debug.print("Final corpus delta appended to: {s}\n", .{corpus_file});
 }
 
 /// Ingests from datasets/ then the entire hardware directory tree (../).
@@ -2302,8 +2401,7 @@ fn runTrainAll(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         total_bytes_processed += result.bytes_processed;
         std.debug.print("\nPhase 1 Results:\n", .{});
         std.debug.print("  Files: {d}/{d}, Sentences: {d}, Corpus: {d} sentences\n\n", .{ result.files_read, result.files_scanned, result.sentences_learned, result.corpus_size_after });
-        try training.saveCorpusToFile(&agent, corpus_file);
-        std.debug.print("Intermediate corpus saved.\n\n", .{});
+        try persistCorpusDelta(&agent, corpus_file);
     } else |err| {
         std.debug.print("Warning: datasets/ ingestion failed: {s}\n\n", .{@errorName(err)});
     }
@@ -2318,8 +2416,7 @@ fn runTrainAll(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         total_bytes_processed += result.bytes_processed;
         std.debug.print("\nPhase 2 Results:\n", .{});
         std.debug.print("  Files: {d}/{d}, Sentences: {d}, Corpus: {d} sentences\n\n", .{ result.files_read, result.files_scanned, result.sentences_learned, result.corpus_size_after });
-        try training.saveCorpusToFile(&agent, corpus_file);
-        std.debug.print("Final corpus saved.\n\n", .{});
+        try persistCorpusDelta(&agent, corpus_file);
     } else |err| {
         std.debug.print("Warning: hardware root ingestion failed: {s}\n\n", .{@errorName(err)});
     }
@@ -2340,8 +2437,8 @@ fn runTrainAll(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     std.debug.print("Total files read: {d}\n", .{total_files_read});
     std.debug.print("Total sentences learned: {d}\n", .{total_sentences_learned});
     std.debug.print("Total bytes processed: {d}\n", .{total_bytes_processed});
-    std.debug.print("Final corpus: {d} sentences\n", .{agent.getCorpusSentenceCount()});
-    std.debug.print("Corpus saved to: {s}\n", .{corpus_file});
+    std.debug.print("Final corpus window: {d} sentences\n", .{agent.getCorpusSentenceCount()});
+    std.debug.print("Corpus delta appended to: {s}\n", .{corpus_file});
 }
 
 fn runTrainMetacog(allocator: std.mem.Allocator, args: [][:0]u8) !void {
@@ -2440,7 +2537,7 @@ fn runTrainMetacog(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     std.debug.print("Sentences learned: {d}\n", .{result.sentences_learned});
     std.debug.print("Routes created: {d}\n", .{result.routes_created});
     std.debug.print("Corpus: {d} -> {d} sentences\n", .{ result.corpus_size_before, result.corpus_size_after });
-    std.debug.print("Corpus saved to: {s}\n", .{corpus_file});
+    std.debug.print("Corpus delta appended to: {s}\n", .{corpus_file});
 }
 
 fn runKgCommand(allocator: std.mem.Allocator, args: [][:0]u8) !void {
@@ -2600,7 +2697,7 @@ fn runPullModel(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     const model = args[2];
     std.debug.print("pulling {s}...\n", .{model});
     std.debug.print("Qstar is self-contained — no external weights needed.\n", .{});
-    std.debug.print("The lattice (421 E0 nodes x 7 channels) is built-in.\n", .{});
+    std.debug.print("The lattice (421 E0 nodes x 8 channels) is built-in.\n", .{});
     std.debug.print("success\n", .{});
 }
 
@@ -2915,7 +3012,7 @@ fn runQuineCommand(allocator: std.mem.Allocator, args: [][:0]u8) !void {
 
 fn runCollapseCommand(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     if (args.len < 3) {
-        std.debug.print("Usage: qstar collapse <simulate|status|recover>\n", .{});
+        std.debug.print("Usage: qstar collapse <simulate|status|recover|persist <file>>\n", .{});
         return;
     }
 
@@ -2962,12 +3059,109 @@ fn runCollapseCommand(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         std.debug.print("All transport modes reactivated.\n", .{});
         std.debug.print("Selected transport: {s}\n", .{router.selectedTransportName()});
         std.debug.print("Fallback level: {d}/11 (0 = best)\n", .{router.fallbackLevel()});
+    } else if (std.mem.eql(u8, subcmd, "persist")) {
+        // Run the knowledge-preservation pipeline on a file:
+        // Reed-Solomon shards -> Shamir shares -> QR portal atomization ->
+        // nested QR tree -> physical-media distribution estimate.
+        if (args.len < 4) {
+            std.debug.print("Usage: qstar collapse persist <file>\n", .{});
+            return;
+        }
+        const path = args[3];
+        const data = std.fs.cwd().readFileAlloc(allocator, path, 512 * 1024 * 1024) catch |err| {
+            std.debug.print("persist: cannot read {s}: {s}\n", .{ path, @errorName(err) });
+            return;
+        };
+        defer allocator.free(data);
+
+        const collapse_resilience = @import("collapse_resilience");
+        var cr = collapse_resilience.CollapseResilience.init(allocator);
+        std.debug.print("Collapse persistence pipeline: {s} ({d} bytes)\n", .{ path, data.len });
+        const res = cr.persist(data) catch |err| {
+            std.debug.print("persist failed during '{s}': {s}\n", .{ cr.statusReport(), @errorName(err) });
+            return;
+        };
+        std.debug.print("\nPhase: {s}\n", .{cr.statusReport()});
+        std.debug.print("  Reed-Solomon shards:  {d}\n", .{res.shards_created});
+        std.debug.print("  Shamir shares:        {d}\n", .{res.shares_created});
+        std.debug.print("  QR portals generated: {d} ({d} valid)\n", .{ res.portals_generated, res.portals_valid });
+        std.debug.print("  Data integrity:       {d}.{d}%\n", .{ res.data_integrity_ppm / 100, res.data_integrity_ppm % 100 });
+        std.debug.print("  Paper media required: {d} sheets\n", .{res.media_required});
     } else {
         std.debug.print("Unknown collapse subcommand: {s}\n", .{subcmd});
-        std.debug.print("Available: simulate, status, recover\n", .{});
+        std.debug.print("Available: simulate, status, recover, persist\n", .{});
+    }
+}
+
+// =============================================================================
+// Quantum gate-model command (src/quantum.zig)
+// =============================================================================
+
+fn runQuantumCmd(allocator: std.mem.Allocator, args: [][:0]u8) !void {
+    const quantum = @import("quantum");
+    const fp_local = @import("fixed_point");
+
+    var shots: usize = 1000;
+    var i: usize = 2;
+    while (i < args.len) : (i += 1) {
+        if (std.mem.eql(u8, args[i], "--shots") and i + 1 < args.len) {
+            i += 1;
+            shots = std.fmt.parseInt(usize, args[i], 10) catch 1000;
+        }
     }
 
-    _ = allocator;
+    std.debug.print("Qstar Quantum Gate Model (i128 Q64.64 amplitudes)\n", .{});
+    std.debug.print("=================================================\n\n", .{});
+
+    // Bell pair: H(0) then CNOT(0->1) on |00> -> (|00>+|11>)/sqrt(2)
+    var state = try quantum.QuantumState.init(allocator, 2);
+    defer state.deinit();
+
+    var chain = quantum.StateChain.init(allocator);
+    defer chain.deinit();
+
+    var circuit = quantum.Circuit.init(allocator, 2);
+    defer circuit.deinit();
+    try circuit.addHadamard(0);
+    try circuit.addCNOT(0, 1);
+
+    std.debug.print("Circuit: {d} gates (H q0, CNOT q0->q1)\n", .{circuit.gateCount()});
+    try circuit.run(&state, &chain);
+
+    // Bell-state probabilities (Q64.64 -> percent)
+    const p00 = state.probability(0);
+    const p11 = state.probability(3);
+    const pct = struct {
+        fn f(p: i128) i128 {
+            return @divTrunc(p * 100, fp_local.ONE);
+        }
+    }.f;
+    std.debug.print("P(|00>) = {d}%  P(|11>) = {d}%  (expect ~50/50)\n", .{ pct(p00), pct(p11) });
+    std.debug.print("Total probability: {d}%\n\n", .{pct(state.totalProbability())});
+
+    // Measurement statistics over N shots (clone -> measure -> count)
+    var rng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
+    var counts = [_]usize{0} ** 4;
+    for (0..shots) |_| {
+        var shot = try state.clone();
+        defer shot.deinit();
+        counts[shot.measure(&rng)] += 1;
+    }
+    std.debug.print("Measurement over {d} shots:\n", .{shots});
+    const labels = [_][]const u8{ "|00>", "|01>", "|10>", "|11>" };
+    for (counts, 0..) |c, idx| {
+        std.debug.print("  {s}: {d} ({d}%)\n", .{ labels[idx], c, c * 100 / shots });
+    }
+    const correlated = counts[0] + counts[3];
+    std.debug.print("\nBell correlation (|00>+|11>): {d}%  anti-correlated: {d}%\n", .{
+        correlated * 100 / shots,
+        (counts[1] + counts[2]) * 100 / shots,
+    });
+
+    // State chain audit
+    std.debug.print("\nState chain: {d} blocks, verify={s}\n", .{ chain.height(), if (chain.verify()) "PASS" else "FAIL" });
+    const tip = chain.tipHash();
+    std.debug.print("Tip hash: {x}{x}{x}{x}...\n", .{ tip[0], tip[1], tip[2], tip[3] });
 }
 
 /// Framework audit subcommand: runs all E=mc²-i-E=mc⁻² toy-model verification checks
@@ -3006,9 +3200,54 @@ fn runFrameworkAuditCmd(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         std.debug.print("  Status: {d} CHECKS FAILED\n", .{lattice_failures});
     }
 
+    // Hardware proof-port modules (hw_*): self-contained verifications.
+    const hw_e8 = @import("hw_e8_roots");
+    const hw_scaling = @import("hw_scaling_analysis");
+    const hw_lit = @import("hw_literature_review");
+    const hw_consc = @import("hw_consciousness_audit");
+    const hw_oct = @import("hw_octonion");
+    const hw_surf = @import("hw_surface_computation");
+    const hw_jordan = @import("hw_jordan_algebra");
+    const hw_charges = @import("hw_electric_charges");
+
+    var hw_pass: usize = 0;
+    var hw_total: usize = 0;
+    const hw_checks = .{
+        .{ "E8 root count = 240 = 15×16", hw_e8.verifyE8RootCountMatchesFramework },
+        .{ "Scaling: 7-defect in doubling", hw_scaling.verifySevenDefectInDoubling },
+        .{ "Scaling: 421 identity", hw_scaling.verify421Identity },
+        .{ "Scaling: shell transition", hw_scaling.verifyShellTransition },
+        .{ "Octonion: Fano triples match framework", hw_oct.verifyFanoTriplesMatchFramework },
+        .{ "Surface: matches framework", hw_surf.verifySurfaceComputationMatchesFramework },
+        .{ "Surface: 36-claim split 16+20", hw_surf.verifyClaimClassification },
+        .{ "Jordan: J3(O) dim = 27 = 3+3×8", hw_jordan.verifyJ3ODimension },
+        .{ "Jordan: F4 automorphism dim = 52", hw_jordan.verifyF4Dimension },
+        .{ "Charges: U(1) quantization", hw_charges.verifyChargeQuantization },
+        .{ "Charges: octonion anomaly cancellation", hw_charges.verifyAnomalyCancellation },
+        .{ "Consciousness audit: 16+20 split", struct {
+            fn f() bool {
+                return hw_consc.frameworkSplit().match;
+            }
+        }.f },
+        .{ "Literature: 24 refs, 5 verified", struct {
+            fn f() bool {
+                const s = hw_lit.revisedSummary();
+                return s.references_found == 24 and s.independently_verified == 5;
+            }
+        }.f },
+    };
+    std.debug.print("\nHardware Proof Modules (hw_*):\n", .{});
+    inline for (hw_checks) |check| {
+        const ok = check[1]();
+        hw_total += 1;
+        if (ok) hw_pass += 1;
+        std.debug.print("  {s:<45} {s}\n", .{ check[0], if (ok) "PASS" else "FAIL" });
+    }
+    std.debug.print("  hw_* total: {d}/{d} pass\n", .{ hw_pass, hw_total });
+
     std.debug.print("\n=== Framework Constants ===\n", .{});
     std.debug.print("  E0 nodes:        421\n", .{});
-    std.debug.print("  Channels:        7\n", .{});
+    std.debug.print("  Channels:        8 (e0-e7; LLM tokens on e1-e5)\n", .{});
     std.debug.print("  Base edge:       15\n", .{});
     std.debug.print("  Shell edge:      16\n", .{});
     std.debug.print("  7-defect:        7 (2³-1)\n", .{});
@@ -3056,7 +3295,7 @@ pub fn isKnownCommand(cmd: []const u8) bool {
         "diagnose",       "geoview",         "list",            "models",
         "pull",           "push",            "mesh",            "transport",
         "quine",          "collapse",        "framework-audit", "version",
-        "-v",             "--version",
+        "quantum",        "-v",              "--version",
     };
     for (known) |k| {
         if (std.mem.eql(u8, cmd, k)) return true;
@@ -3200,7 +3439,7 @@ test "main: version string reflects Q128.128 and 8 channels" {
     // The version string should reflect the current Q128.128 migration
     // and 8-channel architecture, not the stale Q32.32/7-channel text.
     // This test guards against regression to outdated version info.
-    const version_line = "Qstar v3.1.0 (Pure Zig, Q128.128 Fixed-Point, 421 E0 Nodes, 8 Channels)";
+    const version_line = "Qstar v0.0.2.0 (Pure Zig, Q128.128 Fixed-Point, 421 E0 Nodes, 8 Channels)";
     try std.testing.expect(std.mem.indexOf(u8, version_line, "Q128.128") != null);
     try std.testing.expect(std.mem.indexOf(u8, version_line, "8 Channels") != null);
     try std.testing.expect(std.mem.indexOf(u8, version_line, "Q32.32") == null);

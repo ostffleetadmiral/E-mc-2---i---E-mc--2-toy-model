@@ -24,6 +24,9 @@ const openai = @import("openai_client");
 const maple = @import("maple_client");
 const prompt_gen = @import("prompt_generator");
 const llm_provider = @import("llm_provider");
+const arithmetic_reasoner = @import("arithmetic_reasoner");
+const knowledge_lookup = @import("knowledge_lookup");
+const training = @import("training");
 
 const DEFAULT_OLLAMA_HOST_STR = "127.0.0.1";
 const DEFAULT_OLLAMA_PORT_VAL: u16 = 11434;
@@ -274,8 +277,10 @@ const CliConfig = struct {
     mode: BenchMode = .competitive,
     random: bool = false,
     num_prompts: usize = 0,
+    category_filter: ?Category = null,
     seed: u64 = 0,
     use_judge: bool = true,
+    ollama_judge_only: bool = false,
     conversation: bool = false,
     turns: usize = 5,
     no_ollama: bool = false,
@@ -285,6 +290,7 @@ const CliConfig = struct {
     judge_port: u16 = 0,
     fast: bool = false,
     no_openai: bool = false,
+    no_train: bool = false,
     no_maple: bool = false,
     maple_host: []const u8 = "qstar001.qstar",
     maple_port: u16 = 80,
@@ -299,6 +305,14 @@ const CliConfig = struct {
     bench_ollama_model: []const u8 = DEFAULT_MODEL_STR,
     bench_openai_api_key: []const u8 = "",
     bench_openai_model: []const u8 = DEFAULT_OPENAI_MODEL,
+    // Failure-window training flags (retro-dev round 2)
+    collect_failures: bool = true,
+    failure_window: bool = false,
+    train_frac: f64 = 0.6,
+    val_frac: f64 = 0.2,
+    // Concurrency measurement flags
+    serial_opponents: bool = false,
+    measure_concurrency: bool = false,
 };
 
 var g_env_loader: ?@import("env_loader").EnvLoader = null;
@@ -317,6 +331,9 @@ fn parseCliArgs() CliConfig {
         } else if (std.mem.eql(u8, arg, "--seed") and i + 1 < std.os.argv.len) {
             i += 1;
             config.seed = std.fmt.parseInt(u64, std.mem.sliceTo(std.os.argv[i], 0), 10) catch 0;
+        } else if (std.mem.eql(u8, arg, "--category") and i + 1 < std.os.argv.len) {
+            i += 1;
+            config.category_filter = categoryFromString(std.mem.sliceTo(std.os.argv[i], 0));
         } else if (std.mem.eql(u8, arg, "--mode") and i + 1 < std.os.argv.len) {
             i += 1;
             const mode_str = std.mem.sliceTo(std.os.argv[i], 0);
@@ -329,6 +346,8 @@ fn parseCliArgs() CliConfig {
             }
         } else if (std.mem.eql(u8, arg, "--no-judge")) {
             config.use_judge = false;
+        } else if (std.mem.eql(u8, arg, "--ollama-judge-only")) {
+            config.ollama_judge_only = true;
         } else if (std.mem.eql(u8, arg, "--no-ollama")) {
             config.no_ollama = true;
         } else if (std.mem.eql(u8, arg, "--ollama-host") and i + 1 < std.os.argv.len) {
@@ -356,6 +375,8 @@ fn parseCliArgs() CliConfig {
             config.bench_openai_api_key = std.mem.sliceTo(std.os.argv[i], 0);
         } else if (std.mem.eql(u8, arg, "--no-openai")) {
             config.no_openai = true;
+        } else if (std.mem.eql(u8, arg, "--no-train")) {
+            config.no_train = true;
         } else if (std.mem.eql(u8, arg, "--local-maple")) {
             config.local_maple = true;
         } else if (std.mem.eql(u8, arg, "--no-maple")) {
@@ -387,6 +408,22 @@ fn parseCliArgs() CliConfig {
         } else if (std.mem.eql(u8, arg, "--judge-port") and i + 1 < std.os.argv.len) {
             i += 1;
             config.judge_port = std.fmt.parseInt(u16, std.mem.sliceTo(std.os.argv[i], 0), 10) catch 0;
+        } else if (std.mem.eql(u8, arg, "--collect-failures")) {
+            config.collect_failures = true;
+        } else if (std.mem.eql(u8, arg, "--no-collect-failures")) {
+            config.collect_failures = false;
+        } else if (std.mem.eql(u8, arg, "--failure-window")) {
+            config.failure_window = true;
+        } else if (std.mem.eql(u8, arg, "--train-frac") and i + 1 < std.os.argv.len) {
+            i += 1;
+            config.train_frac = std.fmt.parseFloat(f64, std.mem.sliceTo(std.os.argv[i], 0)) catch 0.6;
+        } else if (std.mem.eql(u8, arg, "--val-frac") and i + 1 < std.os.argv.len) {
+            i += 1;
+            config.val_frac = std.fmt.parseFloat(f64, std.mem.sliceTo(std.os.argv[i], 0)) catch 0.2;
+        } else if (std.mem.eql(u8, arg, "--serial-opponents")) {
+            config.serial_opponents = true;
+        } else if (std.mem.eql(u8, arg, "--measure-concurrency")) {
+            config.measure_concurrency = true;
         } else if (!std.mem.startsWith(u8, arg, "--")) {
             config.model = arg;
         }
@@ -406,7 +443,8 @@ fn parseCliArgs() CliConfig {
     const env_loader = @import("env_loader");
     if (g_env_loader == null) {
         g_env_loader = env_loader.EnvLoader.init(std.heap.page_allocator);
-        g_env_loader.?.loadFile(".env") catch {};
+        const env_path = std.posix.getenv("QSTAR_ENV_FILE") orelse ".env";
+        g_env_loader.?.loadFile(env_path) catch {};
     }
 
     if (g_env_loader.?.get("OPENAI_API_KEY")) |key| {
@@ -473,6 +511,25 @@ fn parseCliArgs() CliConfig {
         config.bench_openai_model = config.openai_model;
     }
 
+    // Explicit process-environment values take precedence over dotenv values,
+    // allowing local-vs-remote competition runs without editing credentials.
+    if (std.posix.getenv("OLLAMA_HOST")) |host| {
+        config.ollama_host = host;
+        config.bench_ollama_host = host;
+    }
+    if (std.posix.getenv("OLLAMA_PORT")) |port| {
+        const parsed = std.fmt.parseInt(u16, port, 10) catch config.ollama_port;
+        config.ollama_port = parsed;
+        config.bench_ollama_port = parsed;
+    }
+    if (std.posix.getenv("OLLAMA_MODEL")) |model| {
+        config.model = model;
+        config.bench_ollama_model = model;
+    }
+    if (std.posix.getenv("OLLAMA_BENCH_HOST")) |host| config.bench_ollama_host = host;
+    if (std.posix.getenv("OLLAMA_BENCH_PORT")) |port| config.bench_ollama_port = std.fmt.parseInt(u16, port, 10) catch config.bench_ollama_port;
+    if (std.posix.getenv("OLLAMA_BENCH_MODEL")) |model| config.bench_ollama_model = model;
+
     return config;
 }
 
@@ -483,6 +540,11 @@ pub fn main() !void {
 
     const cli = parseCliArgs();
 
+    if (cli.measure_concurrency) {
+        try runConcurrencyMeasurement(allocator, cli);
+        std.process.exit(0);
+    }
+
     if (cli.conversation) {
         try runConversationMode(allocator, cli);
     } else {
@@ -492,8 +554,8 @@ pub fn main() !void {
             .competitive => try runCompetitiveBenchmark(allocator, cli),
         }
 
-        // Post-benchmark training: automatically run training after every bench test
-        try runPostBenchTraining(allocator, cli);
+        // Training is explicit so benchmark runs can close deterministically.
+        if (!cli.no_train) try runPostBenchTraining(allocator, cli);
     }
 
     std.process.exit(0);
@@ -506,8 +568,6 @@ fn runPostBenchTraining(allocator: std.mem.Allocator, cli: CliConfig) !void {
     std.debug.print("========================================================\n", .{});
     std.debug.print("=== Post-Benchmark Training                          ===\n", .{});
     std.debug.print("========================================================\n\n", .{});
-
-    const training = @import("training");
 
     // Build training config from CLI args
     var train_config = training.TrainingConfig{
@@ -554,6 +614,261 @@ fn runPostBenchTraining(allocator: std.mem.Allocator, cli: CliConfig) !void {
     if (result.sentences_learned > 0) {
         std.debug.print("  Corpus saved to qstar_corpus.txt\n", .{});
     }
+    std.debug.print("========================================================\n", .{});
+}
+
+/// Runs failure-window training on collected benchmark failures.
+/// Partitions failures into train/val/held-out, trains on the train split,
+/// validates on the val split, and reports held-out improvement.
+/// Also evaluates the external held-out prompts (not in the 144 benchmark)
+/// for out-of-distribution generalization.
+fn runFailureWindowTraining(
+    allocator: std.mem.Allocator,
+    cli: CliConfig,
+    failure_examples: []training.FailureExample,
+) !void {
+    std.debug.print("\n", .{});
+    std.debug.print("========================================================\n", .{});
+    std.debug.print("=== Failure-Window Training                          ===\n", .{});
+    std.debug.print("========================================================\n\n", .{});
+
+    if (failure_examples.len == 0) {
+        std.debug.print("No failures collected — skipping training.\n", .{});
+        std.debug.print("========================================================\n", .{});
+        return;
+    }
+
+    std.debug.print("Collected {d} failure examples.\n", .{failure_examples.len});
+
+    // Partition into train/val/held-out using deterministic hash split.
+    var window = try training.partitionFailures(allocator, failure_examples, cli.train_frac, cli.val_frac);
+    defer window.deinit();
+
+    std.debug.print("Partition: {d} train / {d} val / {d} held-out\n", .{
+        window.train.len, window.val.len, window.held_out.len,
+    });
+
+    var agent = initAgent(allocator);
+    defer agent.deinit();
+
+    var routes_created: usize = 0;
+    var sentences_learned: usize = 0;
+
+    // Train on the train split: promote opponent responses that beat Qstar
+    // by the promotion gate, or reinforce Qstar responses that were just slow.
+    for (window.train) |ex| {
+        const category = training.classifyPromptCategory(ex.prompt);
+        const should_promote = training.shouldPromote(
+            ex.qstar_judge_composite,
+            ex.opponent_best_score,
+            category,
+        );
+
+        if (should_promote and ex.opponent_best_response.len > 20) {
+            // Promote the opponent's response as a route.
+            const confidence_bp = training.confidenceForCategory(category);
+            var kws: [training.dyn_routes_mod.MAX_KEYWORDS][]const u8 = undefined;
+            const kw_count = agent_mod.mc_engine.RouteGenerator.extractKeywords(ex.prompt, &kws, training.dyn_routes_mod.MAX_KEYWORDS);
+            if (kw_count > 0) {
+                agent.registerDynamicRoute(kws[0..kw_count], ex.opponent_best_response, confidence_bp, category, .openai_reinforced) catch {};
+                routes_created += 1;
+            }
+            const learned = agent.learnFromText(ex.opponent_best_response) catch 0;
+            sentences_learned += learned;
+        } else if (ex.qstar_response.len > 20 and ex.latency_ms > 60000) {
+            // Qstar was slow but not necessarily wrong — reinforce its response
+            // so future runs can use the cached route instead of regenerating.
+            const confidence_bp = training.confidenceForCategory(category);
+            var kws: [training.dyn_routes_mod.MAX_KEYWORDS][]const u8 = undefined;
+            const kw_count = agent_mod.mc_engine.RouteGenerator.extractKeywords(ex.prompt, &kws, training.dyn_routes_mod.MAX_KEYWORDS);
+            if (kw_count > 0) {
+                agent.registerDynamicRoute(kws[0..kw_count], ex.qstar_response, confidence_bp, category, .self_evaluated) catch {};
+                routes_created += 1;
+            }
+        }
+    }
+
+    std.debug.print("\nTraining complete:\n", .{});
+    std.debug.print("  Routes created: {d}\n", .{routes_created});
+    std.debug.print("  Sentences learned: {d}\n", .{sentences_learned});
+
+    // Validation: run val prompts through the trained agent and measure
+    // relevance improvement. Only promote routes that improve val score.
+    var val_improved: usize = 0;
+    for (window.val) |ex| {
+        const trained_response = agent.generateWithReflection(ex.prompt, allocator, null) catch continue;
+        defer allocator.free(trained_response);
+        const trained_rel = scoreResponse(trained_response, &.{}).relevance;
+        if (trained_rel > ex.qstar_relevance + 0.05) val_improved += 1;
+    }
+    std.debug.print("  Validation: {d}/{d} prompts improved\n", .{ val_improved, window.val.len });
+
+    // Held-out evaluation: 144-benchmark held-out.
+    var held_out_results = std.ArrayList(u8).init(allocator);
+    defer held_out_results.deinit();
+    try held_out_results.appendSlice("{\"benchmark_held_out\":[");
+    var ho_relevance_before: f64 = 0;
+    var ho_relevance_after: f64 = 0;
+    for (window.held_out, 0..) |ex, i| {
+        if (i > 0) try held_out_results.append(',');
+        const trained_response = agent.generateWithReflection(ex.prompt, allocator, null) catch continue;
+        defer allocator.free(trained_response);
+        const trained_rel = scoreResponse(trained_response, &.{}).relevance;
+        ho_relevance_before += ex.qstar_relevance;
+        ho_relevance_after += trained_rel;
+        try held_out_results.writer().print("{{\"prompt\":\"{s}\",\"before\":{d:.4},\"after\":{d:.4}}}", .{
+            ex.prompt, ex.qstar_relevance, trained_rel,
+        });
+    }
+    try held_out_results.appendSlice("],");
+
+    // External held-out: prompts NOT in the 144 benchmark.
+    try held_out_results.appendSlice("\"external_held_out\":[");
+    var ext_relevance: f64 = 0;
+    for (training.EXTERNAL_HELD_OUT_PROMPTS, 0..) |ep, i| {
+        if (i > 0) try held_out_results.append(',');
+        const response = agent.generateWithReflection(ep.prompt, allocator, null) catch continue;
+        defer allocator.free(response);
+        const rel = scoreResponse(response, ep.expected_keywords).relevance;
+        ext_relevance += rel;
+        try held_out_results.writer().print("{{\"prompt\":\"{s}\",\"category\":\"{s}\",\"relevance\":{d:.4}}}", .{
+            ep.prompt, ep.category, rel,
+        });
+    }
+    try held_out_results.appendSlice("],");
+
+    const ho_count = @max(@as(usize, 1), window.held_out.len);
+    const ext_count = @max(@as(usize, 1), training.EXTERNAL_HELD_OUT_PROMPTS.len);
+    try held_out_results.writer().print("\"held_out_avg_before\":{d:.4},\"held_out_avg_after\":{d:.4},\"external_held_out_avg\":{d:.4},\"routes_created\":{d},\"sentences_learned\":{d}}}", .{
+        ho_relevance_before / @as(f64, @floatFromInt(ho_count)),
+        ho_relevance_after / @as(f64, @floatFromInt(ho_count)),
+        ext_relevance / @as(f64, @floatFromInt(ext_count)),
+        routes_created,
+        sentences_learned,
+    });
+
+    // Write the failure-window report atomically.
+    const tmp_path = "failure_window_report.json.tmp";
+    {
+        const tmp_file = try std.fs.cwd().createFile(tmp_path, .{ .truncate = true });
+        defer tmp_file.close();
+        try tmp_file.writeAll(held_out_results.items);
+        try tmp_file.sync();
+    }
+    try std.fs.cwd().rename(tmp_path, "failure_window_report.json");
+
+    std.debug.print("\nFailure-window report saved to failure_window_report.json\n", .{});
+    std.debug.print("  Held-out avg relevance: {d:.4} -> {d:.4}\n", .{
+        ho_relevance_before / @as(f64, @floatFromInt(ho_count)),
+        ho_relevance_after / @as(f64, @floatFromInt(ho_count)),
+    });
+    std.debug.print("  External held-out avg relevance: {d:.4}\n", .{
+        ext_relevance / @as(f64, @floatFromInt(ext_count)),
+    });
+    std.debug.print("========================================================\n", .{});
+}
+
+/// Runs a concurrency measurement: executes a 24-prompt subset (2 per
+/// category) twice — once with serial opponents and once with concurrent
+/// opponents — and writes a comparison JSON with wall-time differences.
+fn runConcurrencyMeasurement(allocator: std.mem.Allocator, cli: CliConfig) !void {
+    std.debug.print("\n", .{});
+    std.debug.print("========================================================\n", .{});
+    std.debug.print("=== Concurrency Measurement                          ===\n", .{});
+    std.debug.print("========================================================\n\n", .{});
+
+    // Build a 24-prompt subset: 2 per category.
+    var subset = std.ArrayList(BenchPrompt).init(allocator);
+    defer subset.deinit();
+    var seen_per_cat: [13]usize = .{0} ** 13;
+    for (BENCHMARK_PROMPTS) |bp| {
+        const cat_idx = @intFromEnum(bp.category);
+        if (seen_per_cat[cat_idx] < 2) {
+            try subset.append(bp);
+            seen_per_cat[cat_idx] += 1;
+        }
+        if (subset.items.len >= 24) break;
+    }
+    std.debug.print("Selected {d} prompts for concurrency measurement.\n", .{subset.items.len});
+
+    // Configure opponents.
+    const ollama_cfg = ollama.OllamaConfig{
+        .host = cli.bench_ollama_host,
+        .port = cli.bench_ollama_port,
+        .model = cli.bench_ollama_model,
+    };
+    const openai_cfg = openai.OpenAIConfig{
+        .model = cli.bench_openai_model,
+        .api_key = cli.bench_openai_api_key,
+    };
+    const run_ollama = !cli.no_ollama and ollama.isAvailable(ollama_cfg);
+    const run_openai = !cli.no_openai and cli.bench_openai_api_key.len > 0 and openai.isAvailable(openai_cfg);
+
+    // Run serial.
+    std.debug.print("\n--- Serial opponents ---\n", .{});
+    var serial_total_ns: u64 = 0;
+    var serial_per_prompt = std.ArrayList(struct { prompt: []const u8, opponents_ms: u64 }).init(allocator);
+    defer serial_per_prompt.deinit();
+    for (subset.items) |bp| {
+        const start = std.time.nanoTimestamp();
+        var opponents = runOpponentsParallelMode(bp, ollama_cfg, openai_cfg, run_ollama, run_openai, true);
+        const wall_ns: u64 = @intCast(std.time.nanoTimestamp() - start);
+        serial_total_ns += wall_ns;
+        try serial_per_prompt.append(.{ .prompt = bp.prompt, .opponents_ms = wall_ns / 1_000_000 });
+        if (opponents.ollama_result) |*r| r.deinit();
+        if (opponents.openai_result) |*r| r.deinit();
+    }
+
+    // Run concurrent.
+    std.debug.print("\n--- Concurrent opponents ---\n", .{});
+    var concurrent_total_ns: u64 = 0;
+    var concurrent_per_prompt = std.ArrayList(struct { prompt: []const u8, opponents_ms: u64 }).init(allocator);
+    defer concurrent_per_prompt.deinit();
+    for (subset.items) |bp| {
+        const start = std.time.nanoTimestamp();
+        var opponents = runOpponentsParallelMode(bp, ollama_cfg, openai_cfg, run_ollama, run_openai, false);
+        const wall_ns: u64 = @intCast(std.time.nanoTimestamp() - start);
+        concurrent_total_ns += wall_ns;
+        try concurrent_per_prompt.append(.{ .prompt = bp.prompt, .opponents_ms = wall_ns / 1_000_000 });
+        if (opponents.ollama_result) |*r| r.deinit();
+        if (opponents.openai_result) |*r| r.deinit();
+    }
+
+    const serial_ms = serial_total_ns / 1_000_000;
+    const concurrent_ms = concurrent_total_ns / 1_000_000;
+    const speedup: f64 = if (concurrent_ms > 0) @as(f64, @floatFromInt(serial_ms)) / @as(f64, @floatFromInt(concurrent_ms)) else 0;
+
+    std.debug.print("\nSerial total:      {d} ms\n", .{serial_ms});
+    std.debug.print("Concurrent total:  {d} ms\n", .{concurrent_ms});
+    std.debug.print("Speedup ratio:     {d:.2}x\n", .{speedup});
+
+    // Write comparison JSON.
+    var json = std.ArrayList(u8).init(allocator);
+    defer json.deinit();
+    try json.appendSlice("{\"concurrency_comparison\":{");
+    try json.writer().print("\"serial_total_ms\":{d},\"concurrent_total_ms\":{d},\"speedup\":{d:.4},\"prompts\":{d},\"serial\":[", .{
+        serial_ms, concurrent_ms, speedup, subset.items.len,
+    });
+    for (serial_per_prompt.items, 0..) |p, i| {
+        if (i > 0) try json.append(',');
+        try json.writer().print("{{\"opponents_ms\":{d}}}", .{p.opponents_ms});
+    }
+    try json.appendSlice("],\"concurrent\":[");
+    for (concurrent_per_prompt.items, 0..) |p, i| {
+        if (i > 0) try json.append(',');
+        try json.writer().print("{{\"opponents_ms\":{d}}}", .{p.opponents_ms});
+    }
+    try json.appendSlice("]}}");
+
+    const tmp_path = "concurrency_comparison.json.tmp";
+    {
+        const tmp_file = try std.fs.cwd().createFile(tmp_path, .{ .truncate = true });
+        defer tmp_file.close();
+        try tmp_file.writeAll(json.items);
+        try tmp_file.sync();
+    }
+    try std.fs.cwd().rename(tmp_path, "concurrency_comparison.json");
+    std.debug.print("\nComparison saved to concurrency_comparison.json\n", .{});
     std.debug.print("========================================================\n", .{});
 }
 
@@ -876,7 +1191,9 @@ fn scoreResponse(text: []const u8, expected_keywords: []const []const u8) struct
 
 fn runQstarPrompt(allocator: std.mem.Allocator, agent: *agent_mod.Agent, bench_prompt: BenchPrompt) !ScoredResponse {
     var timer = try std.time.Timer.start();
-    const response = try agent.generateWithReflection(bench_prompt.prompt, allocator);
+    const deterministic = knowledge_lookup.answer(allocator, bench_prompt.prompt) catch null orelse
+        (arithmetic_reasoner.solve(allocator, bench_prompt.prompt) catch null);
+    const response = deterministic orelse try agent.generateWithReflection(bench_prompt.prompt, allocator, null);
     const elapsed = timer.read();
 
     const token_count = response.len / 4;
@@ -960,6 +1277,47 @@ fn runOpenAIPrompt(allocator: std.mem.Allocator, config: openai.OpenAIConfig, be
     };
 }
 
+const OpponentParallel = struct {
+    prompt: BenchPrompt,
+    ollama_config: ollama.OllamaConfig,
+    openai_config: openai.OpenAIConfig,
+    ollama_result: ?ScoredResponse = null,
+    openai_result: ?ScoredResponse = null,
+};
+
+fn runOllamaWorker(ctx: *OpponentParallel) void {
+    ctx.ollama_result = runOllamaPrompt(std.heap.page_allocator, ctx.ollama_config, ctx.prompt) catch null;
+}
+
+fn runOpenAIWorker(ctx: *OpponentParallel) void {
+    ctx.openai_result = runOpenAIPrompt(std.heap.page_allocator, ctx.openai_config, ctx.prompt) catch null;
+}
+
+fn runOpponentsParallel(prompt: BenchPrompt, ollama_config: ollama.OllamaConfig, openai_config: openai.OpenAIConfig, run_ollama: bool, run_openai: bool) OpponentParallel {
+    return runOpponentsParallelMode(prompt, ollama_config, openai_config, run_ollama, run_openai, false);
+}
+
+fn runOpponentsParallelMode(prompt: BenchPrompt, ollama_config: ollama.OllamaConfig, openai_config: openai.OpenAIConfig, run_ollama: bool, run_openai: bool, serial: bool) OpponentParallel {
+    var ctx = OpponentParallel{
+        .prompt = prompt,
+        .ollama_config = ollama_config,
+        .openai_config = openai_config,
+    };
+    if (serial) {
+        // Serial mode: run opponents sequentially (no threads).
+        if (run_ollama) ctx.ollama_result = runOllamaPrompt(std.heap.page_allocator, ctx.ollama_config, ctx.prompt) catch null;
+        if (run_openai) ctx.openai_result = runOpenAIPrompt(std.heap.page_allocator, ctx.openai_config, ctx.prompt) catch null;
+        return ctx;
+    }
+    var ollama_thread: ?std.Thread = null;
+    var openai_thread: ?std.Thread = null;
+    if (run_ollama) ollama_thread = std.Thread.spawn(.{}, runOllamaWorker, .{&ctx}) catch null;
+    if (run_openai) openai_thread = std.Thread.spawn(.{}, runOpenAIWorker, .{&ctx}) catch null;
+    if (ollama_thread) |thread| thread.join();
+    if (openai_thread) |thread| thread.join();
+    return ctx;
+}
+
 fn categoryToString(cat: Category) []const u8 {
     return switch (cat) {
         .factual => "factual",
@@ -1001,10 +1359,30 @@ fn categoryCount() usize {
 fn initAgent(allocator: std.mem.Allocator) agent_mod.Agent {
     var agent = agent_mod.Agent.init(allocator, 0, fp.ONE);
 
-    // Load corpus
-    if (std.fs.cwd().openFile("qstar_corpus.txt", .{})) |file| {
+    // Lattice-first with optional low-confidence external fallback.
+    const llama_server = @import("llama_server");
+    const server_config = llama_server.LlamaServerConfig.fromEnv(allocator, .{});
+    if (llama_server.isAvailable(server_config)) agent.attachLlamaServer(server_config);
+
+    // Prefer the full compressed corpus with bounded streaming.
+    const qsc_path = if (std.posix.getenv("QSTAR_CORPUS_QSC")) |configured|
+        configured
+    else blk: {
+        std.fs.cwd().access("qstar_corpus_full.qsc", .{}) catch break :blk "qstar_corpus.qsc";
+        break :blk "qstar_corpus_full.qsc";
+    };
+    const max_pages = if (std.posix.getenv("QSTAR_CORPUS_MAX_PAGES")) |value|
+        std.fmt.parseInt(usize, value, 10) catch 16
+    else
+        16;
+    const has_qsc = blk: {
+        std.fs.cwd().access(qsc_path, .{}) catch break :blk false;
+        break :blk true;
+    };
+    if (has_qsc) {
+        _ = training.streamCorpusFromQscMax(&agent, qsc_path, max_pages) catch 0;
+    } else if (std.fs.cwd().openFile("qstar_corpus.txt", .{})) |file| {
         file.close();
-        const training = @import("training");
         _ = training.loadCorpusFromFile(&agent, "qstar_corpus.txt") catch 0;
     } else |_| {}
 
@@ -1030,7 +1408,6 @@ fn initMapleAgent(allocator: std.mem.Allocator) agent_mod.Agent {
     // Load same corpus as Qstar — this is the "compressed Qstar" approach
     if (std.fs.cwd().openFile("qstar_corpus.txt", .{})) |file| {
         file.close();
-        const training = @import("training");
         _ = training.loadCorpusFromFile(&agent, "qstar_corpus.txt") catch 0;
     } else |_| {}
 
@@ -1048,7 +1425,7 @@ fn initMapleAgent(allocator: std.mem.Allocator) agent_mod.Agent {
 
 fn runLocalMaplePrompt(allocator: std.mem.Allocator, agent: *agent_mod.Agent, bench_prompt: BenchPrompt) !ScoredResponse {
     var timer = try std.time.Timer.start();
-    const response = try agent.generateWithReflection(bench_prompt.prompt, allocator);
+    const response = try agent.generateWithReflection(bench_prompt.prompt, allocator, null);
     const elapsed = timer.read();
 
     const token_count = response.len / 4;
@@ -1087,7 +1464,7 @@ fn selectPrompts(allocator: std.mem.Allocator, cli: CliConfig, out_gen_prompts: 
     }
     const gen_list = out_gen_prompts.*;
 
-    if (!cli.random and cli.num_prompts == 0 and gen_list == null) {
+    if (!cli.random and cli.num_prompts == 0 and gen_list == null and cli.category_filter == null) {
         // Default: all prompts in order
         return allocator.dupe(BenchPrompt, &BENCHMARK_PROMPTS);
     }
@@ -1106,6 +1483,14 @@ fn selectPrompts(allocator: std.mem.Allocator, cli: CliConfig, out_gen_prompts: 
             });
         }
         std.debug.print("Generated {d} random prompts via Ollama (untrained category)\n", .{gl.len});
+    }
+
+    if (cli.category_filter) |wanted| {
+        var i: usize = pool.items.len;
+        while (i > 0) {
+            i -= 1;
+            if (pool.items[i].category != wanted) _ = pool.orderedRemove(i);
+        }
     }
 
     // Shuffle a copy if random mode
@@ -1185,7 +1570,7 @@ pub fn runCompetitiveBenchmark(allocator: std.mem.Allocator, cli: CliConfig) !vo
 
     const judge_model = g_judge_model_override orelse g_judge_model;
     const judge_available = if (cli.use_judge) ollama.isAvailable(ollama.OllamaConfig{ .host = cli.judge_host orelse cli.bench_ollama_host, .port = if (cli.judge_port > 0) cli.judge_port else cli.bench_ollama_port, .model = judge_model }) else false;
-    const openai_judge_available = if (cli.use_judge and (cli.openai_judge or (openai_available and cli.bench_openai_api_key.len > 0))) openai.isAvailable(openai_cfg) else false;
+    const openai_judge_available = if (cli.use_judge and !cli.ollama_judge_only and (cli.openai_judge or (openai_available and cli.bench_openai_api_key.len > 0))) openai.isAvailable(openai_cfg) else false;
     if (openai_judge_available and judge_available and cli.use_judge) {
         std.debug.print("Judge:  Cross-judge OpenAI+Ollama+Qstar\n", .{});
     } else if (openai_judge_available and judge_available) {
@@ -1284,6 +1669,14 @@ pub fn runCompetitiveBenchmark(allocator: std.mem.Allocator, cli: CliConfig) !vo
     try json_output.appendSlice(if (cli.random) "true" else "false");
     try json_output.appendSlice(",\"results\":[");
 
+    // Failure-window collection: accumulate failed/low-scoring prompts for
+    // post-bench failure-window training (retro-dev round 2).
+    var failure_examples = std.ArrayList(training.FailureExample).init(allocator);
+    defer {
+        for (failure_examples.items) |*ex| ex.deinit();
+        failure_examples.deinit();
+    }
+
     for (selected_prompts, 0..) |bp, idx| {
         const cat_idx: usize = @intFromEnum(bp.category);
         cat_counts[cat_idx] += 1;
@@ -1309,28 +1702,48 @@ pub fn runCompetitiveBenchmark(allocator: std.mem.Allocator, cli: CliConfig) !vo
         cat_qstar_rel[cat_idx] += qstar_result.relevance_score;
         cat_qstar_tps[cat_idx] += qstar_result.tokens_per_sec;
 
-        // Run Ollama
-        var ollama_result: ?ScoredResponse = null;
-        if (ollama_available) {
-            ollama_result = runOllamaPrompt(allocator, ollama_cfg, bp) catch null;
-        }
+        // Run independent opponents concurrently to remove serial network wait.
+        const opponents_start = std.time.nanoTimestamp();
+        const opponents = runOpponentsParallelMode(bp, ollama_cfg, openai_cfg, ollama_available, openai_available, cli.serial_opponents);
+        const opponents_wall_ns: u64 = @intCast(std.time.nanoTimestamp() - opponents_start);
+        var ollama_result = opponents.ollama_result;
+        var openai_result = opponents.openai_result;
 
-        // Run OpenAI (frontier opponent)
-        var openai_result: ?ScoredResponse = null;
-        if (openai_available) {
-            openai_result = runOpenAIPrompt(allocator, openai_cfg, bp) catch null;
+        // Capture opponent best response for failure-window collection BEFORE
+        // the JSON output section defers free the result texts.
+        var failure_opp_best_score: f64 = 0;
+        var failure_opp_best_text: ?[]u8 = null;
+        defer if (failure_opp_best_text) |t| allocator.free(t);
+        var failure_has_opponent = false;
+        if (ollama_result) |or_res| {
+            const oj_composite: f64 = if (or_res.judge) |oj| oj.composite() else or_res.relevance_score;
+            if (oj_composite > failure_opp_best_score) {
+                failure_opp_best_score = oj_composite;
+                if (failure_opp_best_text) |old| allocator.free(old);
+                failure_opp_best_text = allocator.dupe(u8, or_res.text) catch null;
+                failure_has_opponent = true;
+            }
+        }
+        if (openai_result) |oa_res| {
+            const aj_composite: f64 = if (oa_res.judge) |aj| aj.composite() else oa_res.relevance_score;
+            if (aj_composite > failure_opp_best_score) {
+                failure_opp_best_score = aj_composite;
+                if (failure_opp_best_text) |old| allocator.free(old);
+                failure_opp_best_text = allocator.dupe(u8, oa_res.text) catch null;
+                failure_has_opponent = true;
+            }
         }
 
         // Cross-judge scoring: all available models judge each response
         const cross_judge_model = g_judge_model_override orelse g_judge_model;
         const cross_cfg = CrossJudgeConfig{
-            .use_openai = openai_judge_available,
+            .use_openai = openai_judge_available and !cli.ollama_judge_only,
             .openai_cfg = if (openai_judge_available) openai_cfg else null,
             .use_ollama = judge_available,
             .ollama_host = cli.judge_host orelse cli.ollama_host,
             .ollama_port = if (cli.judge_port > 0) cli.judge_port else cli.ollama_port,
             .ollama_model = cross_judge_model,
-            .use_qstar = cli.use_judge,
+            .use_qstar = cli.use_judge and !cli.ollama_judge_only,
             .qstar_agent = &agent,
         };
 
@@ -1377,8 +1790,10 @@ pub fn runCompetitiveBenchmark(allocator: std.mem.Allocator, cli: CliConfig) !vo
 
         // JSON entry (always present — qstar always runs)
         if (idx > 0) try json_output.append(',');
+        const prompt_escaped = try escapeJsonString(allocator, bp.prompt);
+        defer allocator.free(prompt_escaped);
         try json_output.appendSlice("{\"prompt\":\"");
-        try json_output.appendSlice(bp.prompt);
+        try json_output.appendSlice(prompt_escaped);
         try json_output.appendSlice("\",\"category\":\"");
         try json_output.appendSlice(categoryToString(bp.category));
         try json_output.appendSlice("\",\"qstar\":{\"relevance\":");
@@ -1660,6 +2075,50 @@ pub fn runCompetitiveBenchmark(allocator: std.mem.Allocator, cli: CliConfig) !vo
         } else {
             try json_output.appendSlice(",\"maple\":null");
         }
+        // Per-prompt opponent wall-clock timing for concurrency measurement.
+        try json_output.appendSlice(",\"opponents_wall_ms\":");
+        try json_output.writer().print("{d}", .{opponents_wall_ns / 1_000_000});
+        try json_output.appendSlice(",\"opponents_serial\":");
+        try json_output.appendSlice(if (cli.serial_opponents) "true" else "false");
+        try json_output.appendSlice("}");
+
+        // Failure-window collection: classify this prompt as a failure if
+        // Qstar lost to both opponents, had low relevance, or was very slow.
+        if (cli.collect_failures) {
+            const qstar_rel = qstar_result.relevance_score;
+            const qstar_judge_composite: f64 = if (qstar_result.judge) |qj| qj.composite() else qstar_rel;
+            const failure_qstar_ms = qstar_result.latency_ns / 1_000_000;
+
+            // Use pre-captured opponent best score/text (captured before JSON
+            // output section freed the result texts).
+            const opponent_best_score = failure_opp_best_score;
+            const opponent_best_response: []const u8 = failure_opp_best_text orelse "";
+            const has_opponent = failure_has_opponent;
+
+            // Failure criteria: low relevance, lost to both opponents, or very slow.
+            const is_low_relevance = qstar_rel < 0.5;
+            const lost_to_opponents = has_opponent and opponent_best_score > qstar_judge_composite + 0.05;
+            const is_slow = failure_qstar_ms > 60000;
+            if (is_low_relevance or lost_to_opponents or is_slow) {
+                const route_backend_name = switch (agent.last_route_backend) {
+                    .lattice => "lattice",
+                    .llama_server => "llama_server",
+                };
+                failure_examples.append(training.FailureExample{
+                    .prompt = allocator.dupe(u8, bp.prompt) catch continue,
+                    .category = allocator.dupe(u8, categoryToString(bp.category)) catch continue,
+                    .qstar_response = allocator.dupe(u8, qstar_result.text) catch continue,
+                    .qstar_relevance = qstar_rel,
+                    .qstar_judge_composite = qstar_judge_composite,
+                    .opponent_best_response = allocator.dupe(u8, opponent_best_response) catch continue,
+                    .opponent_best_score = opponent_best_score,
+                    .route_backend = allocator.dupe(u8, route_backend_name) catch continue,
+                    .fallback_used = agent.fallback_attempts > 0,
+                    .latency_ms = failure_qstar_ms,
+                    .allocator = allocator,
+                }) catch {};
+            }
+        }
 
         std.debug.print("\n", .{});
     }
@@ -1711,10 +2170,8 @@ pub fn runCompetitiveBenchmark(allocator: std.mem.Allocator, cli: CliConfig) !vo
         try json_output.writer().print("{d:.2}", .{m_avg_tps});
         try json_output.appendSlice("}");
     }
-    try json_output.appendSlice("]");
-
     // Overall summary
-    try json_output.appendSlice(",\"total_prompts\":");
+    try json_output.appendSlice("],\"total_prompts\":");
     try json_output.writer().print("{d}", .{selected_prompts.len});
     try json_output.appendSlice(",\"qstar_wins\":");
     try json_output.writer().print("{d}", .{total_qstar_wins});
@@ -1726,12 +2183,21 @@ pub fn runCompetitiveBenchmark(allocator: std.mem.Allocator, cli: CliConfig) !vo
     try json_output.writer().print("{d}", .{total_maple_wins});
     try json_output.appendSlice(",\"ties\":");
     try json_output.writer().print("{d}", .{total_ties});
-    try json_output.appendSlice("}}");
+    try json_output.appendSlice(",\"fallback_attempts\":");
+    try json_output.writer().print("{d}", .{agent.fallback_attempts});
+    try json_output.appendSlice(",\"fallback_successes\":");
+    try json_output.writer().print("{d}", .{agent.fallback_successes});
+    try json_output.appendSlice(",\"completed\":true}}");
 
-    // Write results file
-    const results_file = try std.fs.cwd().createFile("competitive_results.json", .{});
-    defer results_file.close();
-    try results_file.writeAll(json_output.items);
+    // Write results atomically so interruptions do not leave a false-complete file.
+    const tmp_results_path = "competitive_results.json.tmp";
+    {
+        const tmp_file = try std.fs.cwd().createFile(tmp_results_path, .{ .truncate = true });
+        defer tmp_file.close();
+        try tmp_file.writeAll(json_output.items);
+        try tmp_file.sync();
+    }
+    try std.fs.cwd().rename(tmp_results_path, "competitive_results.json");
 
     // Print summary
     std.debug.print("\n========================================================\n", .{});
@@ -1766,6 +2232,14 @@ pub fn runCompetitiveBenchmark(allocator: std.mem.Allocator, cli: CliConfig) !vo
     }
 
     std.debug.print("\nResults saved to competitive_results.json\n", .{});
+
+    // Failure-window training (retro-dev round 2): if enabled, run training
+    // on the collected failures after the benchmark completes.
+    if (cli.failure_window and failure_examples.items.len > 0) {
+        runFailureWindowTraining(allocator, cli, failure_examples.items) catch |err| {
+            std.debug.print("Failure-window training error: {s}\n", .{@errorName(err)});
+        };
+    }
 }
 
 // =============================================================================
@@ -1786,7 +2260,7 @@ pub fn runQstarBench(allocator: std.mem.Allocator, cli: CliConfig) !void {
 
     const judge_model = g_judge_model_override orelse g_judge_model;
     const judge_available = if (cli.use_judge) ollama.isAvailable(ollama.OllamaConfig{ .host = cli.judge_host orelse cli.bench_ollama_host, .port = if (cli.judge_port > 0) cli.judge_port else cli.bench_ollama_port, .model = judge_model }) else false;
-    const openai_judge_available = if (cli.use_judge and (cli.openai_judge or (openai_available and cli.bench_openai_api_key.len > 0))) openai.isAvailable(openai_cfg) else false;
+    const openai_judge_available = if (cli.use_judge and !cli.ollama_judge_only and (cli.openai_judge or (openai_available and cli.bench_openai_api_key.len > 0))) openai.isAvailable(openai_cfg) else false;
 
     if (openai_judge_available and judge_available and cli.use_judge) {
         std.debug.print("Judge:  Cross-judge OpenAI+Ollama+Qstar\n", .{});
@@ -1812,13 +2286,13 @@ pub fn runQstarBench(allocator: std.mem.Allocator, cli: CliConfig) !void {
     std.debug.print("Prompts: {d}\n\n", .{selected_prompts.len});
 
     const cross_cfg = CrossJudgeConfig{
-        .use_openai = openai_judge_available,
+        .use_openai = openai_judge_available and !cli.ollama_judge_only,
         .openai_cfg = if (openai_judge_available) openai_cfg else null,
         .use_ollama = judge_available,
         .ollama_host = cli.judge_host orelse cli.ollama_host,
         .ollama_port = if (cli.judge_port > 0) cli.judge_port else cli.ollama_port,
         .ollama_model = judge_model,
-        .use_qstar = cli.use_judge,
+        .use_qstar = cli.use_judge and !cli.ollama_judge_only,
         .qstar_agent = &agent,
     };
 
@@ -1863,8 +2337,10 @@ pub fn runQstarBench(allocator: std.mem.Allocator, cli: CliConfig) !void {
         total_tps += qstar_result.tokens_per_sec;
 
         if (idx > 0) try json_output.append(',');
+        const prompt_escaped = try escapeJsonString(allocator, bp.prompt);
+        defer allocator.free(prompt_escaped);
         try json_output.appendSlice("{\"prompt\":\"");
-        try json_output.appendSlice(bp.prompt);
+        try json_output.appendSlice(prompt_escaped);
         try json_output.appendSlice("\",\"category\":\"");
         try json_output.appendSlice(categoryToString(bp.category));
         try json_output.appendSlice("\",\"relevance\":");
@@ -1971,7 +2447,7 @@ pub fn runMapleBench(allocator: std.mem.Allocator, cli: CliConfig) !void {
 
     const judge_model = g_judge_model_override orelse g_judge_model;
     const judge_available = if (cli.use_judge) ollama.isAvailable(ollama.OllamaConfig{ .host = cli.judge_host orelse cli.bench_ollama_host, .port = if (cli.judge_port > 0) cli.judge_port else cli.bench_ollama_port, .model = judge_model }) else false;
-    const openai_judge_available = if (cli.use_judge and (cli.openai_judge or (openai_available and cli.bench_openai_api_key.len > 0))) openai.isAvailable(openai_cfg) else false;
+    const openai_judge_available = if (cli.use_judge and !cli.ollama_judge_only and (cli.openai_judge or (openai_available and cli.bench_openai_api_key.len > 0))) openai.isAvailable(openai_cfg) else false;
 
     if (openai_judge_available and judge_available and cli.use_judge) {
         std.debug.print("Judge:  Cross-judge OpenAI+Ollama+Qstar\n", .{});
@@ -1997,13 +2473,13 @@ pub fn runMapleBench(allocator: std.mem.Allocator, cli: CliConfig) !void {
     std.debug.print("Prompts: {d}\n\n", .{selected_prompts.len});
 
     const cross_cfg = CrossJudgeConfig{
-        .use_openai = openai_judge_available,
+        .use_openai = openai_judge_available and !cli.ollama_judge_only,
         .openai_cfg = if (openai_judge_available) openai_cfg else null,
         .use_ollama = judge_available,
         .ollama_host = cli.judge_host orelse cli.ollama_host,
         .ollama_port = if (cli.judge_port > 0) cli.judge_port else cli.ollama_port,
         .ollama_model = judge_model,
-        .use_qstar = cli.use_judge,
+        .use_qstar = cli.use_judge and !cli.ollama_judge_only,
         .qstar_agent = &agent,
     };
 
@@ -2086,8 +2562,10 @@ pub fn runMapleBench(allocator: std.mem.Allocator, cli: CliConfig) !void {
             success_count += 1;
 
             if (idx > 0) try json_output.append(',');
+            const maple_prompt_escaped = try escapeJsonString(allocator, bp.prompt);
+            defer allocator.free(maple_prompt_escaped);
             try json_output.appendSlice("{\"prompt\":\"");
-            try json_output.appendSlice(bp.prompt);
+            try json_output.appendSlice(maple_prompt_escaped);
             try json_output.appendSlice("\",\"category\":\"");
             try json_output.appendSlice(categoryToString(bp.category));
             try json_output.appendSlice("\",\"relevance\":");
@@ -2122,8 +2600,10 @@ pub fn runMapleBench(allocator: std.mem.Allocator, cli: CliConfig) !void {
         } else {
             std.debug.print("  Maple:  FAILED\n", .{});
             if (idx > 0) try json_output.append(',');
+            const maple_prompt_escaped = try escapeJsonString(allocator, bp.prompt);
+            defer allocator.free(maple_prompt_escaped);
             try json_output.appendSlice("{\"prompt\":\"");
-            try json_output.appendSlice(bp.prompt);
+            try json_output.appendSlice(maple_prompt_escaped);
             try json_output.appendSlice("\",\"category\":\"");
             try json_output.appendSlice(categoryToString(bp.category));
             try json_output.appendSlice("\",\"error\":true}");
