@@ -291,3 +291,31 @@ The following f64 uses are intentional boundaries, not state paths:
 - `mesh.zig` Location/PhaseLock/timesync — f64 for network geometric routing
 - `voice_codec.zig` VQ codebook — f64 audio sidecar for training/IO
 - `metacognition_engine.zig` Shannon entropy — f64 introspection boundary (requires log2)
+
+### wasm32-freestanding status (2026-09-18)
+
+`zig build wasm` is green again after the `e9fa0ac` regression (missing `wasm_agent`
+module imports + unsupported LLVM lowering). Two artifacts build:
+`zig-out/wasm/qstar_llm.wasm` (1,070,710 B) and `qstar_llm_esp32.wasm` (1,049,938 B).
+
+Key invariants for future work on the WASM target:
+
+- **No native wide-int division in WASM-reachable paths.** `i256`/`i512` `/`,
+  `@divTrunc`, `@rem`, `@mod`, and variable-amount shifts lower to compiler-rt
+  libcalls absent beyond i128 on wasm32 → `LLVM ERROR: Unsupported library call
+  operation!`. Use `fp.sdivmod256` (`src/fixed_point.zig`) and `q128`'s
+  `udivmod512`/`sdivmod512` limb helpers behind `is_freestanding` comptime
+  branches. Native codegen keeps `@divTrunc`/`@rem` — behavior is byte-identical.
+- **No OS APIs in the WASM-reachable graph.** `std.fs`, `std.net`, `std.Thread`,
+  `std.time`, `std.crypto.random` fail type analysis (`posix.fd_t`, `posix.O`,
+  `timespec` absent). Guard with `if (builtin.os.tag == .freestanding) return ...`
+  early-returns — Zig prunes everything below a comptime-true return from
+  analysis. Type positions (`std.fs.File` fields/returns) still resolve eagerly —
+  use target-dependent types like `corpus_store`'s `FileT`.
+- **Entropy:** `std.crypto.random` is unavailable; use `self.rng`
+  (`std.Random.DefaultPrng`, pure integer) on freestanding.
+- **Supported export surface:** `qstar_init`, `qstar_ingest`, `qstar_run`,
+  `qstar_decode`, `qstar_generate_long_form`, `qstar_tool_execute`,
+  `qstar_save_corpus`, `qstar_load_corpus`.
+
+Full audit trail: `experiments/qstar-llm/docs/RETRO_DEV_AUDIT.md` Module 70.

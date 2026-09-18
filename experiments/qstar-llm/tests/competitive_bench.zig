@@ -607,12 +607,20 @@ fn runPostBenchTraining(allocator: std.mem.Allocator, cli: CliConfig) !void {
     std.debug.print("  Sentences learned: {d}\n", .{result.sentences_learned});
     std.debug.print("  Corpus size: {d} -> {d} bytes\n", .{ result.corpus_size_before, result.corpus_size_after });
 
-    // Save the updated corpus for future bench runs
-    training.saveCorpusToFile(&agent, "qstar_corpus.txt") catch |err| {
+    // Save the updated corpus for future bench runs (delta-append semantics)
+    _ = training.saveCorpusToFile(&agent, "qstar_corpus.txt") catch |err| {
         std.debug.print("Warning: Failed to save corpus: {s}\n", .{@errorName(err)});
     };
     if (result.sentences_learned > 0) {
         std.debug.print("  Corpus saved to qstar_corpus.txt\n", .{});
+    }
+
+    // Persist dynamic routes created during training
+    if (agent.dynamicRouteCount() > 0) {
+        std.fs.cwd().makePath("datasets") catch {};
+        agent.saveDynamicRoutes("datasets/dynamic_routes.bin") catch |err| {
+            std.debug.print("  WARNING: Could not save dynamic routes: {s}\n", .{@errorName(err)});
+        };
     }
     std.debug.print("========================================================\n", .{});
 }
@@ -691,6 +699,15 @@ fn runFailureWindowTraining(
     std.debug.print("\nTraining complete:\n", .{});
     std.debug.print("  Routes created: {d}\n", .{routes_created});
     std.debug.print("  Sentences learned: {d}\n", .{sentences_learned});
+
+    // Persist learned routes so they survive across bench runs
+    if (agent.dynamicRouteCount() > 0) {
+        std.fs.cwd().makePath("datasets") catch {};
+        agent.saveDynamicRoutes("datasets/dynamic_routes.bin") catch |err| {
+            std.debug.print("  WARNING: Could not save dynamic routes: {s}\n", .{@errorName(err)});
+        };
+        std.debug.print("  Persisted {d} dynamic routes.\n", .{agent.dynamicRouteCount()});
+    }
 
     // Validation: run val prompts through the trained agent and measure
     // relevance improvement. Only promote routes that improve val score.
@@ -1381,6 +1398,13 @@ fn initAgent(allocator: std.mem.Allocator) agent_mod.Agent {
     };
     if (has_qsc) {
         _ = training.streamCorpusFromQscMax(&agent, qsc_path, max_pages) catch 0;
+        // Attach full-corpus retrieval: the word→page index lets generation
+        // page in keyword-matching sentences from the whole container, not
+        // just the bounded window. First run builds the index (one-time).
+        std.fs.cwd().makePath("datasets") catch {};
+        agent.attachCorpusRetrieval(qsc_path, "datasets/qsc_index.bin", true) catch |err| {
+            std.debug.print("WARNING: corpus retrieval index unavailable: {s}\n", .{@errorName(err)});
+        };
     } else if (std.fs.cwd().openFile("qstar_corpus.txt", .{})) |file| {
         file.close();
         _ = training.loadCorpusFromFile(&agent, "qstar_corpus.txt") catch 0;
@@ -1395,6 +1419,16 @@ fn initAgent(allocator: std.mem.Allocator) agent_mod.Agent {
 
     // Load knowledge graph
     _ = agent.loadKnowledgeGraph("qstar_kg.bin") catch 0;
+
+    // Load persisted dynamic routes — learned routes survive across bench runs
+    agent.loadDynamicRoutes("datasets/dynamic_routes.bin") catch |err| {
+        if (err != error.FileNotFound) {
+            std.debug.print("WARNING: Could not load dynamic routes: {s}\n", .{@errorName(err)});
+        }
+    };
+    if (agent.dynamicRouteCount() > 0) {
+        std.debug.print("  Loaded {d} dynamic routes from disk.\n", .{agent.dynamicRouteCount()});
+    }
 
     // Ingest system prompt
     agent.ingest(agent_mod.SYSTEM_PROMPT) catch {};
@@ -1459,7 +1493,7 @@ fn selectPrompts(allocator: std.mem.Allocator, cli: CliConfig, out_gen_prompts: 
             .timeout_ms = 600_000,
         };
         if (ollama.isAvailable(gen_cfg)) {
-            out_gen_prompts.* = prompt_gen.generateRandomPrompts(allocator, gen_cfg, cli.gen_prompts) catch null;
+            out_gen_prompts.* = prompt_gen.generateRandomPromptsOllama(allocator, gen_cfg, cli.gen_prompts) catch null;
         }
     }
     const gen_list = out_gen_prompts.*;
@@ -2103,6 +2137,7 @@ pub fn runCompetitiveBenchmark(allocator: std.mem.Allocator, cli: CliConfig) !vo
                 const route_backend_name = switch (agent.last_route_backend) {
                     .lattice => "lattice",
                     .llama_server => "llama_server",
+                    .dynamic_route => "dynamic_route",
                 };
                 failure_examples.append(training.FailureExample{
                     .prompt = allocator.dupe(u8, bp.prompt) catch continue,

@@ -243,6 +243,64 @@ pub fn build(b: *std.Build) void {
     });
     dim_10d_gravity_mod.addImport("fixed_point", fixed_point_mod);
 
+    // LongCat-Video-Avatar reverse-port: fixed-point splat rasterizer (3DGS
+    // output stage) + 11D pipeline orchestration analogs.
+    const splat_render_mod = b.addModule("splat_render", .{
+        .root_source_file = b.path("src/splat_render.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    splat_render_mod.addImport("fixed_point", fixed_point_mod);
+    splat_render_mod.addImport("dim_4d_rotation", dim_4d_rotation_mod);
+
+    const longcat_port_mod = b.addModule("longcat_port", .{
+        .root_source_file = b.path("src/longcat_port.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    longcat_port_mod.addImport("fixed_point", fixed_point_mod);
+    longcat_port_mod.addImport("dim_2d_complex", dim_2d_complex_mod);
+    longcat_port_mod.addImport("dim_4d_rotation", dim_4d_rotation_mod);
+    longcat_port_mod.addImport("dim_7d_color", dim_7d_color_mod);
+    longcat_port_mod.addImport("dim_8d_frequency", dim_8d_frequency_mod);
+    longcat_port_mod.addImport("dim_9d_chaos", dim_9d_chaos_mod);
+    longcat_port_mod.addImport("splat_render", splat_render_mod);
+
+    // Weight reverse-engineering: safetensors container parser + streaming
+    // tensor→lattice distiller (S7→S0 seed pattern applied to model weights).
+    const safetensors_mod = b.addModule("safetensors", .{
+        .root_source_file = b.path("src/safetensors.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    safetensors_mod.addImport("fixed_point", fixed_point_mod);
+
+    const weight_distill_mod = b.addModule("weight_distill", .{
+        .root_source_file = b.path("src/weight_distill.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    weight_distill_mod.addImport("fixed_point", fixed_point_mod);
+    weight_distill_mod.addImport("safetensors", safetensors_mod);
+
+    longcat_port_mod.addImport("weight_distill", weight_distill_mod);
+
+    // Multimodel lattice: modality taxonomy (dim routing) + model registry
+    // (checkpoint → family/modality/scheduler/seed map).
+    const modality_mod = b.addModule("modality", .{
+        .root_source_file = b.path("src/modality.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const model_registry_mod = b.addModule("model_registry", .{
+        .root_source_file = b.path("src/model_registry.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    model_registry_mod.addImport("modality", modality_mod);
+    model_registry_mod.addImport("weight_distill", weight_distill_mod);
+
     const so10_mod = b.addModule("so10", .{
         .root_source_file = b.path("src/so10.zig"),
         .target = target,
@@ -410,6 +468,34 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     agent_mod.addImport("corpus_seed", corpus_seed_mod);
+
+    const compress_mod = b.addModule("compress", .{
+        .root_source_file = b.path("src/compress.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const corpus_store_mod = b.addModule("corpus_store", .{
+        .root_source_file = b.path("src/corpus_store.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    corpus_store_mod.addImport("compress", compress_mod);
+
+    const corpus_index_mod = b.addModule("corpus_index", .{
+        .root_source_file = b.path("src/corpus_index.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    corpus_index_mod.addImport("corpus_store", corpus_store_mod);
+
+    const creative_composer_mod = b.addModule("creative_composer", .{
+        .root_source_file = b.path("src/creative_composer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    agent_mod.addImport("corpus_store", corpus_store_mod);
+    agent_mod.addImport("corpus_index", corpus_index_mod);
 
     const vulkan_compute_mod = b.addModule("vulkan_compute", .{
         .root_source_file = b.path("src/vulkan_compute.zig"),
@@ -689,12 +775,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const compress_mod = b.addModule("compress", .{
-        .root_source_file = b.path("src/compress.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
     const llm_provider_mod = b.addModule("llm_provider", .{
         .root_source_file = b.path("src/llm_provider.zig"),
         .target = target,
@@ -703,13 +783,7 @@ pub fn build(b: *std.Build) void {
     llm_provider_mod.addImport("ollama_client", ollama_mod);
     llm_provider_mod.addImport("openai_client", openai_mod);
     llm_provider_mod.addImport("env_loader", env_loader_mod);
-
-    const corpus_store_mod = b.addModule("corpus_store", .{
-        .root_source_file = b.path("src/corpus_store.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    corpus_store_mod.addImport("compress", compress_mod);
+    prompt_gen_test_mod.addImport("llm_provider", llm_provider_mod);
 
     const doc_loader_mod = b.addModule("doc_loader", .{
         .root_source_file = b.path("src/doc_loader.zig"),
@@ -759,6 +833,7 @@ pub fn build(b: *std.Build) void {
     training_mod.addImport("corpus_store", corpus_store_mod);
     training_mod.addImport("fixed_point", fixed_point_mod);
     training_mod.addImport("prompt_generator", prompt_gen_test_mod);
+    training_mod.addImport("llm_provider", llm_provider_mod);
     training_mod.addImport("q128", q128_mod);
 
     const turing_test_mod = b.addModule("turing_test", .{
@@ -1020,6 +1095,7 @@ pub fn build(b: *std.Build) void {
     agent_mod.addImport("cognitive_lanes", cognitive_lanes_mod);
     agent_mod.addImport("arithmetic_reasoner", arithmetic_reasoner_mod);
     agent_mod.addImport("knowledge_lookup", knowledge_lookup_mod);
+    agent_mod.addImport("creative_composer", creative_composer_mod);
     agent_mod.addImport("kimi_stream_adapter", kimi_stream_adapter_mod);
     agent_mod.addImport("routing_calibration", routing_calibration_mod);
 
@@ -1363,6 +1439,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "corpus_store", .mod = corpus_store_mod },
             .{ .name = "fixed_point", .mod = fixed_point_mod },
             .{ .name = "prompt_generator", .mod = prompt_gen_test_mod },
+            .{ .name = "llm_provider", .mod = llm_provider_mod },
             .{ .name = "q128", .mod = q128_mod },
         } },
         .{ .file = "src/heartbeat.zig", .imports = &.{
@@ -1511,6 +1588,36 @@ pub fn build(b: *std.Build) void {
         .{ .file = "src/hw_surface_computation.zig", .imports = &.{} },
         .{ .file = "src/hw_jordan_algebra.zig", .imports = &.{.{ .name = "octonion_math", .mod = octonion_math_mod }} },
         .{ .file = "src/hw_electric_charges.zig", .imports = &.{.{ .name = "octonion_math", .mod = octonion_math_mod }} },
+        .{ .file = "src/corpus_store.zig", .imports = &.{.{ .name = "compress", .mod = compress_mod }} },
+        .{ .file = "src/corpus_index.zig", .imports = &.{.{ .name = "corpus_store", .mod = corpus_store_mod }} },
+        .{ .file = "src/arithmetic_reasoner.zig", .imports = &.{} },
+        .{ .file = "src/knowledge_lookup.zig", .imports = &.{} },
+        .{ .file = "src/splat_render.zig", .imports = &.{
+            .{ .name = "fixed_point", .mod = fixed_point_mod },
+            .{ .name = "dim_4d_rotation", .mod = dim_4d_rotation_mod },
+        } },
+        .{ .file = "src/longcat_port.zig", .imports = &.{
+            .{ .name = "fixed_point", .mod = fixed_point_mod },
+            .{ .name = "dim_2d_complex", .mod = dim_2d_complex_mod },
+            .{ .name = "dim_4d_rotation", .mod = dim_4d_rotation_mod },
+            .{ .name = "dim_7d_color", .mod = dim_7d_color_mod },
+            .{ .name = "dim_8d_frequency", .mod = dim_8d_frequency_mod },
+            .{ .name = "dim_9d_chaos", .mod = dim_9d_chaos_mod },
+            .{ .name = "splat_render", .mod = splat_render_mod },
+            .{ .name = "weight_distill", .mod = weight_distill_mod },
+        } },
+        .{ .file = "src/safetensors.zig", .imports = &.{
+            .{ .name = "fixed_point", .mod = fixed_point_mod },
+        } },
+        .{ .file = "src/weight_distill.zig", .imports = &.{
+            .{ .name = "fixed_point", .mod = fixed_point_mod },
+            .{ .name = "safetensors", .mod = safetensors_mod },
+        } },
+        .{ .file = "src/modality.zig", .imports = &.{} },
+        .{ .file = "src/model_registry.zig", .imports = &.{
+            .{ .name = "modality", .mod = modality_mod },
+            .{ .name = "weight_distill", .mod = weight_distill_mod },
+        } },
     };
 
     var prev_test_step: ?*std.Build.Step = null;
@@ -1677,12 +1784,15 @@ pub fn build(b: *std.Build) void {
     agent_tests.root_module.addImport("cognitive_lanes", agent_cog_lanes_mod);
     agent_tests.root_module.addImport("arithmetic_reasoner", arithmetic_reasoner_mod);
     agent_tests.root_module.addImport("knowledge_lookup", knowledge_lookup_mod);
+    agent_tests.root_module.addImport("creative_composer", creative_composer_mod);
     const agent_corpus_seed_mod = b.addModule("corpus_seed", .{
         .root_source_file = b.path("src/corpus_seed.zig"),
         .target = target,
         .optimize = optimize,
     });
     agent_tests.root_module.addImport("corpus_seed", agent_corpus_seed_mod);
+    agent_tests.root_module.addImport("corpus_store", corpus_store_mod);
+    agent_tests.root_module.addImport("corpus_index", corpus_index_mod);
     const agent_tools_mod = b.addModule("tools", .{
         .root_source_file = b.path("src/tools.zig"),
         .target = target,
@@ -1722,6 +1832,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     prompt_gen_tests.root_module.addImport("ollama_client", pg_ollama_mod);
+    prompt_gen_tests.root_module.addImport("llm_provider", llm_provider_mod);
     const pg_test_run = &b.addRunArtifact(prompt_gen_tests).step;
     if (prev_test_step) |prev| pg_test_run.dependOn(prev);
     test_step.dependOn(pg_test_run);
@@ -1775,6 +1886,7 @@ pub fn build(b: *std.Build) void {
     main_tests.root_module.addImport("master_server", master_server_mod);
     main_tests.root_module.addImport("env_loader", env_loader_mod);
     main_tests.root_module.addImport("corpus_store", corpus_store_mod);
+    main_tests.root_module.addImport("corpus_index", corpus_index_mod);
     main_tests.root_module.addImport("compress", compress_mod);
     main_tests.root_module.addImport("hw_bridge", hw_bridge_mod);
     main_tests.root_module.addImport("lattice", lattice_mod);
@@ -1801,6 +1913,12 @@ pub fn build(b: *std.Build) void {
     main_tests.root_module.addImport("transport_optar", transport_optar_mod);
     main_tests.root_module.addImport("transport_paperback", transport_paperback_mod);
     main_tests.root_module.addImport("transport_video", transport_video_mod);
+    main_tests.root_module.addImport("longcat_port", longcat_port_mod);
+    main_tests.root_module.addImport("splat_render", splat_render_mod);
+    main_tests.root_module.addImport("weight_distill", weight_distill_mod);
+    main_tests.root_module.addImport("safetensors", safetensors_mod);
+    main_tests.root_module.addImport("modality", modality_mod);
+    main_tests.root_module.addImport("model_registry", model_registry_mod);
     const main_test_options = b.addOptions();
     main_test_options.addOption(bool, "p2p_enabled", p2p_enabled);
     main_tests.root_module.addOptions("build_options", main_test_options);
@@ -1847,6 +1965,7 @@ pub fn build(b: *std.Build) void {
     training_test_bin.root_module.addImport("corpus_store", corpus_store_mod);
     training_test_bin.root_module.addImport("fixed_point", fixed_point_mod);
     training_test_bin.root_module.addImport("prompt_generator", prompt_gen_test_mod);
+    training_test_bin.root_module.addImport("llm_provider", llm_provider_mod);
     training_test_bin.root_module.addImport("q128", q128_mod);
     test_training_step.dependOn(&b.addRunArtifact(training_test_bin).step);
 
@@ -1915,6 +2034,8 @@ pub fn build(b: *std.Build) void {
     cli_mod.addImport("lattice", cli_lattice_mod);
     cli_mod.addImport("knowledge_graph", cli_kg_mod);
     cli_mod.addImport("corpus_seed", corpus_seed_mod);
+    cli_mod.addImport("corpus_store", corpus_store_mod);
+    cli_mod.addImport("corpus_index", corpus_index_mod);
     cli_mod.addImport("neural_lm", neural_lm_mod);
     cli_mod.addImport("llama_server", llama_server_mod);
     const cli_mem_mod = b.addModule("memory", .{
@@ -2018,6 +2139,7 @@ pub fn build(b: *std.Build) void {
     cli_mod.addImport("cognitive_lanes", cognitive_lanes_mod);
     cli_mod.addImport("arithmetic_reasoner", arithmetic_reasoner_mod);
     cli_mod.addImport("knowledge_lookup", knowledge_lookup_mod);
+    cli_mod.addImport("creative_composer", creative_composer_mod);
     if (quantum_mod) |qm| cli_mod.addImport("quantum", qm);
 
     const cli_ollama_mod = b.addModule("ollama_client", .{
@@ -2057,6 +2179,7 @@ pub fn build(b: *std.Build) void {
     cli_training_mod.addImport("doc_loader", cli_doc_loader_mod);
     cli_training_mod.addImport("corpus_store", corpus_store_mod);
     cli_training_mod.addImport("fixed_point", fixed_point_mod);
+    cli_training_mod.addImport("llm_provider", cli_llm_provider_mod);
     cli_training_mod.addImport("q128", q128_mod);
     const cli_prompt_gen_mod = b.addModule("prompt_generator", .{
         .root_source_file = b.path("src/prompt_generator.zig"),
@@ -2064,6 +2187,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     cli_prompt_gen_mod.addImport("ollama_client", cli_ollama_mod);
+    cli_prompt_gen_mod.addImport("llm_provider", cli_llm_provider_mod);
     cli_training_mod.addImport("prompt_generator", cli_prompt_gen_mod);
 
     const cli_turing_mod = b.addModule("turing_test", .{
@@ -2101,6 +2225,8 @@ pub fn build(b: *std.Build) void {
     cli_server_mod.addImport("external_db", cli_external_db_mod);
     cli_server_mod.addImport("turing_test", cli_turing_mod);
     cli_server_mod.addImport("corpus_seed", corpus_seed_mod);
+    cli_server_mod.addImport("corpus_store", corpus_store_mod);
+    cli_server_mod.addImport("corpus_index", corpus_index_mod);
 
     const cli_cl_mod = b.addModule("continual_learner", .{
         .root_source_file = b.path("src/continual_learner.zig"),
@@ -2132,6 +2258,7 @@ pub fn build(b: *std.Build) void {
     cli_exe.root_module.addImport("llm_provider", cli_llm_provider_mod);
     cli_exe.root_module.addImport("compress", compress_mod);
     cli_exe.root_module.addImport("corpus_store", corpus_store_mod);
+    cli_exe.root_module.addImport("corpus_index", corpus_index_mod);
     cli_exe.root_module.addImport("doc_loader", cli_doc_loader_mod);
     cli_exe.root_module.addImport("knowledge_graph", cli_kg_mod);
     cli_exe.root_module.addImport("external_db", cli_external_db_mod);
@@ -2162,6 +2289,14 @@ pub fn build(b: *std.Build) void {
     cli_exe.root_module.addImport("hw_jordan_algebra", hw_jordan_algebra_mod);
     cli_exe.root_module.addImport("hw_electric_charges", hw_electric_charges_mod);
     cli_exe.root_module.addImport("quantum", quantum_mod.?);
+    cli_exe.root_module.addImport("sybil", sybil_mod.?);
+    cli_exe.root_module.addImport("merge", merge_mod.?);
+    cli_exe.root_module.addImport("longcat_port", longcat_port_mod);
+    cli_exe.root_module.addImport("splat_render", splat_render_mod);
+    cli_exe.root_module.addImport("weight_distill", weight_distill_mod);
+    cli_exe.root_module.addImport("safetensors", safetensors_mod);
+    cli_exe.root_module.addImport("modality", modality_mod);
+    cli_exe.root_module.addImport("model_registry", model_registry_mod);
     cli_exe.root_module.addImport("lattice", cli_lattice_mod);
     cli_exe.root_module.addImport("transport_p2p", transport_p2p_mod);
     cli_exe.root_module.addImport("transport_wifi", transport_wifi_mod);
@@ -2223,6 +2358,7 @@ pub fn build(b: *std.Build) void {
         ob_agent_mod.addImport("cognitive_lanes", cognitive_lanes_mod);
         ob_agent_mod.addImport("arithmetic_reasoner", arithmetic_reasoner_mod);
         ob_agent_mod.addImport("knowledge_lookup", knowledge_lookup_mod);
+        ob_agent_mod.addImport("creative_composer", creative_composer_mod);
         ob_agent_mod.addImport("fixed_point", fixed_point_mod);
         ob_agent_mod.addImport("q128", q128_mod);
         ob_agent_mod.addImport("bpe_tokenizer", bpe_mod);
@@ -2244,6 +2380,8 @@ pub fn build(b: *std.Build) void {
         ob_agent_mod.addImport("lattice", ob_lat_mod);
         ob_agent_mod.addImport("knowledge_graph", ob_kg_mod);
         ob_agent_mod.addImport("corpus_seed", corpus_seed_mod);
+        ob_agent_mod.addImport("corpus_store", corpus_store_mod);
+        ob_agent_mod.addImport("corpus_index", corpus_index_mod);
         const ob_mem_mod = b.addModule("memory", .{
             .root_source_file = b.path("src/memory.zig"),
             .target = target,
@@ -2369,6 +2507,7 @@ pub fn build(b: *std.Build) void {
         au_agent_mod.addImport("cognitive_lanes", cognitive_lanes_mod);
         au_agent_mod.addImport("arithmetic_reasoner", arithmetic_reasoner_mod);
         au_agent_mod.addImport("knowledge_lookup", knowledge_lookup_mod);
+        au_agent_mod.addImport("creative_composer", creative_composer_mod);
         au_agent_mod.addImport("fixed_point", fixed_point_mod);
         au_agent_mod.addImport("q128", q128_mod);
         au_agent_mod.addImport("bpe_tokenizer", bpe_mod);
@@ -2390,6 +2529,8 @@ pub fn build(b: *std.Build) void {
         au_agent_mod.addImport("lattice", au_lat_mod);
         au_agent_mod.addImport("knowledge_graph", au_kg_mod);
         au_agent_mod.addImport("corpus_seed", corpus_seed_mod);
+        au_agent_mod.addImport("corpus_store", corpus_store_mod);
+        au_agent_mod.addImport("corpus_index", corpus_index_mod);
         const au_mem_mod = b.addModule("memory", .{
             .root_source_file = b.path("src/memory.zig"),
             .target = target,
@@ -2489,6 +2630,7 @@ pub fn build(b: *std.Build) void {
         ma_agent_mod.addImport("cognitive_lanes", cognitive_lanes_mod);
         ma_agent_mod.addImport("arithmetic_reasoner", arithmetic_reasoner_mod);
         ma_agent_mod.addImport("knowledge_lookup", knowledge_lookup_mod);
+        ma_agent_mod.addImport("creative_composer", creative_composer_mod);
         ma_agent_mod.addImport("fixed_point", fixed_point_mod);
         ma_agent_mod.addImport("q128", q128_mod);
         ma_agent_mod.addImport("bpe_tokenizer", bpe_mod);
@@ -2510,6 +2652,8 @@ pub fn build(b: *std.Build) void {
         ma_agent_mod.addImport("lattice", ma_lat_mod);
         ma_agent_mod.addImport("knowledge_graph", ma_kg_mod);
         ma_agent_mod.addImport("corpus_seed", corpus_seed_mod);
+        ma_agent_mod.addImport("corpus_store", corpus_store_mod);
+        ma_agent_mod.addImport("corpus_index", corpus_index_mod);
         const ma_mem_mod = b.addModule("memory", .{
             .root_source_file = b.path("src/memory.zig"),
             .target = target,
@@ -2890,6 +3034,116 @@ pub fn build(b: *std.Build) void {
             .optimize = wasm_optimize,
         });
         wasm_agent.addImport("corpus_seed", wasm_corpus_seed);
+        const wasm_compress = b.addModule("compress", .{
+            .root_source_file = b.path("src/compress.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        const wasm_corpus_store = b.addModule("corpus_store", .{
+            .root_source_file = b.path("src/corpus_store.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_corpus_store.addImport("compress", wasm_compress);
+        const wasm_corpus_index = b.addModule("corpus_index", .{
+            .root_source_file = b.path("src/corpus_index.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_corpus_index.addImport("corpus_store", wasm_corpus_store);
+        wasm_agent.addImport("corpus_store", wasm_corpus_store);
+        wasm_agent.addImport("corpus_index", wasm_corpus_index);
+        const wasm_c_ffi = b.addModule("c_ffi", .{
+            .root_source_file = b.path("src/c_ffi.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        const wasm_onnx = b.addModule("onnx_runtime", .{
+            .root_source_file = b.path("src/vision/onnx_runtime.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_onnx.addImport("c_ffi", wasm_c_ffi);
+        const wasm_neural_lm = b.addModule("neural_lm", .{
+            .root_source_file = b.path("src/neural_lm.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_neural_lm.addImport("onnx_runtime", wasm_onnx);
+        wasm_neural_lm.addImport("c_ffi", wasm_c_ffi);
+        wasm_agent.addImport("neural_lm", wasm_neural_lm);
+        const wasm_llama_server = b.addModule("llama_server", .{
+            .root_source_file = b.path("src/llama_server.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_agent.addImport("llama_server", wasm_llama_server);
+        const wasm_sentience = b.addModule("sentience_scorer", .{
+            .root_source_file = b.path("src/sentience_scorer.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_agent.addImport("sentience_scorer", wasm_sentience);
+        const wasm_bi_complex = b.addModule("bi_complex", .{
+            .root_source_file = b.path("src/bi_complex.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_bi_complex.addImport("fixed_point", wasm_fp);
+        wasm_agent.addImport("bi_complex", wasm_bi_complex);
+        const wasm_dim5 = b.addModule("dim_5d_language", .{
+            .root_source_file = b.path("src/dim_5d_language.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_dim5.addImport("fixed_point", wasm_fp);
+        wasm_dim5.addImport("bi_complex", wasm_bi_complex);
+        wasm_agent.addImport("dim_5d_language", wasm_dim5);
+        const wasm_octonion = b.addModule("octonion_math", .{
+            .root_source_file = b.path("src/octonion_math.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_octonion.addImport("fixed_point", wasm_fp);
+        const wasm_jordan = b.addModule("jordan_algebra", .{
+            .root_source_file = b.path("src/jordan_algebra.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_jordan.addImport("octonion_math", wasm_octonion);
+        wasm_metacog.addImport("jordan_algebra", wasm_jordan);
+        const wasm_dim6 = b.addModule("dim_6d_consciousness", .{
+            .root_source_file = b.path("src/dim_6d_consciousness.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_dim6.addImport("jordan_algebra", wasm_jordan);
+        wasm_agent.addImport("dim_6d_consciousness", wasm_dim6);
+        const wasm_cog_lanes = b.addModule("cognitive_lanes", .{
+            .root_source_file = b.path("src/cognitive_lanes.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_cog_lanes.addImport("q128", wasm_q128);
+        wasm_agent.addImport("cognitive_lanes", wasm_cog_lanes);
+        const wasm_arith = b.addModule("arithmetic_reasoner", .{
+            .root_source_file = b.path("src/arithmetic_reasoner.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_agent.addImport("arithmetic_reasoner", wasm_arith);
+        const wasm_kl = b.addModule("knowledge_lookup", .{
+            .root_source_file = b.path("src/knowledge_lookup.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_agent.addImport("knowledge_lookup", wasm_kl);
+        const wasm_creative = b.addModule("creative_composer", .{
+            .root_source_file = b.path("src/creative_composer.zig"),
+            .target = wasm_target,
+            .optimize = wasm_optimize,
+        });
+        wasm_agent.addImport("creative_composer", wasm_creative);
 
         const wasm_exe = b.addExecutable(.{
             .name = "qstar_llm",
@@ -3147,6 +3401,7 @@ pub fn build(b: *std.Build) void {
         cb_exe.root_module.addImport("llama_server", llama_server_mod);
         cb_exe.root_module.addImport("arithmetic_reasoner", arithmetic_reasoner_mod);
         cb_exe.root_module.addImport("knowledge_lookup", knowledge_lookup_mod);
+        cb_exe.root_module.addImport("creative_composer", creative_composer_mod);
 
         // Agent module instance for competitive bench
         const cb_agent_mod = b.addModule("agent", .{
@@ -3157,6 +3412,7 @@ pub fn build(b: *std.Build) void {
         cb_agent_mod.addImport("cognitive_lanes", cognitive_lanes_mod);
         cb_agent_mod.addImport("arithmetic_reasoner", arithmetic_reasoner_mod);
         cb_agent_mod.addImport("knowledge_lookup", knowledge_lookup_mod);
+        cb_agent_mod.addImport("creative_composer", creative_composer_mod);
         cb_agent_mod.addImport("q128", q128_mod);
         cb_agent_mod.addImport("neural_lm", neural_lm_mod);
         cb_agent_mod.addImport("llama_server", llama_server_mod);
@@ -3200,6 +3456,8 @@ pub fn build(b: *std.Build) void {
         cb_agent_mod.addImport("lattice", cb_lat_mod);
         cb_agent_mod.addImport("knowledge_graph", cb_kg_mod);
         cb_agent_mod.addImport("corpus_seed", corpus_seed_mod);
+        cb_agent_mod.addImport("corpus_store", corpus_store_mod);
+        cb_agent_mod.addImport("corpus_index", corpus_index_mod);
         const cb_mem_mod = b.addModule("memory", .{
             .root_source_file = b.path("src/memory.zig"),
             .target = target,
@@ -3336,6 +3594,7 @@ pub fn build(b: *std.Build) void {
         cb_training_mod.addImport("doc_loader", doc_loader_mod);
         cb_training_mod.addImport("corpus_store", corpus_store_mod);
         cb_training_mod.addImport("fixed_point", fixed_point_mod);
+        cb_training_mod.addImport("llm_provider", cb_llm_provider_mod);
 
         // Prompt generator module (Ollama-based random prompt generation)
         const cb_prompt_gen_mod = b.addModule("prompt_generator", .{
@@ -3344,6 +3603,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         cb_prompt_gen_mod.addImport("ollama_client", cb_ollama_mod);
+        cb_prompt_gen_mod.addImport("llm_provider", cb_llm_provider_mod);
         cb_training_mod.addImport("prompt_generator", cb_prompt_gen_mod);
         cb_exe.root_module.addImport("training", cb_training_mod);
         cb_exe.root_module.addImport("prompt_generator", cb_prompt_gen_mod);
@@ -3416,6 +3676,7 @@ pub fn build(b: *std.Build) void {
         mb_agent_mod.addImport("cognitive_lanes", cognitive_lanes_mod);
         mb_agent_mod.addImport("arithmetic_reasoner", arithmetic_reasoner_mod);
         mb_agent_mod.addImport("knowledge_lookup", knowledge_lookup_mod);
+        mb_agent_mod.addImport("creative_composer", creative_composer_mod);
         mb_agent_mod.addImport("fixed_point", fixed_point_mod);
         mb_agent_mod.addImport("q128", q128_mod);
         mb_agent_mod.addImport("bpe_tokenizer", bpe_mod);
@@ -3438,6 +3699,8 @@ pub fn build(b: *std.Build) void {
         mb_agent_mod.addImport("lattice", mb_lat_mod);
         mb_agent_mod.addImport("knowledge_graph", mb_kg_mod);
         mb_agent_mod.addImport("corpus_seed", corpus_seed_mod);
+        mb_agent_mod.addImport("corpus_store", corpus_store_mod);
+        mb_agent_mod.addImport("corpus_index", corpus_index_mod);
 
         const mb_mem_mod = b.addModule("memory", .{
             .root_source_file = b.path("src/memory.zig"),
@@ -3595,6 +3858,7 @@ pub fn build(b: *std.Build) void {
         mb_agent_mod.addImport("cognitive_lanes", cognitive_lanes_mod);
         mb_agent_mod.addImport("arithmetic_reasoner", arithmetic_reasoner_mod);
         mb_agent_mod.addImport("knowledge_lookup", knowledge_lookup_mod);
+        mb_agent_mod.addImport("creative_composer", creative_composer_mod);
         if (quantum_mod) |qm| mb_agent_mod.addImport("quantum", qm);
         const mb_holo_codec_mod = b.addModule("holo_codec", .{
             .root_source_file = b.path("src/holo_codec.zig"),
@@ -3665,6 +3929,15 @@ pub fn build(b: *std.Build) void {
         mb_exe.root_module.addImport("ollama_client", mb_ollama_mod);
         mb_exe.root_module.addImport("openai_client", openai_mod);
         mb_exe.root_module.addImport("env_loader", env_loader_mod);
+
+        const mb_llm_provider_mod = b.addModule("llm_provider", .{
+            .root_source_file = b.path("src/llm_provider.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        mb_llm_provider_mod.addImport("ollama_client", mb_ollama_mod);
+        mb_llm_provider_mod.addImport("openai_client", openai_mod);
+        mb_llm_provider_mod.addImport("env_loader", env_loader_mod);
         mb_exe.root_module.addImport("bpe_tokenizer", bpe_mod);
 
         // Training module
@@ -3681,6 +3954,7 @@ pub fn build(b: *std.Build) void {
         mb_training_mod.addImport("fixed_point", fixed_point_mod);
         mb_training_mod.addImport("dynamic_routes", mb_dyn_routes_mod);
         mb_training_mod.addImport("metacognition_engine", mb_metacog_mod);
+        mb_training_mod.addImport("llm_provider", mb_llm_provider_mod);
         mb_training_mod.addImport("q128", q128_mod);
 
         // Prompt generator
@@ -3690,6 +3964,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         mb_prompt_gen_mod.addImport("ollama_client", mb_ollama_mod);
+        mb_prompt_gen_mod.addImport("llm_provider", mb_llm_provider_mod);
         mb_training_mod.addImport("prompt_generator", mb_prompt_gen_mod);
         mb_exe.root_module.addImport("training", mb_training_mod);
         mb_exe.root_module.addImport("prompt_generator", mb_prompt_gen_mod);
@@ -3723,6 +3998,7 @@ pub fn build(b: *std.Build) void {
         st_agent_mod.addImport("cognitive_lanes", cognitive_lanes_mod);
         st_agent_mod.addImport("arithmetic_reasoner", arithmetic_reasoner_mod);
         st_agent_mod.addImport("knowledge_lookup", knowledge_lookup_mod);
+        st_agent_mod.addImport("creative_composer", creative_composer_mod);
         st_agent_mod.addImport("fixed_point", fixed_point_mod);
         st_agent_mod.addImport("bpe_tokenizer", bpe_mod);
         st_agent_mod.addImport("sampling", sampling_mod);
@@ -3744,6 +4020,8 @@ pub fn build(b: *std.Build) void {
         st_agent_mod.addImport("lattice", st_lat_mod);
         st_agent_mod.addImport("knowledge_graph", st_kg_mod);
         st_agent_mod.addImport("corpus_seed", corpus_seed_mod);
+        st_agent_mod.addImport("corpus_store", corpus_store_mod);
+        st_agent_mod.addImport("corpus_index", corpus_index_mod);
 
         const st_mem_mod = b.addModule("memory", .{
             .root_source_file = b.path("src/memory.zig"),
@@ -3863,6 +4141,15 @@ pub fn build(b: *std.Build) void {
         st_exe.root_module.addImport("env_loader", env_loader_mod);
         st_exe.root_module.addImport("bpe_tokenizer", bpe_mod);
 
+        const st_llm_provider_mod = b.addModule("llm_provider", .{
+            .root_source_file = b.path("src/llm_provider.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        st_llm_provider_mod.addImport("ollama_client", st_ollama_mod);
+        st_llm_provider_mod.addImport("openai_client", openai_mod);
+        st_llm_provider_mod.addImport("env_loader", env_loader_mod);
+
         // Training module
         const st_training_mod = b.addModule("training", .{
             .root_source_file = b.path("src/training.zig"),
@@ -3877,6 +4164,7 @@ pub fn build(b: *std.Build) void {
         st_training_mod.addImport("fixed_point", fixed_point_mod);
         st_training_mod.addImport("dynamic_routes", st_dyn_routes_mod);
         st_training_mod.addImport("metacognition_engine", st_metacog_mod);
+        st_training_mod.addImport("llm_provider", st_llm_provider_mod);
         st_exe.root_module.addImport("training", st_training_mod);
 
         const st_run = b.addRunArtifact(st_exe);
@@ -3909,6 +4197,7 @@ pub fn build(b: *std.Build) void {
         ct_agent_mod.addImport("cognitive_lanes", cognitive_lanes_mod);
         ct_agent_mod.addImport("arithmetic_reasoner", arithmetic_reasoner_mod);
         ct_agent_mod.addImport("knowledge_lookup", knowledge_lookup_mod);
+        ct_agent_mod.addImport("creative_composer", creative_composer_mod);
         ct_agent_mod.addImport("fixed_point", fixed_point_mod);
         ct_agent_mod.addImport("q128", q128_mod);
         ct_agent_mod.addImport("bpe_tokenizer", bpe_mod);
@@ -3931,6 +4220,8 @@ pub fn build(b: *std.Build) void {
         ct_agent_mod.addImport("lattice", ct_lat_mod);
         ct_agent_mod.addImport("knowledge_graph", ct_kg_mod);
         ct_agent_mod.addImport("corpus_seed", corpus_seed_mod);
+        ct_agent_mod.addImport("corpus_store", corpus_store_mod);
+        ct_agent_mod.addImport("corpus_index", corpus_index_mod);
 
         const ct_mem_mod = b.addModule("memory", .{
             .root_source_file = b.path("src/memory.zig"),
@@ -4050,6 +4341,15 @@ pub fn build(b: *std.Build) void {
         ct_exe.root_module.addImport("env_loader", env_loader_mod);
         ct_exe.root_module.addImport("bpe_tokenizer", bpe_mod);
 
+        const ct_llm_provider_mod = b.addModule("llm_provider", .{
+            .root_source_file = b.path("src/llm_provider.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        ct_llm_provider_mod.addImport("ollama_client", ct_ollama_mod);
+        ct_llm_provider_mod.addImport("openai_client", openai_mod);
+        ct_llm_provider_mod.addImport("env_loader", env_loader_mod);
+
         // Training module
         const ct_training_mod = b.addModule("training", .{
             .root_source_file = b.path("src/training.zig"),
@@ -4064,6 +4364,7 @@ pub fn build(b: *std.Build) void {
         ct_training_mod.addImport("fixed_point", fixed_point_mod);
         ct_training_mod.addImport("dynamic_routes", ct_dyn_routes_mod);
         ct_training_mod.addImport("metacognition_engine", ct_metacog_mod);
+        ct_training_mod.addImport("llm_provider", ct_llm_provider_mod);
         ct_training_mod.addImport("q128", q128_mod);
         ct_exe.root_module.addImport("training", ct_training_mod);
 
@@ -4095,6 +4396,7 @@ pub fn build(b: *std.Build) void {
         hb_agent_mod.addImport("cognitive_lanes", cognitive_lanes_mod);
         hb_agent_mod.addImport("arithmetic_reasoner", arithmetic_reasoner_mod);
         hb_agent_mod.addImport("knowledge_lookup", knowledge_lookup_mod);
+        hb_agent_mod.addImport("creative_composer", creative_composer_mod);
         hb_agent_mod.addImport("fixed_point", fixed_point_mod);
         hb_agent_mod.addImport("bpe_tokenizer", bpe_mod);
         hb_agent_mod.addImport("sampling", sampling_mod);
@@ -4115,6 +4417,8 @@ pub fn build(b: *std.Build) void {
         hb_agent_mod.addImport("lattice", hb_lat_mod);
         hb_agent_mod.addImport("knowledge_graph", hb_kg_mod);
         hb_agent_mod.addImport("corpus_seed", corpus_seed_mod);
+        hb_agent_mod.addImport("corpus_store", corpus_store_mod);
+        hb_agent_mod.addImport("corpus_index", corpus_index_mod);
         const hb_mem_mod = b.addModule("memory", .{
             .root_source_file = b.path("src/memory.zig"),
             .target = target,
@@ -4210,6 +4514,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         hb_prompt_gen_mod.addImport("ollama_client", hb_ollama_mod);
+        hb_prompt_gen_mod.addImport("llm_provider", hb_llm_provider_mod);
         const hb_training_mod = b.addModule("training", .{
             .root_source_file = b.path("src/training.zig"),
             .target = target,
@@ -4222,6 +4527,7 @@ pub fn build(b: *std.Build) void {
         hb_training_mod.addImport("doc_loader", doc_loader_mod);
         hb_training_mod.addImport("fixed_point", fixed_point_mod);
         hb_training_mod.addImport("prompt_generator", hb_prompt_gen_mod);
+        hb_training_mod.addImport("llm_provider", hb_llm_provider_mod);
         hb_exe.root_module.addImport("training", hb_training_mod);
 
         hb_exe.root_module.addImport("compress", compress_mod);
@@ -4365,6 +4671,7 @@ pub fn build(b: *std.Build) void {
         mb_agent_mod.addImport("cognitive_lanes", cognitive_lanes_mod);
         mb_agent_mod.addImport("arithmetic_reasoner", arithmetic_reasoner_mod);
         mb_agent_mod.addImport("knowledge_lookup", knowledge_lookup_mod);
+        mb_agent_mod.addImport("creative_composer", creative_composer_mod);
         mb_agent_mod.addImport("fixed_point", fixed_point_mod);
         mb_agent_mod.addImport("bpe_tokenizer", bpe_mod);
         mb_agent_mod.addImport("sampling", sampling_mod);
@@ -4385,6 +4692,8 @@ pub fn build(b: *std.Build) void {
         mb_kg_mod.addImport("lattice", mb_lat_mod);
         mb_agent_mod.addImport("knowledge_graph", mb_kg_mod);
         mb_agent_mod.addImport("corpus_seed", corpus_seed_mod);
+        mb_agent_mod.addImport("corpus_store", corpus_store_mod);
+        mb_agent_mod.addImport("corpus_index", corpus_index_mod);
         const mb_mem_mod = b.addModule("memory", .{
             .root_source_file = b.path("src/memory.zig"),
             .target = target,

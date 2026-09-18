@@ -810,9 +810,32 @@ Qstar-LLM has been unwound from traditional transformer architectures (75MB–3B
 
 ---
 
+### Module 70: wasm32-freestanding Compile Restoration (2026-09-18)
+
+- **1. Web Research:** Investigated LLVM wasm32 legalization: i256/i512 division/remainder nodes lower to compiler-rt libcalls (`__udivti4`-class) that do not exist beyond i128 on wasm32 — DAG-shape dependent, so isolated op probes pass while combined expressions crash in `LegalizeTypes`. Researched Zig 0.13 freestanding std-lib coverage: `std.fs`, `std.net`, `std.Thread`, `std.time`, `std.crypto.random`, and `std.posix` member types (`fd_t`, `O`, `timespec`) are absent on `wasm32-freestanding`; `std.crypto.random` resolves through `posix.getrandom` → `posix.O`.
+- **2. Reverse Engineer:** Bisected the WASM export surface callee-by-callee. Commit `e9fa0ac` (v0.0.2.0) added `neural_lm` + 9 unconditional imports to `agent.zig` that `wasm_agent` never received — module wiring gap. Post-wiring, three distinct failure classes surfaced: (a) `LLVM ERROR: Unsupported library call operation!` in `ingestTokens`/`decode`/`run` from native i256/i512 `sdiv`/`srem`/variable-shift lowering; (b) `posix.fd_t`/`timespec`/`O` type-analysis errors from filesystem, clock, thread, and entropy APIs reachable in the export graph; (c) a latent `nowTimestamp` self-recursion (introduced during the refactor, caught by test-training).
+- **3. Document (Baseline):** WASM target broken since `e9fa0ac`. `zig build wasm` failed in both artifacts (`qstar_llm`, `qstar_llm_esp32`). Native suite green (test-agent/main/training; q128 35/35; fixed_point 55/55). Root cause of `posix.O`: `std.crypto.random.bytes` in `toolIntentResponse` (agent.zig, UUID-v4 intent) — the only entropy call in the WASM-reachable graph.
+- **4. Build / Refactor:**
+  - `src/fixed_point.zig`: added `udivmod256`/`sdivmod256` — binary long-division over u256 limbs (add/sub/shift/compare only, all expand inline). All i256 `/`, `@divTrunc`, `@rem`, `@mod` sites behind `is_freestanding` comptime branches; native codegen unchanged. Pow2 `@mod` → bitmask (idx provably ≥ 0).
+  - `src/q128.zig`: added `udivmod512`/`sdivmod512` (+ `@setEvalBranchQuota` for the 512-iteration comptime path); rewrote `fromF64`/`toF64` as limb-decomposed conversions (hi/lo `u128` splits, no i256↔f64 builtins) with 2^127/2^128 rounding-edge guards. Applied to `Q128.div`, `fromRatio`, `sqrt`, free `div`/`fromRatio`, trig indices, sigmoid indexing, `half_den`.
+  - `src/agent.zig`: `std.crypto.random.bytes` → `self.rng` (DefaultPrng) on freestanding (UUID intent); `std.debug.print` ×3 and `std.time.*` sites → comptime-pruned freestanding branches; positional-wave i256 division → `fp.sdivmod256`.
+  - `src/corpus_store.zig`: `file: FileT` (`std.fs.File` → `void` on freestanding) + early-return guards on `deinit`/`readPage`/`CorpusReader.read`/`CorpusReader.readAll`.
+  - `src/metacognition_engine.zig`: `MutexT` (`std.Thread.Mutex` → no-op on single-threaded targets); `startThread`/`joinThread` spawn/join guards.
+  - `src/dynamic_routes.zig`: `MutexT`; `nowTimestamp()` helper → `std.time.timestamp()` native / `0` freestanding (7 call sites).
+  - `src/corpus_learner.zig`: background-learner `std.Thread.spawn`/`sleep` guarded.
+  - `src/hw_bridge.zig`: three wide fixed-point ratio sites → `fp.sdivmod256`.
+  - `build.zig`: `wasm_agent` gained 11 missing module imports (`neural_lm` chain incl. `onnx_runtime`/`c_ffi`, `dynamic_routes`, `metacognition_engine`, `corpus_learner`, `cognitive_lanes`, `arithmetic_reasoner`, `knowledge_lookup`, `creative_composer`, wasm-target `corpus_store`/`corpus_index` variants replacing the native-target ones).
+  - `tests/full_regression.zig`: check-8 unit fix — `mean_scores.overall` (raw i256 Q128.128) compared against literal `1.0`; now `1 << 128` (pre-existing since `72595ff`).
+- **5. Test (Component):** q128 35/35; fixed_point 55/55; `zig build wasm` produces `qstar_llm.wasm` (1,070,710 B) + `qstar_llm_esp32.wasm` (1,049,938 B); probe bisection verified each freestanding guard prunes the unsupported decl from analysis.
+- **6. Document (Post-build):** This entry. WASM export surface documented as supported: `qstar_init`, `qstar_ingest`, `qstar_run`, `qstar_decode`, `qstar_generate_long_form`, `qstar_tool_execute`, `qstar_save_corpus`, `qstar_load_corpus`.
+- **7. Integrate:** No feature flags — guards are `builtin.os.tag == .freestanding` comptime branches; native paths byte-identical.
+- **8. Final Verification:** `zig build test-agent test-main test-training` green; 137-module sweep 124/137 (identical to pre-change baseline — 13 pre-existing harness/dep gaps, zero new); `zig build regression` 60/61 (check-7 environmental: teacher-response dedup against 740 KB corpus now that Ollama is live; check-8 fixed). WASM LLVM crash eliminated; `posix.O`/`fd_t`/`timespec` gone.
+
+---
+
 ## 3. Invariant Continuity & Quality Verification
 
-All 69 modules have completed the Retro-Dev cycle and satisfy the Definition of Done (DoD):
+All 70 modules have completed the Retro-Dev cycle and satisfy the Definition of Done (DoD):
 - **Zero Regressions:** 100% of unit, integration, and parity tests pass across all suites.
 - **Test Coverage:** Exceeds 101% baseline with comprehensive boundary, edge-case, and parity tests.
 - **Archive Status:** Complete snapshot archived locally in `.archives/2026-08-30-vulkan-samc-verified/` and mirrored to `/home/admpaul/Desktop/PJ/.archives/qstar-llm-20260830/`; master-node session archived to `/home/admpaul/Desktop/PJ/.archives/qstar-llm-20260901-master-node/`.

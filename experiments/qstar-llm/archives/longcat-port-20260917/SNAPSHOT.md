@@ -1,0 +1,1 @@
+LongCat-Video-Avatar-1.5 11D reverse port: splat_render.zig (7/7) + longcat_port.zig (11/11) + docs map. Regression: test-main/test-agent/test-training green. Bench baseline: Qstar 41W / OpenAI 27W / 15T (144 prompts, judged).

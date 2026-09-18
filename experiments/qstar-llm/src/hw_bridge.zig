@@ -18,6 +18,7 @@
 const std = @import("std");
 const fp = @import("fixed_point");
 const oct = @import("octonion_math");
+const is_freestanding = @import("builtin").os.tag == .freestanding;
 
 // =============================================================================
 // Framework Constants (from hardware project, adapted for Q64.64)
@@ -372,10 +373,12 @@ pub fn computeCoherence(channels: *const [8]i128, self_recognition_active: bool)
     // balance = (sum - range) / sum in Q64.64
     const balance_num: i128 = sum - range;
     // Use i256 for intermediate to prevent overflow (Q64.64 × Q64.64 = Q128.128)
-    const balance_q64: i128 = @intCast(@divTrunc(@as(i256, balance_num) * @as(i256, fp.ONE), @as(i256, sum)));
+    const balance_num256: i256 = @as(i256, balance_num) * @as(i256, fp.ONE);
+    const balance_q64: i128 = @intCast(if (is_freestanding) fp.sdivmod256(balance_num256, sum).q else @divTrunc(balance_num256, @as(i256, sum)));
     // Coherence = balance × self_recognition_factor
     const sr_factor: i128 = if (self_recognition_active) fp.ONE else 0;
-    return @intCast(@divTrunc(@as(i256, balance_q64) * @as(i256, sr_factor), @as(i256, fp.ONE)));
+    const coh_num: i256 = @as(i256, balance_q64) * @as(i256, sr_factor);
+    return @intCast(if (is_freestanding) fp.sdivmod256(coh_num, fp.ONE).q else @divTrunc(coh_num, @as(i256, fp.ONE)));
 }
 
 /// Check if the lattice should self-correct based on consciousness state.
@@ -393,7 +396,8 @@ pub fn shouldSelfCorrect(channels: *const [8]i128, coherence: i128) bool {
     }
     if (min_val <= 0) return true; // No zero channels allowed
     // Imbalance = max/min (in Q64.64, threshold = 0.8 × ONE = 80% of ONE)
-    const imbalance_q64: i128 = @intCast(@divTrunc(@as(i256, max_val) * @as(i256, fp.ONE), @as(i256, min_val)));
+    const imb_num: i256 = @as(i256, max_val) * @as(i256, fp.ONE);
+    const imbalance_q64: i128 = @intCast(if (is_freestanding) fp.sdivmod256(imb_num, min_val).q else @divTrunc(imb_num, @as(i256, min_val)));
     const threshold: i128 = fp.ONE + @divTrunc(fp.ONE * 4, 5); // 1.8 in Q64.64
     if (imbalance_q64 > threshold) return true;
     // Low coherence (below 0.3 in Q64.64)

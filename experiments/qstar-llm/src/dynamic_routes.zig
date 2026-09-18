@@ -1,7 +1,23 @@
 //! dynamic_routes.zig — Dynamic Route Registry & Adaptive Query Router
 //! Thread-safe registry for autonomously created response routes.
 const std = @import("std");
+const builtin = @import("builtin");
 const q128 = @import("q128");
+
+/// Freestanding targets (WASM) are single-threaded: the registry mutex
+/// degrades to a no-op since there is no concurrent access to guard.
+const is_freestanding = builtin.os.tag == .freestanding;
+const NoopMutex = struct {
+    pub fn lock(_: *NoopMutex) void {}
+    pub fn unlock(_: *NoopMutex) void {}
+};
+const MutexT = if (is_freestanding) NoopMutex else std.Thread.Mutex;
+
+/// Wall-clock epoch seconds; freestanding targets have no clock, so routes
+/// carry 0 and time-based decay becomes a no-op there.
+fn nowTimestamp() i64 {
+    return if (is_freestanding) 0 else std.time.timestamp();
+}
 
 pub const MAX_ROUTES: usize = 32768;
 pub const MAX_KEYWORDS: usize = 8;
@@ -133,6 +149,27 @@ fn isSingleKeywordStopword(keyword: []const u8) bool {
     return false;
 }
 
+/// Fallback/template markers that must never be replayed as learned answers.
+/// Mirrors the filler list in agent.zig — kept local so this module stays
+/// dependency-free. A route whose response contains one of these was
+/// registered from a degraded generation path and would replay failure.
+const TEMPLATED_MARKERS = [_][]const u8{
+    "limited depth",
+    "Continued training",
+    "reference material",
+    "coverage for this topic",
+    "cannot provide",
+    "I don't have enough",
+    "insufficient context",
+};
+
+pub fn responseLooksTemplated(response: []const u8) bool {
+    for (TEMPLATED_MARKERS) |m| {
+        if (std.ascii.indexOfIgnoreCase(response, m) != null) return true;
+    }
+    return false;
+}
+
 fn containsWordCI(text: []const u8, word: []const u8) bool {
     if (word.len == 0) return false;
     if (text.len < word.len) return false;
@@ -152,7 +189,7 @@ fn containsWordCI(text: []const u8, word: []const u8) bool {
 pub const DynamicRouteRegistry = struct {
     allocator: std.mem.Allocator,
     routes: std.ArrayList(DynamicRoute),
-    mutex: std.Thread.Mutex = .{},
+    mutex: MutexT = .{},
 
     pub fn init(allocator: std.mem.Allocator) DynamicRouteRegistry {
         return .{
@@ -205,8 +242,8 @@ pub const DynamicRouteRegistry = struct {
                         self.routes.items[i].confidence_bp = confidence_bp;
                         self.routes.items[i].category = category;
                         self.routes.items[i].source = source;
-                        self.routes.items[i].created_at = std.time.timestamp();
-                        self.routes.items[i].last_used = std.time.timestamp();
+                        self.routes.items[i].created_at = nowTimestamp();
+                        self.routes.items[i].last_used = nowTimestamp();
                         return i;
                     }
                     // Lower confidence — skip
@@ -224,8 +261,8 @@ pub const DynamicRouteRegistry = struct {
             .confidence_bp = confidence_bp,
             .category = category,
             .source = source,
-            .created_at = std.time.timestamp(),
-            .last_used = std.time.timestamp(),
+            .created_at = nowTimestamp(),
+            .last_used = nowTimestamp(),
         };
 
         const kw_count = @min(keywords.len, MAX_KEYWORDS);
@@ -273,7 +310,7 @@ pub const DynamicRouteRegistry = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        const now = std.time.timestamp();
+        const now = nowTimestamp();
         var best_idx: ?usize = null;
         var best_confidence: u16 = 0;
 
@@ -286,6 +323,9 @@ pub const DynamicRouteRegistry = struct {
                 }
             }
             if (!found) continue;
+            // Skip poisoned routes: responses containing fallback/template
+            // text must never be replayed as learned answers.
+            if (responseLooksTemplated(route.response)) continue;
             // Relevance check: the keyword must appear in the response.
             // This prevents routes with irrelevant responses from matching
             // (e.g., a route about entanglement with "gravity" as a keyword).
@@ -310,12 +350,14 @@ pub const DynamicRouteRegistry = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        const now = std.time.timestamp();
+        const now = nowTimestamp();
         var best_idx: ?usize = null;
         var best_confidence: u16 = 0;
 
         for (self.routes.items, 0..) |route, i| {
             if (!route.matches(prompt)) continue;
+            // Skip poisoned routes registered from degraded generation paths.
+            if (responseLooksTemplated(route.response)) continue;
             // Relevance check: the first keyword must appear in the response.
             // This prevents routes with irrelevant responses from matching.
             if (route.keyword_count > 0 and !containsWordCI(route.response, route.keywords[0])) continue;
@@ -366,11 +408,12 @@ pub const DynamicRouteRegistry = struct {
     }
 
     fn pruneLocked(self: *DynamicRouteRegistry) void {
-        const now = std.time.timestamp();
+        const now = nowTimestamp();
         var write_idx: usize = 0;
         for (self.routes.items, 0..) |*route, read_idx| {
             const eff = route.decayedConfidence(now);
-            if (eff >= PRUNE_THRESHOLD_BP) {
+            // Evict poisoned routes: templated/fallback text is never a learned answer.
+            if (eff >= PRUNE_THRESHOLD_BP and !responseLooksTemplated(route.response)) {
                 if (write_idx != read_idx) {
                     self.routes.items[write_idx] = route.*;
                 }
@@ -914,6 +957,30 @@ test "DynamicRouteRegistry: saveToBuffer/loadFromBuffer with context topic" {
     try std.testing.expectEqualStrings("Entropy increases in isolated systems.", matched.?.response);
     try std.testing.expect(matched.?.context_len == 7);
     try std.testing.expectEqualSlices(u8, "physics", matched.?.context_topic[0..matched.?.context_len]);
+}
+
+test "DynamicRouteRegistry: templated responses never match and are pruned" {
+    var reg = DynamicRouteRegistry.init(std.testing.allocator);
+    defer reg.deinit();
+
+    // Simulate a poisoned route: fallback template registered as if learned.
+    const kws = [_][]const u8{ "consciousness", "thoughts" };
+    _ = try reg.register(&kws, "Regarding Explain and thoughts and consciousness: current training corpus has limited depth coverage for this topic.", 9000, .open_ended, .self_evaluated);
+    // And a clean route on different keywords.
+    const kws2 = [_][]const u8{ "entropy", "thermodynamics" };
+    _ = try reg.register(&kws2, "Entropy increases in isolated systems.", 6000, .factual, .self_evaluated);
+
+    // Match-time skip: the poisoned route must not replay.
+    try std.testing.expect(reg.match("Explain your thoughts on consciousness") == null);
+    try std.testing.expect(reg.matchWithContext("Explain your thoughts on consciousness", null) == null);
+    try std.testing.expect(reg.matchByKeyword("consciousness") == null);
+
+    // Clean route still matches normally.
+    try std.testing.expect(reg.match("How does entropy relate to thermodynamics?") != null);
+
+    // Prune evicts the poisoned route entirely.
+    reg.pruneLowConfidence();
+    try std.testing.expectEqual(@as(usize, 1), reg.count());
 }
 
 // =============================================================================

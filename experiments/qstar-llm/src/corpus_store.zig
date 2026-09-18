@@ -15,7 +15,14 @@
 //!   [page payloads...]
 
 const std = @import("std");
+const builtin = @import("builtin");
 const compress = @import("compress");
+
+/// File I/O is unavailable on freestanding targets (WASM). The store degrades
+/// to "no corpus": init fails fast and every file-backed operation returns an
+/// error, matching the lattice-only fallback path used elsewhere (c_ffi).
+const is_freestanding = builtin.os.tag == .freestanding;
+const FileT = if (is_freestanding) void else std.fs.File;
 
 pub const QSC_MAGIC: [4]u8 = .{ 'Q', 'S', 'C', '1' };
 pub const QSC_VERSION: u16 = 1;
@@ -30,7 +37,7 @@ pub const PageEntry = struct {
 
 pub const CorpusStore = struct {
     allocator: std.mem.Allocator,
-    file: std.fs.File,
+    file: FileT,
     magic: [4]u8,
     version: u16,
     page_size: usize,
@@ -43,6 +50,7 @@ pub const CorpusStore = struct {
     cache_capacity: usize,
 
     pub fn init(allocator: std.mem.Allocator, path: []const u8) !CorpusStore {
+        if (is_freestanding) return error.FreestandingUnsupported;
         const file = try std.fs.cwd().openFile(path, .{});
 
         var store = CorpusStore{
@@ -65,6 +73,7 @@ pub const CorpusStore = struct {
     }
 
     pub fn deinit(self: *CorpusStore) void {
+        if (is_freestanding) return;
         // Free cached pages
         var it = self.cache.iterator();
         while (it.next()) |entry| {
@@ -126,6 +135,7 @@ pub const CorpusStore = struct {
 
     /// Lightweight integrity check: header magic/version + first page checksum.
     pub fn checksumValid(self: *CorpusStore) bool {
+        if (is_freestanding) return false;
         if (!std.mem.eql(u8, &self.magic, &QSC_MAGIC)) return false;
         if (self.version != QSC_VERSION) return false;
         if (self.page_count == 0) return true;
@@ -143,6 +153,7 @@ pub const CorpusStore = struct {
 
     /// Reads and decompresses a page. Returns an owned slice; caller frees.
     pub fn readPage(self: *CorpusStore, page_idx: usize) ![]u8 {
+        if (is_freestanding) return error.FreestandingUnsupported;
         if (page_idx >= self.page_count) return error.PageOutOfRange;
         const entry = self.entries[page_idx];
 
@@ -196,6 +207,7 @@ pub const CorpusStore = struct {
     /// Streams all sentences (lines) from the corpus, decompressing pages on demand.
     /// Calls `cb` with the context and each line. The line slice is valid only during the call.
     pub fn streamLines(self: *CorpusStore, ctx: anytype, cb: *const fn (ctx: @TypeOf(ctx), line: []const u8) void) !void {
+        if (is_freestanding) return error.FreestandingUnsupported;
         var line_buf = std.ArrayList(u8).init(self.allocator);
         defer line_buf.deinit();
 

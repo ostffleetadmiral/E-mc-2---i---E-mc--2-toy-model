@@ -21,6 +21,41 @@
 //! backward-compatible migration.
 
 const std = @import("std");
+const builtin = @import("builtin");
+const is_freestanding = builtin.os.tag == .freestanding;
+
+/// Unsigned 512-bit divmod via binary long division.
+/// Only uses add/sub/shift/compare on u512 — operations LLVM expands inline.
+/// A native i512 @divTrunc lowers to a compiler-rt libcall that does not
+/// exist for integers wider than i128 on wasm32-freestanding.
+fn udivmod512(n: u512, d: u512) struct { q: u512, r: u512 } {
+    @setEvalBranchQuota(1_000_000);
+    var q: u512 = 0;
+    var r: u512 = 0;
+    var bit: u10 = 511;
+    while (true) {
+        r = (r << 1) | ((n >> @intCast(bit)) & 1);
+        if (r >= d) {
+            r -= d;
+            q |= @as(u512, 1) << @intCast(bit);
+        }
+        if (bit == 0) break;
+        bit -= 1;
+    }
+    return .{ .q = q, .r = r };
+}
+
+/// Signed 512-bit truncated divmod: q = trunc(n/d), r = n - q*d.
+/// Wrapping negation keeps |minInt| representable via bitcast.
+pub fn sdivmod512(n: i512, d: i512) struct { q: i512, r: i512 } {
+    if (d == 0) return .{ .q = 0, .r = n };
+    const un: u512 = if (n < 0) @bitCast(-%n) else @intCast(n);
+    const ud: u512 = if (d < 0) @bitCast(-%d) else @intCast(d);
+    const dm = udivmod512(un, ud);
+    const q: i512 = @bitCast(if ((n < 0) != (d < 0)) -%@as(u512, @bitCast(dm.q)) else dm.q);
+    const r: i512 = @bitCast(if (n < 0) -%@as(u512, @bitCast(dm.r)) else dm.r);
+    return .{ .q = q, .r = r };
+}
 
 // =============================================================================
 // Core Types
@@ -104,6 +139,7 @@ pub const Q128 = struct {
     pub fn div(self: Q128, other: Q128) Error!Q128 {
         if (other.raw == 0) return error.DivisionByZero;
         const numerator: Wide = @as(Wide, self.raw) << FRAC_BITS;
+        if (is_freestanding) return .{ .raw = @truncate(sdivmod512(numerator, @as(Wide, other.raw)).q) };
         return .{ .raw = @truncate(@divTrunc(numerator, @as(Wide, other.raw))) };
     }
 
@@ -113,8 +149,16 @@ pub const Q128 = struct {
         const abs_num: i256 = if (num < 0) -num else num;
         const abs_den: i256 = if (den < 0) -den else den;
         const scaled_num: Wide = @as(Wide, abs_num) << FRAC_BITS;
-        const quotient: Wide = @divTrunc(scaled_num, @as(Wide, abs_den));
-        const remainder: Wide = @mod(scaled_num, @as(Wide, abs_den));
+        var quotient: Wide = undefined;
+        var remainder: Wide = undefined;
+        if (is_freestanding) {
+            const dm = sdivmod512(scaled_num, @as(Wide, abs_den));
+            quotient = dm.q;
+            remainder = if (dm.r < 0) -dm.r else dm.r;
+        } else {
+            quotient = @divTrunc(scaled_num, @as(Wide, abs_den));
+            remainder = @mod(scaled_num, @as(Wide, abs_den));
+        }
         const half_den: Wide = @as(Wide, abs_den) >> 1;
         var result: Wide = quotient;
         if (remainder > half_den or (remainder == half_den and remainder != 0)) {
@@ -177,8 +221,8 @@ pub const Q128 = struct {
             const s_scaled: u512 = @as(u512, n) << 128;
             const x_u512: u512 = @as(u512, x);
             if (x_u512 == 0) break;
-            const quotient = s_scaled / x_u512;
-            const x_new = (x_u512 + quotient) / 2;
+            const quotient = if (is_freestanding) udivmod512(s_scaled, x_u512).q else s_scaled / x_u512;
+            const x_new = (x_u512 + quotient) >> 1;
             const x_new_trunc: u256 = @truncate(x_new);
             if (x_new_trunc == x) break;
             x = x_new_trunc;
@@ -257,7 +301,9 @@ pub inline fn mul(a: Fp, b: Fp) Fp {
 /// Uses i512 intermediate to prevent overflow.
 pub inline fn div(a: Fp, b: Fp) Fp {
     if (b == 0) return 0;
-    const result: Wide = @divTrunc(@as(Wide, a) << FRAC_BITS, @as(Wide, b));
+    const numerator: Wide = @as(Wide, a) << FRAC_BITS;
+    if (is_freestanding) return @intCast(sdivmod512(numerator, @as(Wide, b)).q);
+    const result: Wide = @divTrunc(numerator, @as(Wide, b));
     return @intCast(result);
 }
 
@@ -267,9 +313,17 @@ pub inline fn div(a: Fp, b: Fp) Fp {
 pub fn fromRatio(num: Fp, den: Fp) Fp {
     if (den == 0) return 0;
     const scaled: Wide = @as(Wide, num) << FRAC_BITS;
-    const q: Wide = @divTrunc(scaled, @as(Wide, den));
-    const remainder: Wide = @rem(scaled, @as(Wide, den));
-    const half_den: Wide = @divTrunc(@as(Wide, den), 2);
+    var q: Wide = undefined;
+    var remainder: Wide = undefined;
+    if (is_freestanding) {
+        const dm = sdivmod512(scaled, @as(Wide, den));
+        q = dm.q;
+        remainder = dm.r;
+    } else {
+        q = @divTrunc(scaled, @as(Wide, den));
+        remainder = @rem(scaled, @as(Wide, den));
+    }
+    const half_den: Wide = @as(Wide, if (den >= 0) den >> 1 else -((-%den) >> 1));
     const abs_rem: Wide = if (remainder < 0) -remainder else remainder;
     const abs_half: Wide = if (half_den < 0) -half_den else half_den;
     if (abs_rem >= abs_half) {
@@ -357,18 +411,36 @@ pub inline fn q128ToQ64(v: Fp) i128 {
 
 /// Convert an f64 to Q128.128 (sidecar bridge only — not for state paths).
 /// Clamps to i256 range and handles NaN/Inf gracefully.
+/// The i256↔f64 conversion is decomposed into 128-bit limbs because
+/// compiler-rt only provides float/int libcalls up to 128 bits; a direct
+/// @intFromFloat on i256 crashes LLVM lowering on wasm32-freestanding.
 pub inline fn fromF64(v: f64) Fp {
     if (std.math.isNan(v) or std.math.isInf(v)) return 0;
-    const scaled = v * @as(f64, @floatFromInt(ONE));
-    const max_f = @as(f64, @floatFromInt(std.math.maxInt(Fp)));
-    const min_f = @as(f64, @floatFromInt(std.math.minInt(Fp)));
-    const clamped = if (scaled >= max_f) max_f else if (scaled <= min_f) min_f else scaled;
-    return @intFromFloat(clamped);
+    const scaled = v * ONE_F;
+    const negative = scaled < 0;
+    const mag = if (negative) -scaled else scaled;
+    const hi_cap_f = @as(f64, @floatFromInt(@as(i128, std.math.maxInt(i128))));
+    if (mag >= hi_cap_f * ONE_F) return if (negative) std.math.minInt(Fp) else std.math.maxInt(Fp);
+    const hi_f = @trunc(mag / ONE_F);
+    // f64 rounding can push hi_f/lo_f to exactly 2^127/2^128 at range edges;
+    // clamp before @intFromFloat to avoid overflow.
+    const hi: i128 = if (hi_f >= hi_cap_f) std.math.maxInt(i128) else @intFromFloat(hi_f);
+    const lo_f = @max(0.0, mag - hi_f * ONE_F);
+    const lo: u128 = if (lo_f >= ONE_F) std.math.maxInt(u128) else @intFromFloat(lo_f);
+    const mag_i: Fp = (@as(Fp, hi) << 128) + @as(Fp, lo);
+    return if (negative) -mag_i else mag_i;
 }
 
 /// Convert Q128.128 to f64 (sidecar bridge only — not for state paths).
+/// Splits the i256 magnitude into high/low u128 limbs so each conversion
+/// stays within compiler-rt's 128-bit float libcall range.
 pub inline fn toF64(v: Fp) f64 {
-    return @as(f64, @floatFromInt(v)) / @as(f64, @floatFromInt(ONE));
+    const negative = v < 0;
+    const mag: u256 = @intCast(if (negative) -v else v);
+    const hi: u128 = @truncate(mag >> 128);
+    const lo: u128 = @truncate(mag);
+    const f = @as(f64, @floatFromInt(hi)) * ONE_F + @as(f64, @floatFromInt(lo));
+    return (if (negative) -f else f) / ONE_F;
 }
 
 // =============================================================================
@@ -555,7 +627,7 @@ pub fn sigmoid(x: Fp) Fp {
     const offset = x + SIGMOID_RANGE;
     const scaled: Wide = @as(Wide, offset) * @as(Wide, SIGMOID_TABLE_SIZE);
     const range: Wide = @as(Wide, SIGMOID_RANGE) * 2;
-    const idx: Fp = @intCast(@divTrunc(scaled, range));
+    const idx: Fp = @intCast(if (is_freestanding) sdivmod512(scaled, range).q else @divTrunc(scaled, range));
     const clamped: usize = @intCast(clamp(idx, 0, @as(Fp, @intCast(SIGMOID_TABLE_SIZE - 1))));
     return sigmoid_table[clamped];
 }
@@ -626,14 +698,23 @@ const cos_table: [TRIG_TABLE_SIZE]Fp = blk: {
     break :blk table;
 };
 
+/// Table index for angle in [0, two_pi): idx = a * TRIG_TABLE_SIZE / two_pi.
+/// Freestanding uses the limb-safe divmod; the pow2 mod is a mask since idx >= 0.
+inline fn trigIndex(a: Fp, two_pi: Fp) usize {
+    const scaled: Wide = @as(Wide, a) * @as(Wide, TRIG_TABLE_SIZE);
+    const idx: Wide = if (is_freestanding)
+        sdivmod512(scaled, @as(Wide, two_pi)).q
+    else
+        @divTrunc(scaled, @as(Wide, two_pi));
+    return @intCast(idx & (TRIG_TABLE_SIZE - 1));
+}
+
 pub fn sin(angle: Fp) Fp {
     var a = angle;
     const two_pi = TWO_PI;
     while (a < 0) a += two_pi;
     while (a >= two_pi) a -= two_pi;
-    const idx: Wide = @divTrunc(@as(Wide, a) * @as(Wide, TRIG_TABLE_SIZE), @as(Wide, two_pi));
-    const clamped: usize = @intCast(@mod(idx, @as(Wide, TRIG_TABLE_SIZE)));
-    return sin_table[clamped];
+    return sin_table[trigIndex(a, two_pi)];
 }
 
 pub fn cos(angle: Fp) Fp {
@@ -641,9 +722,7 @@ pub fn cos(angle: Fp) Fp {
     const two_pi = TWO_PI;
     while (a < 0) a += two_pi;
     while (a >= two_pi) a -= two_pi;
-    const idx: Wide = @divTrunc(@as(Wide, a) * @as(Wide, TRIG_TABLE_SIZE), @as(Wide, two_pi));
-    const clamped: usize = @intCast(@mod(idx, @as(Wide, TRIG_TABLE_SIZE)));
-    return cos_table[clamped];
+    return cos_table[trigIndex(a, two_pi)];
 }
 
 pub fn sincos(angle: Fp) struct { sin_val: Fp, cos_val: Fp } {
@@ -651,13 +730,16 @@ pub fn sincos(angle: Fp) struct { sin_val: Fp, cos_val: Fp } {
     const two_pi = TWO_PI;
     while (a < 0) a += two_pi;
     while (a >= two_pi) a -= two_pi;
-    const idx: Wide = @divTrunc(@as(Wide, a) * @as(Wide, TRIG_TABLE_SIZE), @as(Wide, two_pi));
-    const clamped: usize = @intCast(@mod(idx, @as(Wide, TRIG_TABLE_SIZE)));
+    const clamped = trigIndex(a, two_pi);
     return .{ .sin_val = sin_table[clamped], .cos_val = cos_table[clamped] };
 }
 
 pub fn twiddle(k: usize, N: usize) struct { re: Fp, im: Fp } {
-    const angle: Wide = @divTrunc(-(@as(Wide, TWO_PI) * @as(Wide, @intCast(k))), @as(Wide, @intCast(N)));
+    const tw_num: Wide = -(@as(Wide, TWO_PI) * @as(Wide, @intCast(k)));
+    const angle: Wide = if (is_freestanding)
+        sdivmod512(tw_num, @as(Wide, @intCast(N))).q
+    else
+        @divTrunc(tw_num, @as(Wide, @intCast(N)));
     const angle_fp: Fp = @intCast(angle);
     const sc = sincos(angle_fp);
     return .{ .re = sc.cos_val, .im = sc.sin_val };

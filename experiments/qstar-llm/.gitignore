@@ -26,3 +26,7 @@ zig-out/master/
 # Maple prototype build artifacts
 prototype/Maple/firmware/Maple_V1_5/build/
 experiments/qstar-llm/convert-corpus
+weights/
+*.o
+*.o.o
+*.deb

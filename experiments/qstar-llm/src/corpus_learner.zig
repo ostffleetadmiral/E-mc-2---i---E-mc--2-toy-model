@@ -22,9 +22,16 @@
 //! the corpus, looping back to the beginning when EOF is reached.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const trivium = @import("trivium");
 const quadrivium = @import("quadrivium");
 const dyn_routes = @import("dynamic_routes");
+
+/// Freestanding targets (WASM) are single-threaded and have no filesystem:
+/// the background learner cannot run, so start/join degrade to no-ops and
+/// callers proceed with whatever routes already exist.
+const is_freestanding = builtin.os.tag == .freestanding;
+const ThreadT = if (is_freestanding) void else std.Thread;
 
 // =============================================================================
 // Constants
@@ -98,7 +105,7 @@ pub const CorpusLearner = struct {
     stats: CorpusLearnerStats,
 
     stop_flag: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
-    thread: ?std.Thread = null,
+    thread: ?ThreadT = null,
     running: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 
     trivium_pipeline: trivium.TriviumPipeline = .{},
@@ -136,6 +143,7 @@ pub const CorpusLearner = struct {
     }
 
     pub fn join(self: *CorpusLearner) void {
+        if (is_freestanding) return;
         if (self.thread) |t| {
             t.join();
             self.thread = null;
@@ -147,6 +155,7 @@ pub const CorpusLearner = struct {
     }
 
     pub fn start(self: *CorpusLearner) !void {
+        if (is_freestanding) return;
         if (self.thread != null) return;
         self.stop_flag.store(false, .release);
         self.running.store(true, .release);

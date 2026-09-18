@@ -88,11 +88,50 @@ pub inline fn mul(a: i128, b: i128) i128 {
     return @intCast(if (up) shifted + 1 else shifted);
 }
 
+const builtin = @import("builtin");
+const is_freestanding = builtin.os.tag == .freestanding;
+
+/// Unsigned 256-bit divmod via binary long division.
+/// Only uses add/sub/shift/compare on u256 — operations LLVM expands inline.
+/// A native i256 @divTrunc lowers to a compiler-rt libcall that does not
+/// exist for integers wider than i128 on wasm32-freestanding.
+fn udivmod256(n: u256, d: u256) struct { q: u256, r: u256 } {
+    @setEvalBranchQuota(1_000_000);
+    var q: u256 = 0;
+    var r: u256 = 0;
+    var bit: u9 = 255;
+    while (true) {
+        r = (r << 1) | ((n >> @intCast(bit)) & 1);
+        if (r >= d) {
+            r -= d;
+            q |= @as(u256, 1) << @intCast(bit);
+        }
+        if (bit == 0) break;
+        bit -= 1;
+    }
+    return .{ .q = q, .r = r };
+}
+
+/// Signed 256-bit truncated divmod: q = trunc(n/d), r = n - q*d.
+/// Wrapping negation keeps |minInt| representable via bitcast.
+/// Exported so other modules with i256 division sites can stay wasm-safe.
+pub fn sdivmod256(n: i256, d: i256) struct { q: i256, r: i256 } {
+    if (d == 0) return .{ .q = 0, .r = n };
+    const un: u256 = if (n < 0) @bitCast(-%n) else @intCast(n);
+    const ud: u256 = if (d < 0) @bitCast(-%d) else @intCast(d);
+    const dm = udivmod256(un, ud);
+    const q: i256 = @bitCast(if ((n < 0) != (d < 0)) -%@as(u256, @bitCast(dm.q)) else dm.q);
+    const r: i256 = @bitCast(if (n < 0) -%@as(u256, @bitCast(dm.r)) else dm.r);
+    return .{ .q = q, .r = r };
+}
+
 /// Fixed-point division: (a << FRAC_BITS) / b.
 /// Uses i256 intermediate to prevent overflow.
 pub inline fn div(a: i128, b: i128) i128 {
     if (b == 0) return 0;
-    const result: i256 = @divTrunc(@as(i256, a) << FRAC_BITS, @as(i256, b));
+    const numerator: i256 = @as(i256, a) << FRAC_BITS;
+    if (is_freestanding) return @intCast(sdivmod256(numerator, @as(i256, b)).q);
+    const result: i256 = @divTrunc(numerator, @as(i256, b));
     return @intCast(result);
 }
 
@@ -102,10 +141,18 @@ pub inline fn div(a: i128, b: i128) i128 {
 pub fn fromRatio(num: i128, den: i128) i128 {
     if (den == 0) return 0;
     const scaled: i256 = @as(i256, num) << FRAC_BITS;
-    const q: i256 = @divTrunc(scaled, @as(i256, den));
-    const remainder: i256 = @rem(scaled, @as(i256, den));
+    var q: i256 = undefined;
+    var remainder: i256 = undefined;
+    if (is_freestanding) {
+        const dm = sdivmod256(scaled, @as(i256, den));
+        q = dm.q;
+        remainder = dm.r;
+    } else {
+        q = @divTrunc(scaled, @as(i256, den));
+        remainder = @rem(scaled, @as(i256, den));
+    }
     // Round half away from zero
-    const half_den: i256 = @divTrunc(@as(i256, den), 2);
+    const half_den: i256 = @as(i256, @divTrunc(den, 2));
     const abs_rem: i256 = if (remainder < 0) -remainder else remainder;
     const abs_half: i256 = if (half_den < 0) -half_den else half_den;
     if (abs_rem >= abs_half) {
@@ -465,15 +512,25 @@ const cos_table: [TRIG_TABLE_SIZE]i128 = blk: {
 
 /// Computes sin(angle) using lookup table.
 /// Input: angle in Q64.64 radians. Output: sin(angle) in Q64.64.
+/// Table index for angle in [0, two_pi): idx = a * TRIG_TABLE_SIZE / two_pi.
+/// Freestanding uses the limb-safe divmod; the pow2 mod is a mask since idx >= 0.
+inline fn trigIndex(a: i128, two_pi: i128) usize {
+    const scaled: i256 = @as(i256, a) * @as(i256, TRIG_TABLE_SIZE);
+    const idx: i256 = if (is_freestanding)
+        sdivmod256(scaled, @as(i256, two_pi)).q
+    else
+        @divTrunc(scaled, @as(i256, two_pi));
+    return @intCast(idx & (TRIG_TABLE_SIZE - 1));
+}
+
+/// Computes sin(angle) using lookup table.
+/// Input: angle in Q64.64 radians. Output: sin(angle) in Q64.64.
 pub fn sin(angle: i128) i128 {
     var a = angle;
     const two_pi = TWO_PI;
     while (a < 0) a += two_pi;
     while (a >= two_pi) a -= two_pi;
-
-    const idx: i256 = @divTrunc(@as(i256, a) * @as(i256, TRIG_TABLE_SIZE), @as(i256, two_pi));
-    const clamped: usize = @intCast(@mod(idx, @as(i256, TRIG_TABLE_SIZE)));
-    return sin_table[clamped];
+    return sin_table[trigIndex(a, two_pi)];
 }
 
 /// Computes cos(angle) using lookup table.
@@ -484,9 +541,7 @@ pub fn cos(angle: i128) i128 {
     while (a < 0) a += two_pi;
     while (a >= two_pi) a -= two_pi;
 
-    const idx: i256 = @divTrunc(@as(i256, a) * @as(i256, TRIG_TABLE_SIZE), @as(i256, two_pi));
-    const clamped: usize = @intCast(@mod(idx, @as(i256, TRIG_TABLE_SIZE)));
-    return cos_table[clamped];
+    return cos_table[trigIndex(a, two_pi)];
 }
 
 /// Computes both sin and cos simultaneously (for DFT).
@@ -497,8 +552,7 @@ pub fn sincos(angle: i128) struct { sin_val: i128, cos_val: i128 } {
     while (a < 0) a += two_pi;
     while (a >= two_pi) a -= two_pi;
 
-    const idx: i256 = @divTrunc(@as(i256, a) * @as(i256, TRIG_TABLE_SIZE), @as(i256, two_pi));
-    const clamped: usize = @intCast(@mod(idx, @as(i256, TRIG_TABLE_SIZE)));
+    const clamped = trigIndex(a, two_pi);
     return .{ .sin_val = sin_table[clamped], .cos_val = cos_table[clamped] };
 }
 
@@ -506,7 +560,11 @@ pub fn sincos(angle: i128) struct { sin_val: i128, cos_val: i128 } {
 /// Returns { .re, .im } in Q64.64 fixed-point.
 /// This is cos(-2πk/N) + i*sin(-2πk/N) = cos(2πk/N) - i*sin(2πk/N).
 pub fn twiddle(k: usize, N: usize) struct { re: i128, im: i128 } {
-    const angle: i256 = @divTrunc(-(@as(i256, TWO_PI) * @as(i256, @intCast(k))), @as(i256, @intCast(N)));
+    const tw_num: i256 = -(@as(i256, TWO_PI) * @as(i256, @intCast(k)));
+    const angle: i256 = if (is_freestanding)
+        sdivmod256(tw_num, @as(i256, @intCast(N))).q
+    else
+        @divTrunc(tw_num, @as(i256, @intCast(N)));
     const angle_fp: i128 = @intCast(angle);
     const sc = sincos(angle_fp);
     return .{ .re = sc.cos_val, .im = sc.sin_val };
@@ -1049,7 +1107,7 @@ test "cmp and eq consistency" {
 pub fn verifyFrameworkConstants() bool {
     // DEFECT_DELTA = 7/225 (Möbius defect density)
     // Verify: 7 * ONE / 225 == DEFECT_DELTA (within 1 ULP)
-    const expected_defect = @divTrunc(@as(i256, 7) * @as(i256, ONE), @as(i256, 225));
+    const expected_defect = if (is_freestanding) sdivmod256(@as(i256, 7) * @as(i256, ONE), 225).q else @divTrunc(@as(i256, 7) * @as(i256, ONE), @as(i256, 225));
     {
         const diff = @as(i128, @intCast(expected_defect)) - DEFECT_DELTA;
         const abs_diff = if (diff < 0) -diff else diff;
@@ -1057,7 +1115,7 @@ pub fn verifyFrameworkConstants() bool {
     }
 
     // ACTIVE_DENSITY_RHO = 421/3375 (active E0 observer density)
-    const expected_rho = @divTrunc(@as(i256, 421) * @as(i256, ONE), @as(i256, 3375));
+    const expected_rho = if (is_freestanding) sdivmod256(@as(i256, 421) * @as(i256, ONE), 3375).q else @divTrunc(@as(i256, 421) * @as(i256, ONE), @as(i256, 3375));
     {
         const diff = @as(i128, @intCast(expected_rho)) - ACTIVE_DENSITY_RHO;
         const abs_diff = if (diff < 0) -diff else diff;
@@ -1068,7 +1126,7 @@ pub fn verifyFrameworkConstants() bool {
     // g = (7/225) × (421/3375) ≈ 0.003880907
     const expected_g_num = @as(i256, 7) * @as(i256, 421);
     const expected_g_den = @as(i256, 225) * @as(i256, 3375);
-    const expected_g = @divTrunc(expected_g_num * @as(i256, ONE), expected_g_den);
+    const expected_g = if (is_freestanding) sdivmod256(expected_g_num * @as(i256, ONE), expected_g_den).q else @divTrunc(expected_g_num * @as(i256, ONE), expected_g_den);
     {
         const diff = @as(i128, @intCast(expected_g)) - COUPLING_G;
         const abs_diff = if (diff < 0) -diff else diff;

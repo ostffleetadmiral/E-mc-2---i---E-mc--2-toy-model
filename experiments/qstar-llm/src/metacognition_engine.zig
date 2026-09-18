@@ -20,12 +20,24 @@
 //! All core state is Q128.128 fixed-point. Floating-point only at hw_bridge boundary.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const dyn_routes = @import("dynamic_routes");
 const hw_bridge = @import("hw_bridge");
 const q128 = @import("q128");
 const trivium = @import("trivium");
 const quadrivium = @import("quadrivium");
 const jordan = @import("jordan_algebra");
+
+/// Freestanding targets (WASM) are single-threaded: the background
+/// introspection thread cannot spawn, so the engine runs without it. The
+/// mutex degrades to a no-op — there is no concurrent access to guard.
+const is_freestanding = builtin.os.tag == .freestanding;
+const ThreadT = if (is_freestanding) void else std.Thread;
+const NoopMutex = struct {
+    pub fn lock(_: *NoopMutex) void {}
+    pub fn unlock(_: *NoopMutex) void {}
+};
+const MutexT = if (is_freestanding) NoopMutex else std.Thread.Mutex;
 
 // =============================================================================
 // Constants
@@ -444,10 +456,10 @@ pub const MetacognitionEngine = struct {
     stop_flag: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
     correction_pending: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
     generation_active: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
-    bg_thread: ?std.Thread = null,
+    bg_thread: ?ThreadT = null,
 
     // Mutex-protected shared state for thread communication
-    state_mutex: std.Thread.Mutex = .{},
+    state_mutex: MutexT = .{},
     // Set once updateSharedState has delivered a real lattice snapshot; the
     // background thread must not evaluate the zero-initialized state.
     shared_state_valid: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
@@ -521,6 +533,7 @@ pub const MetacognitionEngine = struct {
     /// The thread continuously monitors shared lattice state and sets
     /// correction_pending when issues are detected.
     pub fn startThread(self: *MetacognitionEngine) !void {
+        if (is_freestanding) return;
         if (self.bg_thread != null) return;
         self.stop_flag.store(false, .release);
         self.bg_thread = try std.Thread.spawn(.{}, bgThreadLoop, .{self});
@@ -528,6 +541,7 @@ pub const MetacognitionEngine = struct {
 
     /// Stops the background thread and waits for it to finish.
     pub fn stopThread(self: *MetacognitionEngine) void {
+        if (is_freestanding) return;
         if (self.bg_thread) |t| {
             self.stop_flag.store(true, .release);
             t.join();

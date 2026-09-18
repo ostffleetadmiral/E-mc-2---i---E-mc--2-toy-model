@@ -11,6 +11,12 @@
 //!   4. The agent routes to this when lattice confidence < threshold
 
 const std = @import("std");
+const builtin = @import("builtin");
+
+/// TCP sockets are unavailable on freestanding targets (WASM); every network
+/// entry point degrades to "server unreachable" so callers fall back to
+/// lattice-only generation.
+const is_freestanding = builtin.os.tag == .freestanding;
 
 pub const LlamaServerConfig = struct {
     host: []const u8 = "127.0.0.1",
@@ -88,6 +94,7 @@ pub const LlamaServerResponse = struct {
 
 /// Checks if llama-server is reachable by attempting a TCP connection.
 pub fn isAvailable(config: LlamaServerConfig) bool {
+    if (is_freestanding) return false;
     const addr = std.net.Address.parseIp4(config.host, config.port) catch return false;
     var stream = std.net.tcpConnectToAddress(addr) catch return false;
     stream.close();
@@ -101,6 +108,7 @@ pub fn generate(
     system_prompt: []const u8,
     user_prompt: []const u8,
 ) !LlamaServerResponse {
+    if (is_freestanding) return error.ServerUnreachable;
     const addr = try std.net.Address.parseIp4(config.host, config.port);
     var stream = try std.net.tcpConnectToAddress(addr);
     defer stream.close();
@@ -146,6 +154,7 @@ pub fn generateStreaming(
     system_prompt: []const u8,
     user_prompt: []const u8,
 ) !LlamaServerResponse {
+    if (is_freestanding) return error.ServerUnreachable;
     const addr = try std.net.Address.parseIp4(config.host, config.port);
     var stream = try std.net.tcpConnectToAddress(addr);
     defer stream.close();
