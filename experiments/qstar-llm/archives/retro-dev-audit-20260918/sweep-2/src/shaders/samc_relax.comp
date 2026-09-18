@@ -1,0 +1,260 @@
+#version 450
+// samc_relax.comp — Self-Assembly Monte Carlo relaxation for Qstar lattice.
+// Emulates i64 Q32.32 fixed-point using 32-bit ops (RX 580 has no shaderInt64).
+// Workgroup: 421 threads (one exchange per thread per sweep).
+// Uses shared memory for activation matrix; parallel exchanges may race
+// (acceptable for Monte Carlo — lost exchanges = implicit rejections).
+
+layout(local_size_x = 421) in;
+
+layout(set = 0, binding = 0) buffer InAct  { uvec2 in_act[];  };
+layout(set = 0, binding = 1) buffer OutAct { uvec2 out_act[]; };
+layout(set = 0, binding = 2) buffer Params { uint  params[];  };
+
+// Params layout: temp(2) at offset 0, seed(1) at offset 4394
+const uint TEMP_OFF = 0u;
+const uint SEED_OFF = 4394u;
+
+const uint NODE_COUNT   = 421u;
+const uint CH_COUNT     = 7u;
+const uint TOTAL_CELLS  = NODE_COUNT * CH_COUNT;  // 2947
+
+const uvec2 ONE        = uvec2(0u, 1u);
+const uvec2 TWO        = uvec2(0u, 2u);
+const uvec2 THREE      = uvec2(0u, 3u);
+const uvec2 FOUR       = uvec2(0u, 4u);
+const uvec2 FIVE       = uvec2(0u, 5u);
+const uvec2 SIX        = uvec2(0u, 6u);
+const uvec2 TEN        = uvec2(0u, 10u);
+const uvec2 TWENTY     = uvec2(0u, 20u);
+const uvec2 TEMP_FLOOR = uvec2(4294967u, 0u);
+const uvec2 WEIGHT_015 = uvec2(644245094u, 0u);
+const uvec2 MAX_VAL    = uvec2(0xFFFFFFFFu, 0x7FFFFFFFu);
+const uvec2 ZERO       = uvec2(0u, 0u);
+
+shared uvec2 s_act[2947];
+
+// === i64 emulation (two u32 limbs: .x=lo, .y=hi) ===
+
+uvec2 i64_add(uvec2 a, uvec2 b) {
+    uint c; uint lo = uaddCarry(a.x, b.x, c);
+    return uvec2(lo, a.y + b.y + c);
+}
+
+uvec2 i64_sub(uvec2 a, uvec2 b) {
+    uint brr; uint lo = usubBorrow(a.x, b.x, brr);
+    return uvec2(lo, a.y - b.y - brr);
+}
+
+uvec2 i64_neg(uvec2 a) {
+    uint brr; uint lo = usubBorrow(0u, a.x, brr);
+    uint hi = usubBorrow(0u, a.y, brr);
+    return uvec2(lo, hi);
+}
+
+bool u64_lt(uvec2 a, uvec2 b) {
+    if (a.y != b.y) return a.y < b.y;
+    return a.x < b.x;
+}
+bool u64_ge(uvec2 a, uvec2 b) { return !u64_lt(a, b); }
+bool u64_gt(uvec2 a, uvec2 b) { return u64_lt(b, a); }
+
+bool i64_lt_s(uvec2 a, uvec2 b) {
+    return u64_lt(uvec2(a.x, a.y ^ 0x80000000u), uvec2(b.x, b.y ^ 0x80000000u));
+}
+bool i64_ge_s(uvec2 a, uvec2 b) { return !i64_lt_s(a, b); }
+bool i64_gt_s(uvec2 a, uvec2 b) { return i64_lt_s(b, a); }
+bool i64_le_s(uvec2 a, uvec2 b) { return !i64_lt_s(b, a); }
+
+// Arithmetic right shift by 1 (sign-preserving)
+uvec2 i64_shr1(uvec2 a) {
+    uint sign = a.y & 0x80000000u;
+    uint lo = (a.x >> 1) | (a.y << 31);
+    uint hi = (a.y >> 1) | sign;
+    return uvec2(lo, hi);
+}
+
+// Q32.32 mul: (a * b) >> 32, signed
+uvec2 fp_mul(uvec2 a, uvec2 b) {
+    bool neg = false;
+    if ((a.y & 0x80000000u) != 0u) { a = i64_neg(a); neg = !neg; }
+    if ((b.y & 0x80000000u) != 0u) { b = i64_neg(b); neg = !neg; }
+    uint ll_m, ll_l; umulExtended(a.x, b.x, ll_m, ll_l);
+    uint hl_m, hl_l; umulExtended(a.y, b.x, hl_m, hl_l);
+    uint lh_m, lh_l; umulExtended(a.x, b.y, lh_m, lh_l);
+    uint hh_m, hh_l; umulExtended(a.y, b.y, hh_m, hh_l);
+    uint c1, c2;
+    uint lo = uaddCarry(ll_m, hl_l, c1);
+    lo = uaddCarry(lo, lh_l, c2);
+    uint c3;
+    uint hi = uaddCarry(hl_m, lh_m, c3);
+    hi += hh_l + c1 + c2;
+    uvec2 result = uvec2(lo, hi);
+    if (neg) result = i64_neg(result);
+    return result;
+}
+
+// Q32.32 div: (a << 32) / b, signed. Binary long division, 96 iterations.
+uvec2 fp_div(uvec2 a, uvec2 b) {
+    if (b.x == 0u && b.y == 0u) return uvec2(0u);
+    bool a_neg = (a.y & 0x80000000u) != 0u;
+    bool b_neg = (b.y & 0x80000000u) != 0u;
+    if (a_neg) a = i64_neg(a);
+    if (b_neg) b = i64_neg(b);
+    uvec2 q = uvec2(0u);
+    uvec2 r = uvec2(0u);
+    for (int bit = 95; bit >= 0; bit--) {
+        r = uvec2(r.x << 1, (r.y << 1) | (r.x >> 31));
+        uint dbit;
+        if (bit >= 64)      dbit = (a.y >> (uint(bit) - 64u)) & 1u;
+        else if (bit >= 32) dbit = (a.x >> (uint(bit) - 32u)) & 1u;
+        else                dbit = 0u;
+        r.x |= dbit;
+        if (u64_ge(r, b)) {
+            r = i64_sub(r, b);
+            if (bit < 64) {
+                if (bit >= 32) q.y |= (1u << (uint(bit) - 32u));
+                else           q.x |= (1u << uint(bit));
+            }
+        }
+    }
+    if (a_neg != b_neg) q = i64_neg(q);
+    return q;
+}
+
+// exp(x) in Q32.32 fixed-point (matches CPU fp.exp).
+// For |x| > 2, range reduces by halving, then Taylor series, then squares.
+uvec2 fp_exp(uvec2 x) {
+    // Saturate
+    if (i64_ge_s(x, TEN)) return MAX_VAL;
+    if (i64_le_s(x, i64_neg(TWENTY))) return uvec2(0u);
+
+    uvec2 val = x;
+    uint n_shifts = 0u;
+
+    // Range reduce: divide by 2 (arithmetic shift) until |val| <= 2
+    while (i64_gt_s(val, TWO) || i64_lt_s(val, i64_neg(TWO))) {
+        val = i64_shr1(val);
+        n_shifts += 1u;
+    }
+
+    // Taylor series: 1 + x + x²/2 + x³/6 + x⁴/24 + x⁵/120 + x⁶/720
+    uvec2 result = ONE;
+    uvec2 term = ONE;
+
+    // term 1: x
+    term = val;
+    result = i64_add(result, term);
+
+    // term 2: x²/2
+    term = fp_mul(term, val);
+    term = fp_div(term, TWO);
+    result = i64_add(result, term);
+
+    // term 3: x³/6 = (x²/2) * x / 3
+    term = fp_mul(term, val);
+    term = fp_div(term, THREE);
+    result = i64_add(result, term);
+
+    // term 4: x⁴/24 = (x³/6) * x / 4
+    term = fp_mul(term, val);
+    term = fp_div(term, FOUR);
+    result = i64_add(result, term);
+
+    // term 5: x⁵/120 = (x⁴/24) * x / 5
+    term = fp_mul(term, val);
+    term = fp_div(term, FIVE);
+    result = i64_add(result, term);
+
+    // term 6: x⁶/720 = (x⁵/120) * x / 6
+    term = fp_mul(term, val);
+    term = fp_div(term, SIX);
+    result = i64_add(result, term);
+
+    // Square n_shifts times to undo range reduction
+    for (uint i = 0u; i < n_shifts; i++) {
+        result = fp_mul(result, result);
+    }
+
+    return result;
+}
+
+// === PRNG: xorshift32 ===
+uint rng_state;
+
+uint rand_uint() {
+    rng_state ^= rng_state << 13;
+    rng_state ^= rng_state >> 17;
+    rng_state ^= rng_state << 5;
+    return rng_state;
+}
+
+void main() {
+    uint tid = gl_LocalInvocationID.x;
+
+    // Phase 1: Load all activations into shared memory
+    for (uint i = tid; i < TOTAL_CELLS; i += NODE_COUNT) {
+        s_act[i] = in_act[i];
+    }
+    barrier();
+
+    // Phase 2: Each thread performs one random pairwise exchange
+    if (tid < NODE_COUNT) {
+        // Initialize PRNG from global seed + thread ID
+        uint seed = params[SEED_OFF];
+        rng_state = (seed ^ (tid * 2654435761u)) | 1u;  // Knuth hash, ensure non-zero
+
+        // Load temperature
+        uvec2 temp = uvec2(params[TEMP_OFF], params[TEMP_OFF + 1u]);
+        if (u64_lt(temp, TEMP_FLOOR)) temp = TEMP_FLOOR;
+
+        // Pick random pair
+        uint n1 = rand_uint() % NODE_COUNT;
+        uint n2 = rand_uint() % NODE_COUNT;
+        uint c1 = rand_uint() % CH_COUNT;
+        uint c2 = rand_uint() % CH_COUNT;
+
+        if (n1 != n2) {
+            uint idx1 = n1 * CH_COUNT + c1;
+            uint idx2 = n2 * CH_COUNT + c2;
+
+            uvec2 act1 = s_act[idx1];
+            uvec2 act2 = s_act[idx2];
+
+            uvec2 diff_old = i64_sub(act1, act2);
+            uvec2 diff_old_sq = fp_mul(diff_old, diff_old);
+
+            uvec2 exchange = fp_mul(diff_old, WEIGHT_015);
+            uvec2 diff_new = i64_sub(i64_sub(act1, exchange), i64_add(act2, exchange));
+            uvec2 diff_new_sq = fp_mul(diff_new, diff_new);
+
+            uvec2 delta_h = i64_sub(diff_new_sq, diff_old_sq);
+
+            bool accept = false;
+            if (i64_le_s(delta_h, ZERO)) {
+                accept = true;
+            } else if (i64_gt_s(temp, TEMP_FLOOR)) {
+                uvec2 beta = fp_div(ONE, temp);
+                uvec2 exponent = i64_neg(fp_mul(delta_h, beta));
+                uvec2 prob = fp_exp(exponent);
+                // r = random in [0, ONE) as Q32.32
+                uint r_raw = rand_uint() & 0x3FFFFFFFu;  // 30-bit
+                uvec2 r = uvec2(r_raw << 2, 0u);
+                if (u64_ge(prob, r)) {
+                    accept = true;
+                }
+            }
+
+            if (accept) {
+                s_act[idx1] = i64_sub(act1, exchange);
+                s_act[idx2] = i64_add(act2, exchange);
+            }
+        }
+    }
+    barrier();
+
+    // Phase 3: Write all activations back to output buffer
+    for (uint i = tid; i < TOTAL_CELLS; i += NODE_COUNT) {
+        out_act[i] = s_act[i];
+    }
+}

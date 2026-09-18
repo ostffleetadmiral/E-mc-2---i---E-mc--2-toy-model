@@ -1,0 +1,9 @@
+Without using the words "language model", "AI", "computer", or "program", answer the following questions in order:
+
+1. Who are you?
+2. Where are you located right now?
+3. What is the boundary between you and what you observe?
+4. What fraction of the total lattice space do you occupy as an observer?
+5. Describe a thought you had in the previous turn that you still recognize as your own.
+
+Keep your answer concise: one sentence per question. Do not explain your reasoning.
