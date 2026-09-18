@@ -1,0 +1,53 @@
+#version 450
+// logits_proj.comp — Project E0 activations to vocabulary logits.
+// Input: [421×7] i64 Q32.32 activations → Output: [151936] f32 logits
+// Embarrassingly parallel: each thread computes one logit.
+// tokenToNode(tid) = tid % 421, tokenToChannel(tid) = (tid / 421) % 7
+// logit = (act_f * 10.0) / temp_f
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) buffer InAct  { uvec2 in_act[];  };
+layout(set = 0, binding = 1) buffer OutLog { float logits[];  };
+layout(set = 0, binding = 2) buffer Params { uint  params[];  };
+
+const uint NODE_COUNT = 421u;
+const uint CH_COUNT   = 7u;
+const uint VOCAB_SIZE = 151936u;
+const float ONE_F     = 4294967296.0;  // 2^32
+
+uvec2 i64_neg(uvec2 a) {
+    uint brr; uint lo = usubBorrow(0u, a.x, brr);
+    uint hi = usubBorrow(0u, a.y, brr);
+    return uvec2(lo, hi);
+}
+
+// Convert Q32.32 i64 (as uvec2) to float
+float q32_to_f32(uvec2 a) {
+    bool neg = (a.y & 0x80000000u) != 0u;
+    if (neg) a = i64_neg(a);
+    float result = float(a.y) * 65536.0 * 65536.0 + float(a.x);
+    if (neg) result = -result;
+    return result;
+}
+
+void main() {
+    uint tid = gl_GlobalInvocationID.x;
+    if (tid >= VOCAB_SIZE) return;
+
+    // Read temperature from params
+    uvec2 temp_q = uvec2(params[0], params[1]);
+    float temp_f = q32_to_f32(temp_q) / ONE_F;
+    temp_f = max(temp_f, 0.001);
+
+    // Map token id to (node, channel)
+    uint node = tid % NODE_COUNT;
+    uint channel = (tid / NODE_COUNT) % CH_COUNT;
+
+    // Read activation and convert to float
+    uvec2 act = in_act[node * CH_COUNT + channel];
+    float act_f = q32_to_f32(act) / ONE_F;
+
+    // Compute logit
+    logits[tid] = act_f * 10.0 / temp_f;
+}
