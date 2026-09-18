@@ -47,3 +47,8 @@ experiments/*/*.bin
 experiments/*/*.so
 experiments/*/*.dll
 experiments/*/*.dylib
+
+# Loose build artifacts
+*.o
+*.o.o
+*.deb
