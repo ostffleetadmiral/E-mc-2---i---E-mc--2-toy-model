@@ -1,0 +1,126 @@
+# 24h training topic list — 100 random-fact domains (Wikipedia titles)
+# Curated via web research: animals, space, human body, history oddities,
+# food, geography, oceans, inventions, psychology, weather, ancient world,
+# technology, math, chemistry, art, sports, language, architecture,
+# economics, unusual phenomena
+# Animals & nature oddities
+Octopus
+Axolotl
+Tardigrade
+Mantis_shrimp
+Platypus
+Immortal_jellyfish
+Honey_badger
+Mimic_octopus
+Pistol_shrimp
+Ant_collective_behavior
+# Space & astronomy
+Venus
+Kuiper_belt
+Oumuamua
+Pulsar
+Rogue_planet
+Titan_(moon)
+K%C3%A1rm%C3%A1n_line
+Great_Red_Spot
+Halley%27s_Comet
+Lagrange_point
+# Human body & medicine
+Human_brain
+Gut_flora
+Sleep
+Dream
+Synesthesia
+Proprioception
+Appendix_(anatomy)
+Immune_system
+Placebo_effect
+Hiccup
+# History oddities
+Benin_Bronzes
+Dancing_plague_of_1518
+Green_children_of_Woolpit
+London_Beer_Flood
+Year_Without_a_Summer
+Defenestrations_of_Prague
+Daguerreotype
+Library_of_Alexandria
+Antikythera_mechanism
+Voynich_manuscript
+# Geography & Earth
+Mariana_Trench
+Door_to_Hell
+Salar_de_Uyuni
+Lake_Baikal
+Socotra
+Richat_Structure
+Devil%27s_Kettle
+Mount_Roraima
+Blood_Falls
+Pitcairn_Islands
+# Food & drink
+Honey
+Saffron
+Casu_martzu
+Kopi_luwak
+Fugu
+Miracle_fruit
+Chili_pepper
+Fermentation
+Cacao_tree
+Umami
+# Technology & computing
+Transistor
+Enigma_machine
+Apollo_Guidance_Computer
+Semaphore_telegraph
+Jacquard_machine
+Difference_engine
+Theremin
+Z3_(computer)
+Core_rope_memory
+Phonograph
+# Psychology & behavior
+D%C3%A9j%C3%A0_vu
+Bystander_effect
+Dunning-Kruger_effect
+Pareidolia
+Flow_(psychology)
+Cognitive_bias
+False_memory
+Prosopagnosia
+Stroop_effect
+Mandela_effect
+# Oceans & deep sea
+Bioluminescence
+Hydrothermal_vent
+Great_Barrier_Reef
+Sargasso_Sea
+Bloop
+Blue_hole
+Rogue_wave
+Giant_squid
+Whale_fall
+Dead_zone_(ecology)
+# Inventions & discoveries
+Penicillin
+Vulcanization
+Post-it_note
+Microwave_oven
+Velcro
+Slinky
+Teflon
+Saccharin
+Match
+Safety_pin
+# Math & numbers
+Golden_ratio
+Pi
+Fibonacci_sequence
+Googol
+Fractal
+Mandelbrot_set
+Prime_number
+Infinity
+Zero
+Four_color_theorem

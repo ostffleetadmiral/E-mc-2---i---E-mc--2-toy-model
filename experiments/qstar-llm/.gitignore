@@ -8,7 +8,9 @@ apikey.txt
 
 # Large data assets (not tracked in git)
 qstar_corpus.txt
+qstar_corpus_*.txt
 qstar_corpus.qsc
+logs/
 qstar_memory.json
 turing_results.json
 competitive_results.json

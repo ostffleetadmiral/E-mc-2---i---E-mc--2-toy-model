@@ -270,6 +270,7 @@ zig build cli -- train-internet --limit 10 --verbose
 | `--corpus <path>` | `qstar_corpus_full.qsc` | Corpus file |
 | `--offset <N>` | 0 | Skip first N articles (resumable) |
 | `--limit <N>` | all | Only fetch N articles |
+| `--articles <path>` | built-in | Custom Wikipedia title list (one per line, `#` = comment) |
 | `--no-ollama` | off | Disable Ollama augmentation (use when Ollama is unavailable) |
 
 **Annotations:**

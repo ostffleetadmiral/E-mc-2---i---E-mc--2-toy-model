@@ -118,12 +118,13 @@ zig build cli -- train-internet --offset 0 --no-ollama --corpus qstar_corpus.txt
 | `--corpus <path>` | `qstar_corpus.txt` | Corpus file to load/append |
 | `--offset N` | `0` | Skip first N articles (for resuming) |
 | `--limit N` | all | Only fetch N articles |
+| `--articles <path>` | built-in | Load Wikipedia titles from file (one per line, `#` comments allowed) instead of `WIKIPEDIA_ARTICLES` |
 | `--no-ollama` | off | Disable Ollama augmentation (Wikipedia-only) |
 
 ### How It Works
 
 1. Loads existing corpus from file
-2. Iterates through `WIKIPEDIA_ARTICLES` array (1,345 titles) starting at `--offset`
+2. Iterates through `WIKIPEDIA_ARTICLES` array (1,345 titles) or the `--articles` file, starting at `--offset`
 3. For each article:
    - Constructs Wikipedia API URL: `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&format=json&redirects=1&titles=TITLE`
    - Fetches plain-text extract via zero-dependency HTTP client
@@ -169,6 +170,36 @@ zig build cli -- train-internet --offset 0 --no-ollama --corpus qstar_corpus.txt
 | After AdmPaul dataset | 3,595,693 |
 | **Final (before rebuild)** | **3,626,707 sentences (258 MiB / 270 MB)** |
 | **After rebuild** | **2,195,092 sentences (dedup)** |
+
+---
+
+## 24-Hour Dual-Instance Training (`scripts/train24h.sh`)
+
+A long-running training driver that fans the load across **two Ollama instances** in parallel.
+
+```bash
+LOCAL_MODEL=qwen3.5:latest REMOTE_MODEL=qwen2.5:3b TRAIN24H_HOURS=24 \
+    nohup bash scripts/train24h.sh > logs/train24h_driver.log 2>&1 &
+```
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `TRAIN24H_HOURS` | `24` | Session length in hours |
+| `LOCAL_MODEL` | `qwen2.5:3b` | Teacher on `127.0.0.1:11434` (worker A) |
+| `REMOTE_MODEL` | `qwen2.5:3b` | Teacher on `192.168.12.211:11434` (worker B) |
+
+**How it works:**
+
+1. `datasets/train24h_articles.txt` (110 Wikipedia titles) and `datasets/train24h_prompts.txt` (110 question prompts) are interleave-sharded: even lines → worker A, odd lines → worker B.
+2. Each worker loops two passes per cycle until the deadline:
+   - `train-internet --articles <shard>` — Wikipedia fetch + Ollama augmentation
+   - `train --prompts <pshard>` — pure Ollama teacher expansion
+3. Workers write **separate corpora** (`qstar_corpus_a.txt` / `qstar_corpus_b.txt`) to avoid write contention; merge with `cat` afterwards if desired.
+4. Checkpoints: `train-internet` saves every 5 articles; each pass persists its delta on exit. A sub-60s cycle triggers a 120s backoff (endpoint-down guard).
+
+**Control:** `logs/train24h_{A,B}.log` per-worker logs · `logs/train24h.pid` worker PIDs · `touch datasets/train24h.stop` for graceful stop.
+
+**Topic sources:** the 110-title list was curated via web research across 20 random-fact domains (animal oddities, space, human body, history anomalies, geography, food, technology, psychology, oceans, inventions, math, chemistry-adjacent phenomena) — complementary to the built-in 1,345-title `WIKIPEDIA_ARTICLES` set.
 
 ---
 
