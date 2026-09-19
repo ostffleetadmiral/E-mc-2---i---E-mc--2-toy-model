@@ -1,0 +1,29 @@
+verified-training-20260919
+==========================
+Web fact-checking layer + verified full-dataset dual-Ollama driver.
+
+New files:
+  src/fact_check.zig        - groundedness filter + reference resolution
+                              (cache/wiki/playwright) + JudgeFn spot-check
+  scripts/web_fetch.py      - headless Playwright fetcher (question-strip,
+                              Special:Search fallback, content selectors)
+  scripts/train_verified.sh - replaces train24h.sh: stops old run, merges
+                              corpora to seed, Phase1 datasets/ split ingest+
+                              verified enrich (done-markers), Phase2 verified
+                              wiki sweep + topic shards + teacher prompts
+
+Modified:
+  src/training.zig          - TrainingConfig fc fields, fcJudge, fcVerify*
+                              hooks in trainOnPrompt/trainFromInternet/
+                              enrichFromDirectory
+  src/main.zig              - --fact-check/--fc-* flags on train,
+                              train-internet, enrich-corpus, train-corpus;
+                              train-corpus gained --ollama-host/--ollama-port
+  build.zig                 - shared fact_check_mod wired into all 8 training
+                              module instances + sweep entry
+
+Docs: TRAINING_PIPELINE (Web Fact-Checking + Verified sections),
+      ANNOTATED_COMMANDS (fc flags), RETRO_DEV_AUDIT §4.4c
+
+State: 9/9 fact_check tests pass; smoke-verified on local+remote Ollama;
+wasm build clean; regression pending at archive time (was 61/61 baseline).
