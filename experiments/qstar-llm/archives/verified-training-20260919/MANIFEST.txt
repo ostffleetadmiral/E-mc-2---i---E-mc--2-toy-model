@@ -27,3 +27,14 @@ Docs: TRAINING_PIPELINE (Web Fact-Checking + Verified sections),
 
 State: 9/9 fact_check tests pass; smoke-verified on local+remote Ollama;
 wasm build clean; regression pending at archive time (was 61/61 baseline).
+
+Update (corroboration layer):
+  fact_check.zig           - fetchReferences: en + simple Wikipedia +
+                             per-source cache keys, playwright only if APIs
+                             miss; verifyTextMulti corroboration (min_sources
+                             refs must clear threshold); borderline tier ->
+                             forced judge; numeric-consistency check
+                             (comma-normalized); RefContext shares ref sets
+                             between verify+spotCheck
+  training.zig             - fc_min_sources / fc_numeric_check config
+  main.zig                 - --fc-sources, --fc-no-numeric flags

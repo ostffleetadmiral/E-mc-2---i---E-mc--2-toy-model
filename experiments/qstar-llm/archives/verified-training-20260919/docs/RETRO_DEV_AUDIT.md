@@ -5510,15 +5510,20 @@ enters the corpus. The verified dual-Ollama driver
 (`scripts/train_verified.sh`) replaces the unverified `train24h.sh` run.
 
 - **`src/fact_check.zig`** (new, zero project imports — single shared
-  module in `build.zig`): reference resolution (cache
-  `datasets/factcheck_refs/` → Wikipedia `opensearch`/`extracts` +
-  `list=search` full-text fallback → headless Playwright via
-  `scripts/web_fetch.py` spawned as a `std.process.Child`), integer-only
+  module in `build.zig`): multi-source reference resolution (per-source
+  cache `datasets/factcheck_refs/<slug>.<key>.txt` → English + Simple
+  Wikipedia `opensearch`/`extracts` + `list=search` full-text fallback →
+  headless Playwright via `scripts/web_fetch.py` spawned as a
+  `std.process.Child` only when no API source resolves), integer-only
   groundedness scoring (per-mille content-word coverage, default 550),
-  `verifyText` sentence filtering, and `spotCheck` — a 1-in-N YES/NO
-  judge routed through a caller-supplied `JudgeFn` callback.
-  Question-form queries are stripped of leading question words before
-  resolution. All fs/process paths return null on freestanding.
+  `verifyTextMulti` corroboration (sentence must clear threshold on
+  `min_sources` independent refs; 1-pass-but-short falls to a *borderline*
+  tier), `spotCheck` with numeric-consistency enforcement (claim numbers
+  must appear in a reference; misses force a judge call or drop) and
+  forced judge verdicts on borderline sentences via a caller-supplied
+  `JudgeFn` callback. Question-form queries are stripped of leading
+  question words before resolution. All fs/process paths return null on
+  freestanding.
 - **`scripts/web_fetch.py`** (new): headless Playwright fetcher —
   question queries resolve through Wikipedia `Special:Search`, topic
   queries through the `wiki/<slug>` URL; content extracted from
@@ -5536,10 +5541,10 @@ enters the corpus. The verified dual-Ollama driver
   (augment verified against the fetched article), `enrichFromDirectory`
   (extraction verified against the source document — zero extra fetches).
 - **`main.zig`**: `--fact-check`/`--no-fact-check`/`--fc-threshold`/
-  `--fc-judge-rate`/`--fc-drop-no-ref` on `train`, `train-internet`,
-  `enrich-corpus`, `train-corpus`; `train-corpus` also gained
-  `--ollama-host`/`--ollama-port` (was .env-only — needed for remote
-  worker Phase-1).
+  `--fc-judge-rate`/`--fc-sources`/`--fc-no-numeric`/`--fc-drop-no-ref` on
+  `train`, `train-internet`, `enrich-corpus`, `train-corpus`;
+  `train-corpus` also gained `--ollama-host`/`--ollama-port` (was
+  .env-only — needed for remote worker Phase-1).
 - **`scripts/train_verified.sh`**: Phase 0 stops the old run and merges
   its corpora into a deduplicated seed for fresh `qstar_corpus_v{a,b}.txt`
   (originals preserved). Phase 1 splits `datasets/` top-level dirs evenly,
@@ -5547,15 +5552,21 @@ enters the corpus. The verified dual-Ollama driver
   `datasets/verified_done/*.done`. Phase 2 loops fact-checked
   `train-internet` (half the 1,345-title sweep per worker + 110-topic
   shard) and `train --prompts` until the deadline.
-- **Tests:** 9 `fact_check` unit tests (scoring, filtering, slugify,
+- **Tests:** 13 `fact_check` unit tests (scoring, filtering, slugify,
   question-strip, opensearch/search/extract parsing, judge verdict,
-  no-reference policy). Smoke-verified live on both Ollama instances:
-  `train --fact-check` keeps grounded sentences, drops ungrounded, logs
-  `[fc kept/dropped/judged_fail]` counters.
-- **Known limitation:** groundedness is a support-by-reference heuristic,
-  not absolute truth; the judge sees only the first 4,000 reference
-  chars, so late-section claims can be conservatively rejected. Documented
-  in TRAINING_PIPELINE.md §Web Fact-Checking.
+  no-reference policy, multi-source corroboration, source-count
+  degradation, numeric consistency incl. comma normalization, forced
+  judge on numeric-miss/borderline). Smoke-verified live on both Ollama
+  instances: `train --fact-check` resolves `[fc refs=2]`, corroborates,
+  routes borderline sentences through the judge.
+- **Known limitation:** corroboration across independent references +
+  numeric consistency + model judgment is the practical approximation of
+  "absolute truth" for a web-grounded pipeline — it is not absolute
+  truth. The judge sees a bounded 4,000-char reference excerpt;
+  late-section claims can be conservatively rejected, and Simple
+  Wikipedia stubs produce low coverage that pushes true sentences into
+  the borderline/judge path. Documented in TRAINING_PIPELINE.md
+  §Web Fact-Checking.
 
 ### 4.5 Invariant continuity
 

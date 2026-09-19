@@ -24,8 +24,17 @@ pub const Config = struct {
     /// Per-mille groundedness threshold (550 = 55% of content words must
     /// appear in the reference text).
     threshold_mille: u16 = 550,
+    /// Minimum number of independent references a sentence must clear the
+    /// threshold on. Degrades gracefully to the number actually resolved
+    /// (min(min_sources, refs)).
+    min_sources: u8 = 2,
     /// Judge 1-in-N kept sentences via Ollama (0 disables spot-checks).
     judge_rate: u8 = 10,
+    /// Numeric consistency: a number appearing in a claim must appear in at
+    /// least one reference, else the sentence is forced through the judge
+    /// (or dropped when judging is unavailable). Catches hallucinated
+    /// dates/quantities that word-overlap cannot.
+    numeric_check: bool = true,
     /// Directory holding pre-fetched/cached reference texts.
     cache_dir: []const u8 = "datasets/factcheck_refs",
     /// When no reference can be resolved: keep sentences (true) or drop them.
@@ -37,6 +46,10 @@ pub const Config = struct {
 
 pub const VerifiedText = struct {
     text: []u8,
+    /// Sentences that cleared the threshold on at least one reference but
+    /// fewer than min_sources — corroboration-inconclusive; spotCheck
+    /// routes them through the judge instead of dropping silently.
+    borderline: std.ArrayList([]u8),
     kept: usize,
     dropped: usize,
     judged_ok: usize,
@@ -45,6 +58,8 @@ pub const VerifiedText = struct {
 
     pub fn deinit(self: *VerifiedText) void {
         self.allocator.free(self.text);
+        for (self.borderline.items) |s| self.allocator.free(s);
+        self.borderline.deinit();
     }
 };
 
@@ -80,24 +95,149 @@ fn allAlpha(s: []const u8) bool {
 /// Builds a lowercased content-word set from reference text.
 pub fn buildReferenceSet(allocator: std.mem.Allocator, reference: []const u8) !std.StringHashMap(void) {
     var set = std.StringHashMap(void).init(allocator);
-    errdefer set.deinit();
+    errdefer {
+        var kit = set.keyIterator();
+        while (kit.next()) |k| allocator.free(k.*);
+        set.deinit();
+    }
     var it = std.mem.tokenizeAny(u8, reference, " \t\n\r.,;:!?\"'()[]{}0123456789");
     while (it.next()) |tok| {
         if (tok.len < MIN_CONTENT_WORD or tok.len > 64) continue;
         if (!allAlpha(tok)) continue;
         const lower = try std.ascii.allocLowerString(allocator, tok);
-        try set.put(lower, {});
+        const gop = try set.getOrPut(lower);
+        if (gop.found_existing) allocator.free(lower);
     }
     return set;
 }
 
-/// Filters `text` to sentences grounded in `reference`. Rejoins kept
-/// sentences with ". " terminators. When `reference` is null/empty the
-/// keep_on_no_reference policy applies.
-pub fn verifyText(
+/// Per-reference verification state: a content-word set per reference plus
+/// a comma-stripped copy used for numeric matching. Shared between
+/// verifyTextMulti and spotCheck so the sets are built once per topic.
+pub const RefContext = struct {
+    sets: []std.StringHashMap(void),
+    normalized: [][]u8,
+    allocator: std.mem.Allocator,
+
+    pub fn deinit(self: *RefContext) void {
+        for (self.sets) |*set| {
+            var kit = set.keyIterator();
+            while (kit.next()) |k| self.allocator.free(k.*);
+            set.deinit();
+        }
+        self.allocator.free(self.sets);
+        for (self.normalized) |n| self.allocator.free(n);
+        self.allocator.free(self.normalized);
+    }
+};
+
+/// Builds a RefContext from resolved reference texts. Empty/short refs are
+/// skipped so `ctx.count` reflects usable sources only.
+pub fn buildRefContext(
+    allocator: std.mem.Allocator,
+    references: []const []const u8,
+) !RefContext {
+    var sets = std.ArrayList(std.StringHashMap(void)).init(allocator);
+    defer sets.deinit();
+    var normalized = std.ArrayList([]u8).init(allocator);
+    defer normalized.deinit();
+
+    for (references) |ref| {
+        if (ref.len == 0) continue;
+        var set = try buildReferenceSet(allocator, ref);
+        errdefer {
+            var kit = set.keyIterator();
+            while (kit.next()) |k| allocator.free(k.*);
+            set.deinit();
+        }
+        try sets.append(set);
+        try normalized.append(try normalizeNumeric(allocator, ref));
+    }
+
+    return .{
+        .sets = try sets.toOwnedSlice(),
+        .normalized = try normalized.toOwnedSlice(),
+        .allocator = allocator,
+    };
+}
+
+/// Strips commas so "2,000" and "2000" compare equal for numeric checks.
+fn normalizeNumeric(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
+    var out = try std.ArrayList(u8).initCapacity(allocator, text.len);
+    defer out.deinit();
+    for (text) |c| {
+        if (c != ',') try out.append(c);
+    }
+    return out.toOwnedSlice();
+}
+
+/// Extracts normalized digit tokens from a claim: "1,000" -> "1000",
+/// "$5.5B" -> "5.5". Caller owns the list; slices point into a scratch
+/// buffer owned by the caller via out.items — actually returns owned dupes.
+fn extractClaimNumbers(allocator: std.mem.Allocator, sentence: []const u8) !std.ArrayList([]u8) {
+    var nums = std.ArrayList([]u8).init(allocator);
+    errdefer {
+        for (nums.items) |n| allocator.free(n);
+        nums.deinit();
+    }
+    var it = std.mem.tokenizeAny(u8, sentence, " \t\n\r\"'()[]{};:");
+    var buf: [64]u8 = undefined;
+    while (it.next()) |tok| {
+        if (tok.len > buf.len) continue;
+        var n: usize = 0;
+        var has_digit = false;
+        for (tok) |c| {
+            if (std.ascii.isDigit(c) or c == '.') {
+                buf[n] = c;
+                n += 1;
+                if (std.ascii.isDigit(c)) has_digit = true;
+            } else if (c == ',') {
+                continue; // strip thousands separators
+            }
+        }
+        if (!has_digit) continue;
+        if (n > 0 and buf[n - 1] == '.') n -= 1; // trailing period
+        if (n > 0 and buf[0] == '.') {
+            std.mem.copyForwards(u8, buf[0 .. n - 1], buf[1..n]);
+            n -= 1; // leading period
+        }
+        if (n == 0) continue;
+        const num = std.mem.trim(u8, buf[0..n], ".");
+        if (num.len == 0) continue;
+        try nums.append(try allocator.dupe(u8, num));
+    }
+    return nums;
+}
+
+/// True when every number in `sentence` appears in at least one normalized
+/// reference. Sentences without numbers always pass.
+fn numbersCovered(sentence: []const u8, ctx: *const RefContext, allocator: std.mem.Allocator) bool {
+    var nums = extractClaimNumbers(allocator, sentence) catch return true;
+    defer {
+        for (nums.items) |n| allocator.free(n);
+        nums.deinit();
+    }
+    for (nums.items) |num| {
+        var found = false;
+        for (ctx.normalized) |ref| {
+            if (std.mem.indexOf(u8, ref, num) != null) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) return false;
+    }
+    return true;
+}
+
+/// Filters `text` to sentences corroborated across `references`: a sentence
+/// must clear the groundedness threshold on at least
+/// min(cfg.min_sources, available refs) independent references. When no
+/// reference resolves, the keep_on_no_reference policy applies.
+pub fn verifyTextMulti(
     allocator: std.mem.Allocator,
     text: []const u8,
-    reference: ?[]const u8,
+    ctx: *const RefContext,
     cfg: Config,
 ) !VerifiedText {
     var out = std.ArrayList(u8).init(allocator);
@@ -105,56 +245,99 @@ pub fn verifyText(
     var kept: usize = 0;
     var dropped: usize = 0;
 
-    const ref = reference orelse "";
-    if (ref.len == 0) {
-        if (cfg.keep_on_no_reference) {
-            try out.appendSlice(text);
-            return .{ .text = try out.toOwnedSlice(), .kept = 1, .dropped = 0, .judged_ok = 0, .judged_fail = 0, .allocator = allocator };
-        }
-        return .{ .text = try out.toOwnedSlice(), .kept = 0, .dropped = 1, .judged_ok = 0, .judged_fail = 0, .allocator = allocator };
+    var borderline = std.ArrayList([]u8).init(allocator);
+    errdefer {
+        for (borderline.items) |s| allocator.free(s);
+        borderline.deinit();
     }
 
-    var ref_set = try buildReferenceSet(allocator, ref);
-    defer {
-        var kit = ref_set.keyIterator();
-        while (kit.next()) |k| allocator.free(k.*);
-        ref_set.deinit();
+    if (ctx.sets.len == 0) {
+        if (cfg.keep_on_no_reference) {
+            try out.appendSlice(text);
+            return .{ .text = try out.toOwnedSlice(), .borderline = borderline, .kept = 1, .dropped = 0, .judged_ok = 0, .judged_fail = 0, .allocator = allocator };
+        }
+        return .{ .text = try out.toOwnedSlice(), .borderline = borderline, .kept = 0, .dropped = 1, .judged_ok = 0, .judged_fail = 0, .allocator = allocator };
     }
+
+    const needed: usize = @max(1, @min(@as(usize, cfg.min_sources), ctx.sets.len));
 
     var sent_it = std.mem.splitAny(u8, text, ".\n");
     while (sent_it.next()) |sent| {
         const trimmed = std.mem.trim(u8, sent, " \t\r");
         if (trimmed.len < 15 or trimmed.len > 500) continue;
-        const score = groundednessScore(trimmed, &ref_set);
-        if (score >= cfg.threshold_mille) {
+        var pass: usize = 0;
+        var best: u16 = 0;
+        for (ctx.sets) |*set| {
+            const score = groundednessScore(trimmed, set);
+            if (score > best) best = score;
+            if (score >= cfg.threshold_mille) pass += 1;
+        }
+        if (pass >= needed) {
             kept += 1;
             if (out.items.len > 0) try out.append(' ');
             try out.appendSlice(trimmed);
             try out.append('.');
+        } else if (pass >= 1 and needed > 1) {
+            // Corroborated by some but not enough sources — borderline;
+            // spotCheck routes these through the judge.
+            try borderline.append(try allocator.dupe(u8, trimmed));
+            if (cfg.verbose) {
+                std.debug.print("    [fc] borderline ({d}/{d} refs, best {d}/1000): {s}\n", .{ pass, ctx.sets.len, best, trimmed[0..@min(trimmed.len, 80)] });
+            }
         } else {
             dropped += 1;
             if (cfg.verbose) {
-                std.debug.print("    [fc] dropped ({d}/1000): {s}\n", .{ score, trimmed[0..@min(trimmed.len, 80)] });
+                std.debug.print("    [fc] dropped ({d}/{d} refs, best {d}/1000): {s}\n", .{ pass, ctx.sets.len, best, trimmed[0..@min(trimmed.len, 80)] });
             }
         }
     }
 
-    return .{ .text = try out.toOwnedSlice(), .kept = kept, .dropped = dropped, .judged_ok = 0, .judged_fail = 0, .allocator = allocator };
+    return .{ .text = try out.toOwnedSlice(), .borderline = borderline, .kept = kept, .dropped = dropped, .judged_ok = 0, .judged_fail = 0, .allocator = allocator };
 }
 
-/// Builds the YES/NO judge prompt for a sentence against a reference
-/// excerpt. Caller owns the returned slice.
+/// Single-reference convenience wrapper over verifyTextMulti.
+pub fn verifyText(
+    allocator: std.mem.Allocator,
+    text: []const u8,
+    reference: ?[]const u8,
+    cfg: Config,
+) !VerifiedText {
+    const ref = reference orelse "";
+    if (ref.len == 0) {
+        var empty_refs = [_][]const u8{};
+        var ctx = try buildRefContext(allocator, &empty_refs);
+        defer ctx.deinit();
+        return verifyTextMulti(allocator, text, &ctx, cfg);
+    }
+    var refs = [_][]const u8{ref};
+    var cfg1 = cfg;
+    if (cfg1.min_sources == 0) cfg1.min_sources = 1;
+    var ctx = try buildRefContext(allocator, &refs);
+    defer ctx.deinit();
+    return verifyTextMulti(allocator, text, &ctx, cfg1);
+}
+
+/// Builds the YES/NO judge prompt for a sentence against reference
+/// excerpts (concatenated, bounded to 4000 chars total). Caller owns the
+/// returned slice.
 pub fn buildJudgePrompt(
     allocator: std.mem.Allocator,
     sentence: []const u8,
-    reference: []const u8,
+    references: []const []const u8,
 ) ![]u8 {
-    const excerpt_len = @min(reference.len, 4000);
-    return std.fmt.allocPrint(
-        allocator,
-        "Reference text:\n{s}\n\nClaim: {s}\n\nIs the claim supported by the reference text? Answer only YES or NO.",
-        .{ reference[0..excerpt_len], sentence },
-    );
+    var out = std.ArrayList(u8).init(allocator);
+    defer out.deinit();
+    try out.appendSlice("Reference text:\n");
+    var budget: usize = 4000;
+    for (references, 0..) |ref, i| {
+        if (budget == 0) break;
+        if (i > 0) try out.appendSlice("\n---\n");
+        const take = @min(ref.len, budget);
+        try out.appendSlice(ref[0..take]);
+        budget -= take;
+    }
+    try out.writer().print("\n\nClaim: {s}\n\nIs the claim supported by the reference text? Answer only YES or NO.", .{sentence});
+    return out.toOwnedSlice();
 }
 
 /// Parses a judge model's response. The first YES/NO token wins; a
@@ -169,49 +352,99 @@ pub fn judgeVerdict(response: []const u8) bool {
 }
 
 /// Judge callback: returns true when the sentence is supported by the
-/// reference. `ctx` is caller-owned (e.g. a *const ollama.OllamaConfig).
-pub const JudgeFn = *const fn (ctx: *anyopaque, allocator: std.mem.Allocator, sentence: []const u8, reference: []const u8) bool;
+/// references. `ctx` is caller-owned (e.g. a *const ollama.OllamaConfig).
+pub const JudgeFn = *const fn (ctx: *anyopaque, allocator: std.mem.Allocator, sentence: []const u8, references: []const []const u8) bool;
 
 /// Samples `judge_rate`-in-N kept sentences through the judge; rejected
-/// sentences are removed from `verified.text`. Rebuilds the text in place.
+/// sentences are removed from `verified.text`. When `cfg.numeric_check`
+/// is on, sentences containing a number absent from every reference are
+/// forced through the judge regardless of sampling (dropped outright when
+/// no judge is available). Rebuilds the text in place.
 pub fn spotCheck(
     allocator: std.mem.Allocator,
     verified: *VerifiedText,
     judge_fn: JudgeFn,
     judge_ctx: *anyopaque,
-    reference: []const u8,
+    references: []const []const u8,
+    ctx: *const RefContext,
     cfg: Config,
 ) !void {
-    if (cfg.judge_rate == 0 or verified.text.len == 0) return;
+    if (verified.text.len == 0 and verified.borderline.items.len == 0) return;
+    if (cfg.judge_rate == 0 and !cfg.numeric_check and verified.borderline.items.len == 0) return;
     var out = std.ArrayList(u8).init(allocator);
     errdefer out.deinit();
     var idx: usize = 0;
+    var main_ok: usize = 0;
+    var main_fail: usize = 0;
     var sent_it = std.mem.splitAny(u8, verified.text, ".\n");
     while (sent_it.next()) |sent| {
         const trimmed = std.mem.trim(u8, sent, " \t\r");
         if (trimmed.len == 0) continue;
         idx += 1;
-        if (cfg.judge_rate > 1 and idx % cfg.judge_rate != 0) {
+
+        // Numeric consistency: a claim's numbers must appear in some
+        // reference. A miss forces a judge call regardless of sampling.
+        var numeric_ok = true;
+        if (cfg.numeric_check and ctx.sets.len > 0) {
+            numeric_ok = numbersCovered(trimmed, ctx, allocator);
+            if (!numeric_ok and cfg.judge_rate == 0) {
+                main_fail += 1;
+                if (cfg.verbose) {
+                    std.debug.print("    [fc] numeric-miss dropped (no judge): {s}\n", .{trimmed[0..@min(trimmed.len, 80)]});
+                }
+                continue;
+            }
+        }
+
+        const sampled = cfg.judge_rate > 0 and (cfg.judge_rate == 1 or idx % cfg.judge_rate == 0);
+        if (!sampled and numeric_ok) {
             if (out.items.len > 0) try out.append(' ');
             try out.appendSlice(trimmed);
             try out.append('.');
             continue;
         }
-        if (judge_fn(judge_ctx, allocator, trimmed, reference)) {
-            verified.judged_ok += 1;
+        if (judge_fn(judge_ctx, allocator, trimmed, references)) {
+            main_ok += 1;
             if (out.items.len > 0) try out.append(' ');
             try out.appendSlice(trimmed);
             try out.append('.');
         } else {
-            verified.judged_fail += 1;
+            main_fail += 1;
             if (cfg.verbose) {
                 std.debug.print("    [fc] judge rejected: {s}\n", .{trimmed[0..@min(trimmed.len, 80)]});
             }
         }
     }
+    // Borderline sentences (some-source corroboration) get a forced
+    // judge verdict — semantic agreement can substitute for word overlap
+    // across stylistically different references.
+    var border_ok: usize = 0;
+    var border_fail: usize = 0;
+    for (verified.borderline.items) |sent| {
+        if (cfg.judge_rate == 0) {
+            border_fail += 1;
+            continue;
+        }
+        if (judge_fn(judge_ctx, allocator, sent, references)) {
+            border_ok += 1;
+            if (out.items.len > 0) try out.append(' ');
+            try out.appendSlice(sent);
+            try out.append('.');
+        } else {
+            border_fail += 1;
+            if (cfg.verbose) {
+                std.debug.print("    [fc] judge rejected borderline: {s}\n", .{sent[0..@min(sent.len, 80)]});
+            }
+        }
+    }
+    for (verified.borderline.items) |s| allocator.free(s);
+    verified.borderline.clearRetainingCapacity();
+
     allocator.free(verified.text);
     verified.text = try out.toOwnedSlice();
-    verified.kept = verified.judged_ok + (idx - verified.judged_ok - verified.judged_fail);
+    verified.judged_ok += main_ok + border_ok;
+    verified.judged_fail += main_fail + border_fail;
+    verified.kept = (idx - main_fail) + border_ok;
 }
 
 // =============================================================================
@@ -237,63 +470,107 @@ pub fn slugify(allocator: std.mem.Allocator, topic: []const u8) ![]u8 {
     return out.toOwnedSlice();
 }
 
-/// Resolves reference text for a topic. Order: cache file, Wikipedia API
-/// (opensearch + extract), Playwright child fetch. Successful results are
-/// written to the cache directory. Returns null when nothing resolves.
-pub fn fetchReference(
+/// Resolves up to `max_refs` independent reference texts for a topic.
+/// Sources, in order: English Wikipedia extract, Simple English Wikipedia
+/// extract (independent editorial text), then — only if no API source
+/// resolved — a headless Playwright fetch. Each source is cached
+/// separately under `<slug>.<key>.txt` (en also reads the legacy
+/// `<slug>.txt`). Caller owns the list and each item.
+pub fn fetchReferences(
     allocator: std.mem.Allocator,
     topic: []const u8,
     cfg: Config,
-) !?[]u8 {
-    if (builtin.os.tag == .freestanding) return null;
+    max_refs: usize,
+) !std.ArrayList([]u8) {
+    var refs = std.ArrayList([]u8).init(allocator);
+    errdefer {
+        for (refs.items) |r| allocator.free(r);
+        refs.deinit();
+    }
+    if (builtin.os.tag == .freestanding) return refs;
 
     const slug = try slugify(allocator, topic);
     defer allocator.free(slug);
-    if (slug.len == 0) return null;
+    if (slug.len == 0) return refs;
 
-    const cache_path = try std.fmt.allocPrint(allocator, "{s}/{s}.txt", .{ cfg.cache_dir, slug });
-    defer allocator.free(cache_path);
+    const sources = [_]struct { key: []const u8, host: []const u8 }{
+        .{ .key = "en", .host = "en.wikipedia.org" },
+        .{ .key = "simple", .host = "simple.wikipedia.org" },
+    };
 
-    // 1. Cache hit
-    if (std.fs.cwd().openFile(cache_path, .{})) |f| {
-        defer f.close();
-        const text = f.readToEndAlloc(allocator, 2 * 1024 * 1024) catch null;
-        if (text) |t| {
-            if (t.len > 200) return t;
-            allocator.free(t);
+    for (sources) |src| {
+        if (refs.items.len >= max_refs) break;
+        const cache_path = try std.fmt.allocPrint(allocator, "{s}/{s}.{s}.txt", .{ cfg.cache_dir, slug, src.key });
+        defer allocator.free(cache_path);
+
+        // Cache hit (en also reads the legacy <slug>.txt)
+        if (loadCached(allocator, cache_path)) |cached| {
+            try refs.append(cached);
+            continue;
         }
-    } else |_| {}
+        if (std.mem.eql(u8, src.key, "en")) {
+            const legacy = try std.fmt.allocPrint(allocator, "{s}/{s}.txt", .{ cfg.cache_dir, slug });
+            defer allocator.free(legacy);
+            if (loadCached(allocator, legacy)) |cached| {
+                try refs.append(cached);
+                continue;
+            }
+        }
 
-    // 2. Wikipedia API: opensearch -> extract
-    var ref: ?[]u8 = wikipediaReference(allocator, topic, cfg) catch null;
-    if (ref) |r| {
-        if (r.len < 200) {
-            allocator.free(r);
-            ref = null;
+        var ref: ?[]u8 = wikipediaReference(allocator, topic, cfg, src.host) catch null;
+        if (ref) |r| {
+            if (r.len < 200) {
+                allocator.free(r);
+                ref = null;
+            }
+        }
+        if (ref) |r| {
+            cacheWrite(cfg.cache_dir, cache_path, r);
+            try refs.append(r);
         }
     }
 
-    // 3. Playwright headless fetch (JS-rendered / API-missed pages)
-    if (ref == null) {
-        ref = playwrightReference(allocator, topic, cfg) catch null;
+    // Playwright fallback — only when no API source resolved at all.
+    if (refs.items.len == 0) {
+        const web_path = try std.fmt.allocPrint(allocator, "{s}/{s}.web.txt", .{ cfg.cache_dir, slug });
+        defer allocator.free(web_path);
+        if (loadCached(allocator, web_path)) |cached| {
+            try refs.append(cached);
+        } else if (playwrightReference(allocator, topic, cfg) catch null) |r| {
+            if (r.len >= 200) {
+                cacheWrite(cfg.cache_dir, web_path, r);
+                try refs.append(r);
+            } else {
+                allocator.free(r);
+            }
+        }
     }
+    return refs;
+}
 
-    if (ref) |r| {
-        std.fs.cwd().makePath(cfg.cache_dir) catch {};
-        if (std.fs.cwd().createFile(cache_path, .{})) |f| {
-            defer f.close();
-            f.writeAll(r) catch {};
-        } else |_| {}
-        return r;
+fn loadCached(allocator: std.mem.Allocator, path: []const u8) ?[]u8 {
+    const f = std.fs.cwd().openFile(path, .{}) catch return null;
+    defer f.close();
+    const text = f.readToEndAlloc(allocator, 2 * 1024 * 1024) catch return null;
+    if (text.len < 200) {
+        allocator.free(text);
+        return null;
     }
-    return null;
+    return text;
+}
+
+fn cacheWrite(dir: []const u8, path: []const u8, text: []const u8) void {
+    std.fs.cwd().makePath(dir) catch {};
+    const f = std.fs.cwd().createFile(path, .{}) catch return;
+    defer f.close();
+    f.writeAll(text) catch {};
 }
 
 /// Wikipedia opensearch -> plaintext extract. Question-form topics are
 /// stripped of leading question/auxiliary words first (opensearch matches
 /// titles literally); an empty opensearch result falls back to the
 /// full-text `list=search` API before giving up.
-fn wikipediaReference(allocator: std.mem.Allocator, topic: []const u8, cfg: Config) !?[]u8 {
+fn wikipediaReference(allocator: std.mem.Allocator, topic: []const u8, cfg: Config, host: []const u8) !?[]u8 {
     _ = cfg;
     const stripped = try stripQuestionWords(allocator, topic);
     defer allocator.free(stripped);
@@ -302,7 +579,7 @@ fn wikipediaReference(allocator: std.mem.Allocator, topic: []const u8, cfg: Conf
     const query = try urlEncode(allocator, query_text);
     defer allocator.free(query);
 
-    const search_url = try std.fmt.allocPrint(allocator, "https://en.wikipedia.org/w/api.php?action=opensearch&search={s}&limit=1&namespace=0&format=json", .{query});
+    const search_url = try std.fmt.allocPrint(allocator, "https://{s}/w/api.php?action=opensearch&search={s}&limit=1&namespace=0&format=json", .{ host, query });
     defer allocator.free(search_url);
 
     const search_body = try httpGet(allocator, search_url);
@@ -314,7 +591,7 @@ fn wikipediaReference(allocator: std.mem.Allocator, topic: []const u8, cfg: Conf
     if (title == null) {
         // Full-text search fallback — handles natural-language queries that
         // literal title matching misses.
-        const sr_url = try std.fmt.allocPrint(allocator, "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={s}&srlimit=1&format=json", .{query});
+        const sr_url = try std.fmt.allocPrint(allocator, "https://{s}/w/api.php?action=query&list=search&srsearch={s}&srlimit=1&format=json", .{ host, query });
         defer allocator.free(sr_url);
         const sr_body = try httpGet(allocator, sr_url);
         defer allocator.free(sr_body);
@@ -325,7 +602,7 @@ fn wikipediaReference(allocator: std.mem.Allocator, topic: []const u8, cfg: Conf
     const title_enc = try urlEncode(allocator, resolved);
     defer allocator.free(title_enc);
 
-    const extract_url = try std.fmt.allocPrint(allocator, "https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&format=json&redirects=1&titles={s}", .{title_enc});
+    const extract_url = try std.fmt.allocPrint(allocator, "https://{s}/w/api.php?action=query&prop=extracts&explaintext=1&format=json&redirects=1&titles={s}", .{ host, title_enc });
     defer allocator.free(extract_url);
 
     const body = try httpGet(allocator, extract_url);
@@ -561,6 +838,94 @@ test "stripQuestionWords removes leading question tokens" {
 test "extractSearchTitle pulls title from list=search response" {
     const body = "{\"batchcomplete\":\"\",\"query\":{\"search\":[{\"ns\":0,\"title\":\"Phonograph\",\"snippet\":\"x\"}]}}";
     try std.testing.expectEqualStrings("Phonograph", extractSearchTitle(body).?);
+}
+
+test "verifyTextMulti requires corroboration across min_sources" {
+    const allocator = std.testing.allocator;
+    const ref_en = "Honey is a sweet substance made by bees. Honey never spoils and has been found edible in ancient Egyptian tombs.";
+    const ref_simple = "Honey is a sweet food made by bees. Honey never spoils; jars found in ancient Egyptian tombs were still edible.";
+    const refs = [_][]const u8{ ref_en, ref_simple };
+    var ctx = try buildRefContext(allocator, &refs);
+    defer ctx.deinit();
+
+    const text = "Honey never spoils and was found edible in ancient Egyptian tombs. Quantum entanglement violates classical Bell inequalities completely.";
+    var v = try verifyTextMulti(allocator, text, &ctx, .{ .threshold_mille = 500, .min_sources = 2 });
+    defer v.deinit();
+    try std.testing.expect(v.kept == 1);
+    try std.testing.expect(v.dropped == 1);
+    try std.testing.expect(std.mem.indexOf(u8, v.text, "Honey never spoils") != null);
+}
+
+test "verifyTextMulti degrades to available reference count" {
+    const allocator = std.testing.allocator;
+    const refs = [_][]const u8{"Honey is a sweet substance made by bees that never spoils over time."};
+    var ctx = try buildRefContext(allocator, &refs);
+    defer ctx.deinit();
+    // min_sources=2 but only one ref resolved -> needed clamps to 1
+    var v = try verifyTextMulti(allocator, "Honey never spoils over long periods of storage time.", &ctx, .{ .threshold_mille = 500, .min_sources = 2 });
+    defer v.deinit();
+    try std.testing.expect(v.kept == 1);
+}
+
+test "numbersCovered enforces numeric consistency" {
+    const allocator = std.testing.allocator;
+    const refs = [_][]const u8{"The tower is 324 metres tall and was completed in 1889, drawing over 7,000,000 visitors."};
+    var ctx = try buildRefContext(allocator, &refs);
+    defer ctx.deinit();
+
+    try std.testing.expect(numbersCovered("The tower stands 324 metres tall.", &ctx, allocator));
+    try std.testing.expect(numbersCovered("It was finished in 1889.", &ctx, allocator));
+    // Comma normalization: 7,000,000 in ref must satisfy bare 7000000
+    try std.testing.expect(numbersCovered("Over 7000000 people visit each year.", &ctx, allocator));
+    // Hallucinated numbers fail
+    try std.testing.expect(!numbersCovered("The tower is 500 metres tall.", &ctx, allocator));
+    // No numbers -> always passes
+    try std.testing.expect(numbersCovered("The tower is very tall.", &ctx, allocator));
+}
+
+fn stubJudgeAccept(ctx: *anyopaque, allocator: std.mem.Allocator, sentence: []const u8, references: []const []const u8) bool {
+    _ = ctx;
+    _ = allocator;
+    _ = sentence;
+    _ = references;
+    return true;
+}
+
+fn stubJudgeReject(ctx: *anyopaque, allocator: std.mem.Allocator, sentence: []const u8, references: []const []const u8) bool {
+    _ = ctx;
+    _ = allocator;
+    _ = sentence;
+    _ = references;
+    return false;
+}
+
+test "spotCheck forces numeric misses through the judge" {
+    const allocator = std.testing.allocator;
+    const refs = [_][]const u8{"The tower is 324 metres tall and was completed in 1889."};
+    var ctx = try buildRefContext(allocator, &refs);
+    defer ctx.deinit();
+    var dummy: usize = 0;
+
+    // judge_rate=0 + numeric miss -> dropped outright
+    var v = try verifyTextMulti(allocator, "The tower stands 500 metres tall today.", &ctx, .{ .threshold_mille = 400 });
+    defer v.deinit();
+    try std.testing.expect(v.kept == 1);
+    try spotCheck(allocator, &v, stubJudgeAccept, &dummy, &refs, &ctx, .{ .judge_rate = 0, .numeric_check = true });
+    try std.testing.expect(v.judged_fail == 1);
+    try std.testing.expect(v.text.len == 0);
+
+    // numeric miss + judge that rescues -> kept
+    var v2 = try verifyTextMulti(allocator, "The tower stands 500 metres tall today.", &ctx, .{ .threshold_mille = 400 });
+    defer v2.deinit();
+    try spotCheck(allocator, &v2, stubJudgeAccept, &dummy, &refs, &ctx, .{ .judge_rate = 10, .numeric_check = true });
+    try std.testing.expect(v2.judged_ok == 1);
+
+    // numeric miss + rejecting judge -> dropped
+    var v3 = try verifyTextMulti(allocator, "The tower stands 500 metres tall today.", &ctx, .{ .threshold_mille = 400 });
+    defer v3.deinit();
+    try spotCheck(allocator, &v3, stubJudgeReject, &dummy, &refs, &ctx, .{ .judge_rate = 10, .numeric_check = true });
+    try std.testing.expect(v3.judged_fail == 1);
+    try std.testing.expect(v3.text.len == 0);
 }
 
 test "extractJsonExtract unescapes extract field" {

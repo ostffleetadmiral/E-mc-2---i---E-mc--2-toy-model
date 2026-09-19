@@ -45,6 +45,12 @@ pub const TrainingConfig = struct {
     fc_judge_rate: u8 = 10,
     /// Cache directory for fetched reference texts.
     fc_cache_dir: []const u8 = "datasets/factcheck_refs",
+    /// Minimum independent references a sentence must corroborate on.
+    /// Degrades to the number actually resolved (min(min_sources, refs)).
+    fc_min_sources: u8 = 2,
+    /// Numbers in a claim must appear in some reference; misses are forced
+    /// through the judge (or dropped when judging is unavailable).
+    fc_numeric_check: bool = true,
     /// When no reference resolves: keep teacher text (true) or drop it.
     fc_keep_on_no_reference: bool = true,
 };
@@ -53,6 +59,8 @@ fn fcConfig(config: TrainingConfig) fact_check.Config {
     return .{
         .threshold_mille = config.fc_threshold_mille,
         .judge_rate = config.fc_judge_rate,
+        .min_sources = config.fc_min_sources,
+        .numeric_check = config.fc_numeric_check,
         .cache_dir = config.fc_cache_dir,
         .keep_on_no_reference = config.fc_keep_on_no_reference,
         .verbose = config.verbose,
@@ -62,13 +70,19 @@ fn fcConfig(config: TrainingConfig) fact_check.Config {
 /// fact_check.JudgeFn adapter: routes the YES/NO verdict prompt through the
 /// configured Ollama instance. Any failure counts as supported (no evidence
 /// to reject).
-fn fcJudge(ctx: *anyopaque, allocator: std.mem.Allocator, sentence: []const u8, reference: []const u8) bool {
+fn fcJudge(ctx: *anyopaque, allocator: std.mem.Allocator, sentence: []const u8, references: []const []const u8) bool {
     const ollama_cfg: *const ollama.OllamaConfig = @ptrCast(@alignCast(ctx));
-    const prompt = fact_check.buildJudgePrompt(allocator, sentence, reference) catch return true;
+    const prompt = fact_check.buildJudgePrompt(allocator, sentence, references) catch return true;
     defer allocator.free(prompt);
     var resp = llm_provider.complete(allocator, .{ .provider = .remote, .ollama = ollama_cfg.* }, prompt) catch return true;
     defer resp.deinit();
     return fact_check.judgeVerdict(resp.text);
+}
+
+fn fcLog(config: TrainingConfig, v: *const fact_check.VerifiedText) void {
+    if (config.verbose and (v.dropped > 0 or v.judged_fail > 0)) {
+        std.debug.print(" [fc kept={d} dropped={d} judged_fail={d}]", .{ v.kept, v.dropped, v.judged_fail });
+    }
 }
 
 /// Verify generated text against a provided reference (e.g. the source
@@ -80,19 +94,21 @@ fn fcVerifyAgainst(
     config: TrainingConfig,
 ) !fact_check.VerifiedText {
     const fc_cfg = fcConfig(config);
-    var v = try fact_check.verifyText(allocator, text, reference, fc_cfg);
+    var refs = [_][]const u8{reference};
+    var ctx = try fact_check.buildRefContext(allocator, &refs);
+    defer ctx.deinit();
+    var v = try fact_check.verifyTextMulti(allocator, text, &ctx, fc_cfg);
     errdefer v.deinit();
     if (reference.len > 0) {
-        try fact_check.spotCheck(allocator, &v, fcJudge, @constCast(&config.ollama), reference, fc_cfg);
+        try fact_check.spotCheck(allocator, &v, fcJudge, @constCast(&config.ollama), &refs, &ctx, fc_cfg);
     }
-    if (config.verbose and (v.dropped > 0 or v.judged_fail > 0)) {
-        std.debug.print(" [fc kept={d} dropped={d} judged_fail={d}]", .{ v.kept, v.dropped, v.judged_fail });
-    }
+    fcLog(config, &v);
     return v;
 }
 
-/// Verify generated text by resolving an external reference for `topic`
-/// (cache -> Wikipedia API -> Playwright fetch), then verify + spot-check.
+/// Verify generated text by resolving independent references for `topic`
+/// (English + Simple Wikipedia via cache/API, Playwright when both miss),
+/// then corroborate across sources and spot-check.
 fn fcVerifyExternal(
     allocator: std.mem.Allocator,
     text: []const u8,
@@ -100,12 +116,28 @@ fn fcVerifyExternal(
     config: TrainingConfig,
 ) !fact_check.VerifiedText {
     const fc_cfg = fcConfig(config);
-    const ref = fact_check.fetchReference(allocator, topic, fc_cfg) catch null;
-    defer if (ref) |r| allocator.free(r);
-    if (config.verbose and ref == null) {
-        std.debug.print(" [fc no-reference -> {s}]", .{if (config.fc_keep_on_no_reference) "keep" else "drop"});
+    var refs = fact_check.fetchReferences(allocator, topic, fc_cfg, 3) catch
+        std.ArrayList([]u8).init(allocator);
+    defer {
+        for (refs.items) |r| allocator.free(r);
+        refs.deinit();
     }
-    return fcVerifyAgainst(allocator, text, ref orelse "", config);
+    if (config.verbose) {
+        if (refs.items.len == 0) {
+            std.debug.print(" [fc no-reference -> {s}]", .{if (config.fc_keep_on_no_reference) "keep" else "drop"});
+        } else {
+            std.debug.print(" [fc refs={d}]", .{refs.items.len});
+        }
+    }
+    var ctx = try fact_check.buildRefContext(allocator, refs.items);
+    defer ctx.deinit();
+    var v = try fact_check.verifyTextMulti(allocator, text, &ctx, fc_cfg);
+    errdefer v.deinit();
+    if (ctx.sets.len > 0) {
+        try fact_check.spotCheck(allocator, &v, fcJudge, @constCast(&config.ollama), refs.items, &ctx, fc_cfg);
+    }
+    fcLog(config, &v);
+    return v;
 }
 
 pub const TrainingResult = struct {

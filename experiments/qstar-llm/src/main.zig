@@ -1648,6 +1648,8 @@ fn printHelp() void {
         \\  --no-fact-check                 Disable verification (default)
         \\  --fc-threshold <0-1000>         Groundedness threshold per-mille (default: 550)
         \\  --fc-judge-rate <n>             Judge 1-in-N kept sentences via Ollama (default: 10, 0=off)
+        \\  --fc-sources <n>                Min independent references for corroboration (default: 2)
+        \\  --fc-no-numeric                 Disable the numeric-consistency check
         \\  --fc-drop-no-ref                Drop teacher text when no reference resolves (default: keep)
         \\
         \\Heartbeat Options (start-heartbeat):
@@ -1681,6 +1683,8 @@ fn runTraining(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     var fc_enabled: bool = false;
     var fc_threshold: u16 = 550;
     var fc_judge_rate: u8 = 10;
+    var fc_min_sources: u8 = 2;
+    var fc_numeric: bool = true;
     var fc_keep_no_ref: bool = true;
     _ = &skip_corpus_load;
 
@@ -1733,6 +1737,11 @@ fn runTraining(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         } else if (std.mem.eql(u8, args[i], "--fc-judge-rate") and i + 1 < args.len) {
             fc_judge_rate = std.fmt.parseInt(u8, args[i + 1], 10) catch 10;
             i += 1;
+        } else if (std.mem.eql(u8, args[i], "--fc-sources") and i + 1 < args.len) {
+            fc_min_sources = std.fmt.parseInt(u8, args[i + 1], 10) catch 2;
+            i += 1;
+        } else if (std.mem.eql(u8, args[i], "--fc-no-numeric")) {
+            fc_numeric = false;
         } else if (std.mem.eql(u8, args[i], "--fc-drop-no-ref")) {
             fc_keep_no_ref = false;
         }
@@ -1795,6 +1804,8 @@ fn runTraining(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         .fact_check = fc_enabled,
         .fc_threshold_mille = fc_threshold,
         .fc_judge_rate = fc_judge_rate,
+        .fc_min_sources = fc_min_sources,
+        .fc_numeric_check = fc_numeric,
         .fc_keep_on_no_reference = fc_keep_no_ref,
     };
 
@@ -1876,6 +1887,8 @@ fn runTrainInternet(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     var fc_enabled: bool = false;
     var fc_threshold: u16 = 550;
     var fc_judge_rate: u8 = 10;
+    var fc_min_sources: u8 = 2;
+    var fc_numeric: bool = true;
     var fc_keep_no_ref: bool = true;
     var skip_corpus_load: bool = false;
     _ = &skip_corpus_load;
@@ -1924,6 +1937,11 @@ fn runTrainInternet(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         } else if (std.mem.eql(u8, args[i], "--fc-judge-rate") and i + 1 < args.len) {
             fc_judge_rate = std.fmt.parseInt(u8, args[i + 1], 10) catch 10;
             i += 1;
+        } else if (std.mem.eql(u8, args[i], "--fc-sources") and i + 1 < args.len) {
+            fc_min_sources = std.fmt.parseInt(u8, args[i + 1], 10) catch 2;
+            i += 1;
+        } else if (std.mem.eql(u8, args[i], "--fc-no-numeric")) {
+            fc_numeric = false;
         } else if (std.mem.eql(u8, args[i], "--fc-drop-no-ref")) {
             fc_keep_no_ref = false;
         }
@@ -1977,6 +1995,8 @@ fn runTrainInternet(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         .fact_check = fc_enabled,
         .fc_threshold_mille = fc_threshold,
         .fc_judge_rate = fc_judge_rate,
+        .fc_min_sources = fc_min_sources,
+        .fc_numeric_check = fc_numeric,
         .fc_keep_on_no_reference = fc_keep_no_ref,
     };
 
@@ -2115,6 +2135,8 @@ fn runEnrichCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     var fc_enabled: bool = false;
     var fc_threshold: u16 = 550;
     var fc_judge_rate: u8 = 10;
+    var fc_min_sources: u8 = 2;
+    var fc_numeric: bool = true;
     var fc_keep_no_ref: bool = true;
 
     // Load unified LLM config from .env
@@ -2150,6 +2172,11 @@ fn runEnrichCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         } else if (std.mem.eql(u8, args[i], "--fc-judge-rate") and i + 1 < args.len) {
             fc_judge_rate = std.fmt.parseInt(u8, args[i + 1], 10) catch 10;
             i += 1;
+        } else if (std.mem.eql(u8, args[i], "--fc-sources") and i + 1 < args.len) {
+            fc_min_sources = std.fmt.parseInt(u8, args[i + 1], 10) catch 2;
+            i += 1;
+        } else if (std.mem.eql(u8, args[i], "--fc-no-numeric")) {
+            fc_numeric = false;
         } else if (std.mem.eql(u8, args[i], "--fc-drop-no-ref")) {
             fc_keep_no_ref = false;
         }
@@ -2189,6 +2216,8 @@ fn runEnrichCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         .fact_check = fc_enabled,
         .fc_threshold_mille = fc_threshold,
         .fc_judge_rate = fc_judge_rate,
+        .fc_min_sources = fc_min_sources,
+        .fc_numeric_check = fc_numeric,
         .fc_keep_on_no_reference = fc_keep_no_ref,
     };
 
@@ -2355,6 +2384,8 @@ fn runTrainCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
     var fc_enabled: bool = false;
     var fc_threshold: u16 = 550;
     var fc_judge_rate: u8 = 10;
+    var fc_min_sources: u8 = 2;
+    var fc_numeric: bool = true;
     var fc_keep_no_ref: bool = true;
 
     // Load .env for OPENAI_API_KEY / OPENAI_MODEL / OLLAMA settings
@@ -2406,6 +2437,11 @@ fn runTrainCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
         } else if (std.mem.eql(u8, args[i], "--fc-judge-rate") and i + 1 < args.len) {
             fc_judge_rate = std.fmt.parseInt(u8, args[i + 1], 10) catch 10;
             i += 1;
+        } else if (std.mem.eql(u8, args[i], "--fc-sources") and i + 1 < args.len) {
+            fc_min_sources = std.fmt.parseInt(u8, args[i + 1], 10) catch 2;
+            i += 1;
+        } else if (std.mem.eql(u8, args[i], "--fc-no-numeric")) {
+            fc_numeric = false;
         } else if (std.mem.eql(u8, args[i], "--fc-drop-no-ref")) {
             fc_keep_no_ref = false;
         }
@@ -2454,6 +2490,8 @@ fn runTrainCorpus(allocator: std.mem.Allocator, args: [][:0]u8) !void {
             .fact_check = fc_enabled,
             .fc_threshold_mille = fc_threshold,
             .fc_judge_rate = fc_judge_rate,
+            .fc_min_sources = fc_min_sources,
+            .fc_numeric_check = fc_numeric,
             .fc_keep_on_no_reference = fc_keep_no_ref,
         };
 

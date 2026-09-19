@@ -91,8 +91,7 @@ worker() { # $1=tag $2=host $3=model ; dirs come from DIRS_A/DIRS_B
     local tag=$1 host=$2 model=$3
     local corpus="qstar_corpus_v${tag,,}.txt"
     local log="logs/train_verified_${tag}.log"
-    local dirs_name="DIRS_${tag}[@]"
-    local -n dirs_ref="$dirs_name"
+    local -n dirs_ref="DIRS_${tag}"
     local wiki_offset=0
     [[ $tag == B ]] && wiki_offset=$WIKI_HALF
     local cycle=0

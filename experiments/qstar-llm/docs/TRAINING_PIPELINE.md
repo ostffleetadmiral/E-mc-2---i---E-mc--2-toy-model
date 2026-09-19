@@ -209,26 +209,42 @@ All teacher-generated text can be verified against an external reference
 before it enters the corpus. Enabled per-run with `--fact-check`
 (default: off — deterministic baseline preserved).
 
-**Reference resolution** (`fetchReference`, per prompt/topic):
+**Reference resolution** (`fetchReferences`, per prompt/topic) — up to 3
+independent sources, each cached separately under
+`datasets/factcheck_refs/<slug>.<key>.txt`:
 
-1. `datasets/factcheck_refs/<slug>.txt` — local cache (populated on miss)
-2. Wikipedia API — `opensearch` title lookup on the question-stripped
+1. English Wikipedia — `opensearch` title lookup on the question-stripped
    query, then `prop=extracts`; empty results fall back to `list=search`
    full-text resolution
+2. Simple English Wikipedia — same API path on `simple.wikipedia.org`
+   (independent editorial text, not a mirror)
 3. Playwright headless fetch (`scripts/web_fetch.py`, spawned via
-   `std.process.Child`) — resolves JS-rendered/search-result pages; finds
-   a chromium headless shell via `$QSTAR_HEADLESS_SHELL` → newest
+   `std.process.Child`) — only when no API source resolves; finds a
+   chromium headless shell via `$QSTAR_HEADLESS_SHELL` → newest
    `~/.cache/ms-playwright/chromium_headless_shell-*` → playwright default
 
-**Verification** — two layers, integer-only decision path:
+**Verification** — corroboration, not just overlap. Integer-only decision
+path:
 
-1. `verifyText` — groundedness filter: each candidate sentence's content
-   words (alpha tokens ≥4 chars) are scored as the per-mille fraction
-   covered by the reference token set; sentences ≥ `--fc-threshold`
-   (default 550) are kept.
-2. `spotCheck` — 1-in-N kept sentences (`--fc-judge-rate`, default 10;
-   0 disables) are re-asked to the teacher model as a YES/NO
-   supported-by-reference judgment. Rejected sentences are dropped.
+1. `verifyTextMulti` — groundedness per reference: a sentence must score
+   ≥ `--fc-threshold` (default 550) on at least `--fc-sources`
+   (default 2) references. Three outcomes per sentence:
+   - **pass ≥ needed refs** → kept
+   - **pass ≥1 but < needed** → *borderline* (see below)
+   - **pass 0 refs** → dropped
+   Degrades gracefully: `needed = min(--fc-sources, refs resolved)`.
+2. `spotCheck` — three enforcement paths over kept + borderline sentences:
+   - **sampling**: 1-in-N kept sentences (`--fc-judge-rate`, default 10)
+   - **numeric consistency**: every number in a claim must appear in some
+     reference (comma-normalized); a miss forces a judge call, or drops
+     outright when `--fc-judge-rate 0`
+   - **borderline rescue**: every borderline sentence gets a forced
+     YES/NO judge verdict against both references — semantic agreement
+     can substitute for word overlap across stylistically different
+     sources (Simple Wikipedia vocabulary differs from English Wikipedia)
+
+The judge receives both references concatenated (bounded to 4,000 chars)
+and answers YES/NO to "is the claim supported by the reference text?".
 
 **Verification source per pipeline:**
 
@@ -250,12 +266,17 @@ is logged (`[fc no-reference -> keep|drop]`).
 | `--no-fact-check` | — | explicit disable |
 | `--fc-threshold <0-1000>` | 550 | groundedness per-mille cutoff |
 | `--fc-judge-rate <n>` | 10 | judge 1-in-N kept sentences |
+| `--fc-sources <n>` | 2 | minimum independent references for corroboration |
+| `--fc-no-numeric` | on | disable numeric-consistency enforcement |
 | `--fc-drop-no-ref` | keep | drop teacher text when unverifiable |
 
-Caveat: groundedness is a framework-internal grounding heuristic (support
-by the fetched reference), not absolute truth. The judge excerpt is the
-first 4,000 chars of the reference — claims grounded only in later
-sections can be conservatively rejected.
+Caveat: corroboration is the practical approximation of truth available
+to a web-grounded system — independent-source agreement plus numeric
+consistency plus model judgment — not absolute truth. The judge excerpt
+is bounded to 4,000 chars of reference text, so claims grounded only in
+later sections can be conservatively rejected; Simple Wikipedia stubs
+shrink coverage scores for borderline sentences (the judge-rescue path
+exists precisely to compensate).
 
 ---
 

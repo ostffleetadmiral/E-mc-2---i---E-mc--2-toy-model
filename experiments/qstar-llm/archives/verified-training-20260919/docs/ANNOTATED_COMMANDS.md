@@ -243,6 +243,8 @@ zig build cli -- train --hybrid --corpus qstar_corpus.txt
 | `--no-fact-check` | — | Explicitly disable verification |
 | `--fc-threshold <0-1000>` | `550` | Groundedness cutoff (per-mille content-word coverage) |
 | `--fc-judge-rate <n>` | `10` | Judge 1-in-N kept sentences via Ollama (`0` disables) |
+| `--fc-sources <n>` | `2` | Min independent references a sentence must corroborate on |
+| `--fc-no-numeric` | on | Disable numeric-consistency check (claim numbers must appear in a reference) |
 | `--fc-drop-no-ref` | keep | Drop teacher text when no reference resolves |
 
 **Annotations:**
@@ -253,7 +255,7 @@ zig build cli -- train --hybrid --corpus qstar_corpus.txt
 - **Delta-append persistence:** only the session-learned delta is appended — the existing corpus file is never truncated. When `--corpus` names a `.qsc` container, the delta goes to a `<base>.learned.txt` sidecar (auto-loaded by `chat`/`run`/`serve`); the container itself is never modified
 - The in-memory corpus is a bounded window (~10 MB tail); reporting distinguishes file-level sentence counts from retained window counts
 - With `--limit N`: processes only the first N prompts (useful for smoke testing)
-- With `--fact-check`: each teacher response is verified against a resolved reference (cache → Wikipedia API → headless Playwright via `scripts/web_fetch.py`) — see `docs/TRAINING_PIPELINE.md` §Web Fact-Checking
+- With `--fact-check`: each teacher response is corroborated across independent references (English + Simple Wikipedia via cache/API, headless Playwright via `scripts/web_fetch.py` as fallback) — sentences must clear the groundedness threshold on `--fc-sources` refs; borderline and numeric-miss sentences are forced through the Ollama judge — see `docs/TRAINING_PIPELINE.md` §Web Fact-Checking
 
 ---
 
@@ -282,6 +284,8 @@ zig build cli -- train-internet --limit 10 --verbose
 | `--no-fact-check` | — | Explicitly disable verification |
 | `--fc-threshold <0-1000>` | `550` | Groundedness cutoff (per-mille content-word coverage) |
 | `--fc-judge-rate <n>` | `10` | Judge 1-in-N kept sentences via Ollama (`0` disables) |
+| `--fc-sources <n>` | `2` | Min independent references a sentence must corroborate on |
+| `--fc-no-numeric` | on | Disable numeric-consistency check (claim numbers must appear in a reference) |
 | `--fc-drop-no-ref` | keep | Drop teacher text when no reference resolves |
 
 **Annotations:**
@@ -340,6 +344,8 @@ zig build cli -- enrich-corpus datasets/AdmPaul --corpus-file qstar_corpus.txt -
 | `--no-fact-check` | — | Explicitly disable verification |
 | `--fc-threshold <0-1000>` | `550` | Groundedness cutoff (per-mille content-word coverage) |
 | `--fc-judge-rate <n>` | `10` | Judge 1-in-N kept sentences via Ollama (`0` disables) |
+| `--fc-sources <n>` | `2` | Min independent references a sentence must corroborate on |
+| `--fc-no-numeric` | on | Disable numeric-consistency check (claim numbers must appear in a reference) |
 | `--fc-drop-no-ref` | keep | Drop teacher text when no reference resolves |
 
 **Annotations:**
@@ -372,6 +378,8 @@ zig build cli -- train-corpus --ingest-dir datasets/Gov --enrich-dir datasets/Ad
 | `--no-fact-check` | — | Explicitly disable verification |
 | `--fc-threshold <0-1000>` | `550` | Groundedness cutoff (per-mille content-word coverage) |
 | `--fc-judge-rate <n>` | `10` | Judge 1-in-N kept sentences via Ollama (`0` disables) |
+| `--fc-sources <n>` | `2` | Min independent references a sentence must corroborate on |
+| `--fc-no-numeric` | on | Disable numeric-consistency check (claim numbers must appear in a reference) |
 | `--fc-drop-no-ref` | keep | Drop teacher text when no reference resolves |
 
 **Annotations:**
