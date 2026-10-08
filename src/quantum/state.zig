@@ -13,6 +13,29 @@ pub const Complex = struct {
         return .{ .re = self.re.add(other.re), .im = self.im.add(other.im) };
     }
 
+    pub fn sub(self: Complex, other: Complex) Complex {
+        return .{ .re = self.re.sub(other.re), .im = self.im.sub(other.im) };
+    }
+
+    pub fn neg(self: Complex) Complex {
+        return .{ .re = self.re.neg(), .im = self.im.neg() };
+    }
+
+    pub fn conj(self: Complex) Complex {
+        return .{ .re = self.re, .im = self.im.neg() };
+    }
+
+    pub fn mul(self: Complex, other: Complex) Complex {
+        return .{
+            .re = self.re.mul(other.re).sub(self.im.mul(other.im)),
+            .im = self.re.mul(other.im).add(self.im.mul(other.re)),
+        };
+    }
+
+    pub fn fromReal(r: fixed.Q128) Complex {
+        return .{ .re = r, .im = fixed.Q128.zero };
+    }
+
     pub fn scale(self: Complex, scalar: fixed.Q128) Complex {
         return .{ .re = self.re.mul(scalar), .im = self.im.mul(scalar) };
     }

@@ -14,6 +14,11 @@ comptime {
     _ = @import("quantum/simulator.zig");
     _ = @import("quantum/measure.zig");
     _ = @import("quantum/octonion_ops.zig");
+    _ = @import("quantum/lattice_hamiltonian.zig");
+    _ = @import("quantum/lattice_evolution.zig");
+    _ = @import("quantum/lattice_decoherence.zig");
+    _ = @import("quantum/lattice_entanglement.zig");
+    _ = @import("quantum/lattice_blocks.zig");
     _ = @import("codon.zig");
     // Neuraleak integration (chunk-24)
     _ = @import("neuraleak_matrix15.zig");
@@ -43,6 +48,7 @@ comptime {
     _ = @import("electric_charges.zig");
     _ = @import("so8_triality.zig");
     _ = @import("pati_salam.zig");
+    _ = @import("octavian.zig");
     _ = @import("gap_closure.zig");
     _ = @import("generative_chain.zig");
     _ = @import("dimensional_ladder.zig");
