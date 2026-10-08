@@ -843,7 +843,7 @@ A WASM build target was created at `wasm/` for `wasm32-wasi`, enabling bit-exact
 - `wasm/build.zig` — Build configuration for wasm32-wasi target
 - `wasm/wasm_main.zig` — Entry point exporting proof verification functions
 
-Exported functions: `run_all_proofs`, `proof_module_count`, `total_proof_checks`, `verify_rne_multiply`, `verify_e8_roots`, `verify_so10`, `verify_scaling`, `verify_shell_transition`, `verify_seven_defect`.
+Exported functions: `run_all_proofs`, `proof_module_count`, `total_proof_checks`, `verify_rne_multiply`, `verify_fp_division`, `verify_fp_from_ratio`, `verify_fp_sqrt`, `verify_e8_roots`, `verify_so10`, `verify_scaling`, `verify_shell_transition`, `verify_seven_defect`, `verify_codon_boundary`, `verify_mersenne_prime`, `verify_root_count_identity`, `verify_shell_closure`, `verify_consciousness_fraction` — 14 checks, including real Q128.128 fixed-point proofs (RNE multiply, signed division, fromRatio rounding, Newton sqrt). Wide-integer division runs through a Knuth-Algorithm-D limb division in `src/fixed_point.zig` since LLVM has no i512 div libcall on wasm32. Verified: "All 14 proofs passed in WASM." under both Node WASI and the k3w interpreter (bit-identical).
 
 ---
 
